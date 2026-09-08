@@ -3,8 +3,12 @@
 ## Unreleased
 
 - More xmonad-contrib modules ported under their own module paths:
-  `Layout.Grid`, `Layout.Simplest`, `Layout.ResizableTile`, `Actions.CycleWS`
-  and `Actions.WithAll`. See docs/COMPATIBILITY.md for the full list.
+  `Layout.Grid`, `Layout.Simplest`, `Layout.ResizableTile`, `Layout.Renamed`,
+  `Layout.Reflect`, `Layout.PerWorkspace`, `Layout.TwoPane`,
+  `Layout.Accordion`, `Actions.CycleWS`, `Actions.WithAll`,
+  `Actions.RotSlaves`, `Actions.SwapWorkspaces`, `Actions.DwmPromote`,
+  `Actions.PhysicalScreens` and `Hooks.ManageHelpers`. See
+  docs/COMPATIBILITY.md for the full list.
 - `Circle` resizes its centred master with `M-h` / `M-l`, which upstream
   cannot do; plain `Circle` keeps upstream's proportions.
 - `ThreeCol`, `ThreeColMid` and `Circle` layouts, ported from xmonad-contrib,

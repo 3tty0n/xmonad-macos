@@ -10,10 +10,17 @@ import XMonad.Layout.Simplest
 import XMonad.Layout.ResizableTile
 import XMonad.Actions.CycleWS
 import XMonad.Actions.WithAll
+import XMonad.Actions.RotSlaves
+import XMonad.Actions.SwapWorkspaces
+import XMonad.Actions.DwmPromote
+import XMonad.Layout.Renamed
+import XMonad.Layout.Reflect
+import XMonad.Layout.TwoPane
+import XMonad.Layout.Accordion
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.List (sort,nub)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe,listToMaybe)
 import Data.Aeson
 import Control.Monad (forM_,unless)
 
@@ -137,6 +144,43 @@ main = do
   (_,cycleState) <- runX conf s2 $ sendMessage NextLayout >> sendMessage NextLayout >> sendMessage NextLayout
   -- One screen, so a neighbour workspace is hidden rather than on a monitor.
   let single=initialState cfg [head displays]
+  -- More ported contrib layouts.
+  let stack3 = W.Stack 2 [1] [3]
+      rects l = map snd (pureLayout l frame3 stack3)
+  check "TwoPane shows master and focus only" (length (rects (TwoPane (3/100) (1/2)))==2)
+  check "TwoPane splits the frame"
+    (sum [rect_width r*rect_height r | r <- rects (TwoPane (3/100) (1/2))]==800000)
+  check "Accordion places every window" (length (rects Accordion)==3)
+  check "Accordion gives the focused window the most room"
+    (let hs=map rect_height (rects Accordion) in maximum hs==hs !! 1)
+  check "Accordion fills the frame exactly"
+    (sum (map rect_height (rects Accordion))==800)
+  (reflected,_) <- runX conf initial $
+    runLayout (W.Workspace "1" (reflectHoriz (Tall 1 (3/100) (1/2))) (Just stack3)) frame3
+  check "reflectHoriz mirrors the master to the right"
+    (maximum [rect_x r | (_,r) <- fst reflected]==500)
+  check "renamed replaces the description"
+    (description (renamed [Replace "custom"] (Tall 1 (3/100) (1/2)))=="custom")
+  check "renamed can wrap the old description"
+    (description (renamed [Prepend "[",Append "]"] (Tall 1 (3/100) (1/2)))=="[Tall]")
+  -- Ported contrib actions.
+  (_,rotated) <- runX conf s1 rotSlavesDown
+  check "rotSlaves keeps the master in place"
+    (take 1 (W.integrate' (W.stack $ W.workspace $ W.current $ windowset rotated))
+     == take 1 (W.integrate' (W.stack $ W.workspace $ W.current $ windowset s1)))
+  (_,promoted) <- runX conf s1 dwmpromote
+  check "dwmpromote makes the focused window master"
+    (Just (W.focus <$> W.stack (W.workspace $ W.current $ windowset s1))
+     == Just (listToMaybe (W.integrate' (W.stack $ W.workspace $ W.current $ windowset promoted))))
+  -- Tags are exchanged in place, so the windows you are looking at stay put
+  -- and take the other workspace's name with them.
+  let swapped = swapWithCurrent "2" (windowset s1)
+  check "swapWithCurrent renames the current workspace"
+    (W.currentTag swapped=="2")
+  check "swapWithCurrent keeps the visible windows"
+    (sort (W.integrate' (W.stack $ W.workspace $ W.current swapped))==[1,2])
+  check "swapWithCurrent gives the old tag to the other workspace"
+    (W.findTag 3 swapped==Just "1")
   -- Two displays: a workspace each, laid out in that display's own frame.
   check "each display shows its own workspace"
     (map (W.tag . W.workspace) (W.screens $ windowset s1)==["1","2"])

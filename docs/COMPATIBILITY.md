@@ -29,6 +29,16 @@ importing them compiles unchanged.
 | `XMonad.Layout.ResizableTile` | `ResizableTall`, `MirrorShrink`, `MirrorExpand` |
 | `XMonad.Actions.CycleWS` | `nextWS`, `prevWS`, `shiftToNext`, `shiftToPrev`, `toggleWS`, `moveTo`, `shiftTo`; not the predicate/`WSType` API |
 | `XMonad.Actions.WithAll` | `withAll`, `withAll'`, `killAll`, `sinkAll` |
+| `XMonad.Layout.Renamed` | `renamed`, `Replace`/`Prepend`/`Append`/`CutLeft`/`CutRight` |
+| `XMonad.Layout.Reflect` | `reflectHoriz`, `reflectVert` |
+| `XMonad.Layout.PerWorkspace` | `onWorkspace`, `onWorkspaces` |
+| `XMonad.Layout.TwoPane` | `TwoPane` |
+| `XMonad.Layout.Accordion` | `Accordion` |
+| `XMonad.Actions.RotSlaves` | `rotSlavesUp/Down`, `rotAllUp/Down`, the pure `rotSlaves'`/`rotAll'` |
+| `XMonad.Actions.SwapWorkspaces` | `swapWithCurrent`, `swapWith`, `swapWorkspaces` |
+| `XMonad.Actions.DwmPromote` | `dwmpromote` |
+| `XMonad.Actions.PhysicalScreens` | `PhysicalScreen`, `getScreen`, `viewScreen`, `sendToScreen` |
+| `XMonad.Hooks.ManageHelpers` | `composeOne`, `-?>`, `doRectFloat`, `doCenterFloat`, `doFullFloat`, `doSink`; not the X11 property queries |
 | `XMonad.Util.EZConfig` | `additionalKeysP`, `removeKeysP`, key parser |
 | `XMonad.Layout.Spacing` | `spacing` |
 

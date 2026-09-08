@@ -54,8 +54,18 @@ library
     XMonad.Layout.Grid
     XMonad.Layout.Simplest
     XMonad.Layout.ResizableTile
+    XMonad.Layout.Renamed
+    XMonad.Layout.Reflect
+    XMonad.Layout.PerWorkspace
+    XMonad.Layout.TwoPane
+    XMonad.Layout.Accordion
     XMonad.Actions.CycleWS
     XMonad.Actions.WithAll
+    XMonad.Actions.RotSlaves
+    XMonad.Actions.SwapWorkspaces
+    XMonad.Actions.DwmPromote
+    XMonad.Actions.PhysicalScreens
+    XMonad.Hooks.ManageHelpers
     XMonad.MacOS
     XMonad.MacOS.Types
     XMonad.MacOS.Protocol
