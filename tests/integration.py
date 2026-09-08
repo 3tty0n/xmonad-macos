@@ -47,6 +47,10 @@ def run(engine: str) -> None:
         plan = key(ord('1')); assert plan['workspace'] == '1'
         plan = key(ord('2'), mod | 1); assert plan['workspace'] == '1'
         plan = key(ord('2')); assert plan['workspace'] == '2' and len(plan['frames']) == 1
+        # Status-bar row: every workspace with windows, current one marked.
+        row = [(w['tag'], w['windows'], w['current']) for w in plan['workspaces']]
+        assert ('2', 1, True) in row and ('1', 1, False) in row, plan['workspaces']
+        assert [w['tag'] for w in plan['workspaces']][:3] == ['1', '2', '3'], plan
         checkpoint = plan['checkpoint']
         assert checkpoint['savedVersion'] == 1
         assert send({'type':'ping'})['type'] == 'pong'

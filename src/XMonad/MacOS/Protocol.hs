@@ -24,6 +24,13 @@ instance FromJSON InputEvent where
       "exit" -> pure ExitEvent
       _ -> fail $ "Unknown input type: " ++ t
 
+-- One entry per workspace, in config order, for a status bar.
+data WorkspaceInfo = WorkspaceInfo
+  { wsTag :: String, wsWindows :: Int, wsCurrent :: Bool, wsVisible :: Bool }
+  deriving (Show,Eq)
+instance ToJSON WorkspaceInfo where
+  toJSON w = object ["tag" .= wsTag w,"windows" .= wsWindows w
+                    ,"current" .= wsCurrent w,"visible" .= wsVisible w]
 data Placement = Placement Window Rectangle deriving (Show,Eq)
 instance ToJSON Placement where
   toJSON (Placement w r) = object ["wid" .= w,"frame" .= r]
@@ -31,12 +38,14 @@ data Plan = Plan
   { planGeneration :: Int, planEpoch :: Int
   , planFrames :: [Placement], planHide :: [Window], planFocus :: Maybe Window
   , planWorkspace :: String, planLayout :: String, planCheckpoint :: Value
+  , planWorkspaces :: [WorkspaceInfo]
   } deriving (Show)
 instance ToJSON Plan where
   toJSON p = object
     ["type" .= ("plan" :: String),"generation" .= planGeneration p,"epoch" .= planEpoch p
     ,"frames" .= planFrames p,"hide" .= planHide p,"focus" .= planFocus p
-    ,"workspace" .= planWorkspace p,"layout" .= planLayout p,"checkpoint" .= planCheckpoint p]
+    ,"workspace" .= planWorkspace p,"layout" .= planLayout p,"checkpoint" .= planCheckpoint p
+    ,"workspaces" .= planWorkspaces p]
 commandJSON :: NativeCommand -> Value
 commandJSON c = case c of
   Close w -> object ["type" .= ("command" :: String),"name" .= ("close" :: String),"wid" .= w]

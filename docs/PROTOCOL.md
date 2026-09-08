@@ -59,6 +59,8 @@ A placement plan:
 - `frames` — windows to show and place, in stacking order, focused last.
 - `hide` — managed windows to hide for this layout or workspace, by parking
   them past the edge of the displays. A window may never appear in both lists.
+- `workspaces` — one entry per workspace in config order, with `tag`,
+  `windows`, `current` and `visible`, for the menu bar and external bars.
 - `focus` — set only for explicit user-driven focus intent.
 - Windows ignored by `manageHook` appear in neither list.
 

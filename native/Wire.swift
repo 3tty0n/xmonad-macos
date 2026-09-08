@@ -35,9 +35,21 @@ struct Snapshot: Encodable {
 }
 struct KeyBinding: Codable, Hashable { var mask: Int; var sym: Int }
 struct Placement: Codable { var wid: UInt64; var frame: Rect }
+struct WorkspaceInfo: Codable, Equatable {
+    var tag: String, windows: Int, current: Bool, visible: Bool
+}
 struct Plan: Decodable {
     var generation: Int, epoch: Int, frames: [Placement], hide: [UInt64]
     var focus: UInt64?, workspace: String, layout: String, checkpoint: JSONValue
+    var workspaces: [WorkspaceInfo]?
+}
+// xmobar-style row: every workspace that holds windows, plus the current one.
+// "[2]" is current, a bare tag has windows, so an empty desktop stays quiet.
+func workspaceRow(_ all: [WorkspaceInfo]) -> String {
+    let shown = all.filter { $0.windows > 0 || $0.current || $0.visible }
+    return shown.map { w in
+        w.current ? "[\(w.tag)]" : (w.visible ? "(\(w.tag))" : w.tag)
+    }.joined(separator: " ")
 }
 enum JSONValue: Codable {
     case object([String:JSONValue]), array([JSONValue]), string(String)

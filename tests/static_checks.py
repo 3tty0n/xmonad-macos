@@ -25,6 +25,8 @@ for literal in ['--no-startup','--dry-run','--validate-config','--self-test','ru
 ax=(root/'native/Accessibility.swift').read_text()
 check(ax.index('try journal.add(entry)') < ax.index('r.hideRequestedAt=Date()'),'Journal must precede hiding')
 check('parkingSpot' in ax and 'onAnyDisplay' in ax,'Off-screen parking missing')
+wire=(root/'native/Wire.swift').read_text()
+check('workspaceRow' in wire,'Workspace indicator missing')
 check('beginPointerDrag' in ax and 'pointerDrag?.wid' in ax,'Native pointer drag safety missing')
 check('runAXSelfTest' in ax and 'readBackMatched' in ax,'AX self-test/read-back missing')
 check('pointerPendingPoint' in app and 'pointerUpdateInFlight' in app,'Pointer AX updates are not coalesced')

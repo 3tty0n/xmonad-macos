@@ -169,9 +169,15 @@ makePlan = do
       focused=case (focusRequested s,W.peek ws) of
         (True,Just w) | w `elem` shown -> Just w
         _ -> Nothing
+  -- Workspace row for a status bar: config order, then any generated tags.
+  let onScreens = map (W.tag . W.workspace) (W.screens ws)
+      ordered = [w | t <- workspaces c, Just w <- [find ((==t) . W.tag) (W.workspaces ws)]]
+             ++ [w | w <- W.workspaces ws, W.tag w `notElem` workspaces c]
+      summary = [WorkspaceInfo (W.tag w) (length $ W.integrate' $ W.stack w)
+                   (W.tag w == W.currentTag ws) (W.tag w `elem` onScreens) | w <- ordered]
   pure $ Plan (generation s) (epoch s) placements
     (W.allWindows ws \\ shown) focused (W.currentTag ws)
-    (description $ W.layout $ W.workspace $ W.current ws) (checkpoint s)
+    (description $ W.layout $ W.workspace $ W.current ws) (checkpoint s) summary
 
 -- A bridge-session checkpoint. AX handles are never persisted across a new
 -- native process. read-layout failures fall back to the new config's layout.

@@ -197,7 +197,19 @@ xmonad doctor            # environment, permissions, Spaces, recent log
 xmonad autostart on      # opt-in LaunchAgent; also off / status
 ```
 
-The menu bar item offers the same operations, plus two toggles.
+The menu bar item shows the workspace row and the current layout, in the style
+of xmobar: `[2] 1 3 · Tall`. The current workspace is in brackets, a workspace
+visible on another screen is in parentheses, and a workspace with no windows is
+left out. It offers the same operations as `xmonad`, plus two toggles.
+
+For a real status bar — sketchybar, Übersicht, a shell loop — the same data is
+in `xmonad status` under `workspaces`, one entry per workspace with `tag`,
+`windows`, `current` and `visible`:
+
+```sh
+xmonad status | jq -r '[.workspaces[] | select(.windows > 0 or .current)
+  | if .current then "[\(.tag)]" else .tag end] | join(" ")'
+```
 
 "Disable macOS window shortcuts" swallows `Cmd-Tab`, ``Cmd-` ``, the
 `Ctrl-arrows` of Mission Control, `Cmd-H`, and `Cmd-M` while tiling is active.

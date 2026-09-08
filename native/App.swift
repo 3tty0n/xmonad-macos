@@ -93,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var compiler: Process?
     private var input: FileHandle?
     private var runToken=UUID()
+    private var workspaces: [WorkspaceInfo]=[]
     private var poll: Timer?
     private var signalSources: [DispatchSourceSignal]=[]
     private var observers: [NSObjectProtocol]=[]
@@ -207,7 +208,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseItem?.title=running ? "Pause" : "Resume"
         let state: [String:Any]=["pid":Int(getpid()),"running":running,"configured":configured,
           "keyboardReady":tapReady,"pointerReady":pointerReady,"nativeFullScreen":fullScreen,"dryRun":dryRun,"recompiling":recompiling,
-          "status":text,"epoch":currentEpoch,"generation":latestSent,"updated":Date().timeIntervalSince1970]
+          "status":text,"epoch":currentEpoch,"generation":latestSent,
+          // Published for external bars: sketchybar, Übersicht, a shell loop.
+          "workspaces":workspaces.map { ["tag":$0.tag,"windows":$0.windows,
+            "current":$0.current,"visible":$0.visible] },
+          "updated":Date().timeIntervalSince1970]
         if let data=try? JSONSerialization.data(withJSONObject:state,options:[.prettyPrinted,.sortedKeys]) {
             try? data.write(to:Paths.status,options:.atomic)
         }
@@ -359,12 +364,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if dryRun {
                 do { try PlanSafety.validate(plan,active:Set(lastSnapshot?.windows.map(\.wid) ?? [])) }
                 catch { pause(reason:"Invalid dry-run plan: \(error)"); return }
+                workspaces=plan.workspaces ?? []
                 logMessage("DRY-RUN workspace=\(plan.workspace) layout=\(plan.layout) frames=\(plan.frames.map { "\($0.wid):\($0.frame)" }) hide=\(plan.hide)")
                 setStatus("DRY-RUN \(plan.workspace) · \(plan.layout)")
                 return
             }
             checkpoint=plan.checkpoint
-            setStatus("\(plan.workspace) · \(plan.layout)")
+            workspaces=plan.workspaces ?? []
+            let row=workspaces.isEmpty ? plan.workspace : workspaceRow(workspaces)
+            setStatus("\(row) · \(plan.layout)")
             axQueue.async { [weak self] in
                 guard let self=self else { return }
                 do { try self.store.apply(plan) }
