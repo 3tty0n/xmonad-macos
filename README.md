@@ -32,9 +32,22 @@ In System Settings, under Privacy & Security -> Accessibility, add
 `~/Applications/XMonadMac.app`, quit the app, and start it
 again.
 
-Rebuilding the native app changes its code signature, and that invalidates the
-Accessibility grant. Re-add the app after `make native`, or sign with a stable
-identity through `CODESIGN_IDENTITY=...`.
+By default the app is ad-hoc signed, and every rebuild changes its identity,
+so you would have to add it again. To avoid that, once:
+
+```sh
+./scripts/signing-identity.sh   # asks for your login password
+```
+
+That creates `XMonadMac Local Signing` in your login keychain and trusts it
+for code signing. The grant then follows the certificate rather than the
+build, and later rebuilds keep Accessibility working. `CODESIGN_IDENTITY=...`
+signs with your own identity instead.
+
+Changing the signing identity does invalidate the grant, and macOS ignores a
+re-add while the stale entry is present. `make install` detects this, clears
+the entry with `tccutil reset Accessibility org.xmonad.XMonadMac`, and asks
+you to add the app once more.
 
 ## First run
 
@@ -54,12 +67,28 @@ make run
 ```
 
 Try it first with two or three throwaway windows, such as Terminal and
-Finder, holding no unsaved work. The tested setup is one native Space per
-display with Stage Manager off.
+Finder, holding no unsaved work. The tested setup is a single display with
+Stage Manager off.
 
 `--dry-run` skips `startupHook` and changes nothing natively, but your config
 is an ordinary Haskell program. Any IO you wrote in `manageHook` or `logHook`
 still runs, so treat it as your own code rather than a sandbox.
+
+## Workspaces are not macOS Desktops
+
+Workspaces are XMonadMac's own. A window on another workspace is parked past
+the right edge of your displays, so switching is instant and nothing goes to
+the Dock. AppKit keeps about 40 points of a window on screen no matter where
+you put it, so a window whose app enforces that is minimized instead; both
+kinds come back to the same frame.
+
+macOS Desktops are not involved, and cannot be: the window server refuses to
+let an ordinary process move another app's window to another Desktop, which is
+why yabai needs System Integrity Protection disabled for that one feature.
+
+So keep macOS on a single Desktop. `Control-1`/`Control-2`, a swipe, or
+Mission Control switches the *native* Desktop, which resets XMonadMac's
+workspace assignments and brings hidden windows back.
 
 ## Configuration
 
@@ -109,8 +138,8 @@ Apply changes:
 
 ```sh
 xmonad --recompile      # compile and install; leave the running engine alone
-xmonad --restart        # restart the engine with the compiled config
-make reload             # compile, install, and reload in one step
+xmonad --restart        # run the compiled config, starting the app if needed
+xmonad recompile        # both, in one step
 ```
 
 A compile failure never replaces the running engine.
@@ -150,21 +179,22 @@ workspace visible there.
 
 ## Daily use
 
-`make install` creates `~/.local/bin/xmonadctl` and `~/.local/bin/xmonad`. It
+`make install` creates `~/.local/bin/xmonad` (and `xmonadctl`, the same
+script). It
 also copies a self-contained build kit to
 `~/Library/Application Support/XMonadMac/build-kit`, so recompiling your
 config keeps working after you move or delete the checkout.
 
 ```sh
-xmonadctl status         # bridge status as JSON
-xmonadctl pause          # and resume
-xmonadctl reload         # restart the compiled engine
-xmonadctl recompile      # compile, then reload
-xmonadctl config         # open xmonad.hs
-xmonadctl log            # follow the log
-xmonadctl self-test      # AX read/write/read-back on the focused window
-xmonadctl doctor         # environment, permissions, recent log
-xmonadctl autostart on   # opt-in LaunchAgent; also off / status
+xmonad --recompile       # compile xmonad.hs into a new engine
+xmonad --restart         # run the compiled config
+xmonad status            # bridge status as JSON
+xmonad pause             # and resume
+xmonad config            # open xmonad.hs
+xmonad log               # follow the log
+xmonad self-test         # AX read/write/read-back on the focused window
+xmonad doctor            # environment, permissions, Spaces, recent log
+xmonad autostart on      # opt-in LaunchAgent; also off / status
 ```
 
 The menu bar item offers the same operations, plus two toggles.
@@ -185,14 +215,15 @@ is 4, Option is 8, and Command is 64.
 |---|---|
 | `make bootstrap` | Install the toolchain, build everything, install |
 | `make build` | Build the engine and the native app |
-| `make engine` / `make native` | Build one side only |
-| `make install` | Install the app, engine, and CLI |
-| `make reload` | Recompile the config and reload a running app |
+| `make install` | Install the app, engine, and the `xmonad` command |
 | `make run` / `make dry-run` | Launch normally / read-only |
 | `make check` | Portable checks, Haskell tests, integration test |
-| `make doctor` / `make status` | Diagnostics |
 | `make icon` | Regenerate the icons from SVG (needs `rsvg-convert`) |
 | `make clean` | Remove `build/` and `dist-newstyle/` |
+
+Everything that acts on a running XMonadMac is a `xmonad` command, not a make
+target: `--recompile`, `--restart`, `status`, `doctor`, `log`, `recover`,
+`pause`, `quit`, `autostart`.
 
 Every target is a thin wrapper over the matching script in `scripts/`.
 `CONFIG=path/to/xmonad.hs` overrides the config for the build and reload
@@ -215,8 +246,8 @@ windows. A `SIGKILL` of the helper or an OS crash cannot restore anything
 immediately, so run:
 
 ```sh
-make recover     # or: xmonadctl recover
-make doctor
+xmonad recover
+xmonad doctor
 ```
 
 When a window cannot be identified unambiguously, XMonadMac keeps the record
@@ -225,7 +256,9 @@ hand. Deleting the record is not a restore. The journal tracks WM-owned
 minimization and nothing else, so it is not a snapshot of your original window
 geometry.
 
-Switching native Spaces resets the logical epoch and restores owned windows.
+In the minimize-based fallback, switching native Spaces resets the epoch and
+restores owned windows. With workspaces mapped onto Desktops, nothing is
+minimized, so there is nothing to recover.
 Moving windows between Spaces and controlling native full-screen are both out
 of scope. Tiling pauses while a native full-screen window is frontmost.
 

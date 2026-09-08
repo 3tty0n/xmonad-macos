@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- Windows on another workspace are parked off-screen instead of minimized. No
+  Dock animation, no apps refusing or delaying `AXMinimized`, and no restore
+  race on switching back. A window whose app clamps the position back onto a
+  display is minimized instead. Mapping workspaces onto macOS Desktops was
+  investigated and is not possible from an ordinary process: the window server
+  ignores a Space move for windows another process owns.
+- Fixed windows losing their identity on a Space switch: an app can return an
+  incomplete AX window list, and a known window whose frame is briefly
+  unreadable is no longer treated as closed and re-adopted as a new one.
+- `make` builds and installs; `xmonad --recompile` and `xmonad --restart` are
+  the primary commands for a running XMonadMac. The make targets that
+  duplicated them (`reload`, `recompile`, `doctor`, `recover`, `status`,
+  `autostart-on/off`, `engine`, `native`, `test`, `test-portable`) are gone.
+- Fixed send-to-workspace losing windows: a transient `AXMinimized` read
+  failure, or a window missing from the window-server list while it animates,
+  dropped it from the snapshot, and the engine then treated it as a new window
+  on the workspace in view.
+- The app is signed with a persistent local certificate, so rebuilding no
+  longer invalidates the Accessibility grant.
+
 - Fixed the engine handshake: the helper read the engine's stdout with
   `FileHandle.read(upToCount:)`, which blocks until the full count arrives, so
   the `configure` line was never consumed and the watchdog paused every start.
