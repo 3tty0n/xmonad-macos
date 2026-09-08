@@ -16,23 +16,26 @@ resolve_config() {
 CONFIG="$(resolve_config)"
 usage() {
   cat <<USAGE
-Usage: xmonadctl COMMAND [ARGS]   (also installed as: xmonad --FLAG)
-  status                 show current bridge status
-  pause|resume           pause/resume tiling
-  reload                 reload already-compiled engine
-  recompile [xmonad.hs]  compile config atomically, then reload/start
-  recover                restore windows minimized by XMonadMac
-  dump                   write diagnostic snapshot
-  doctor                 print native diagnostics
-  self-test              verify focused-window AX read/write and read-back
-  config                 open xmonad.hs
-  log                     follow bridge.log
-  autostart on|off|status manage login startup
-  quit                    quit XMonadMac
+Usage: xmonad --FLAG | COMMAND [ARGS]
 
-Upstream-compatible flags:
-  --recompile [xmonad.hs] compile the config; leave the running engine alone
-  --restart               restart the engine with the compiled config
+  --recompile [xmonad.hs]  compile the config; leave the running engine alone
+  --restart                run the compiled config, starting the app if needed
+
+  status                   show current bridge status
+  doctor                   print native diagnostics
+  log                      follow bridge.log
+  config                   open xmonad.hs
+  pause|resume             pause/resume tiling
+  recover                  restore windows minimized by XMonadMac
+  quit                     quit XMonadMac
+  autostart on|off|status  manage login startup
+  self-test                verify focused-window AX read/write and read-back
+  dump                     write diagnostic snapshot
+
+  recompile [xmonad.hs]    --recompile, then --restart
+  reload                   reload the already-compiled engine
+
+The app itself is built from the source tree with make; see make help.
 USAGE
 }
 [ $# -gt 0 ] || { usage; exit 2; }

@@ -4,8 +4,8 @@
 
 ```sh
 make check          # everything below
-make test-portable  # Swift unit tests, static checks, ops smoke test
-make test           # Haskell core tests + compiled-engine integration test
+./scripts/test-portable.sh  # Swift unit tests, static checks, ops smoke test
+./scripts/test.sh           # Haskell core tests + compiled-engine integration
 ```
 
 | Suite | What it covers |
@@ -16,7 +16,7 @@ make test           # Haskell core tests + compiled-engine integration test
 | `tests/CoreTests.hs` | StackSet focus/swap/shift/uniqueness, `Tall` geometry and area, `Full` stacking, `Choose` cycling, user vs. WM minimization, ignore, multiple displays, hotplug, checkpoints, key parsing, JSON |
 | `tests/integration.py` | Runs the shipped config as a real engine and drives focus, mouse-float, layout, shift, view, checkpoint, and ping over NDJSON |
 
-`make test` stages the shipped config into `build/config`; it never tests or
+`scripts/test.sh` stages the shipped config into `build/config`; it never tests or
 modifies your personal config.
 
 ## Verified on macOS
@@ -47,7 +47,7 @@ off, yabai/skhd stopped, and no unsaved work in the windows you test with.
 |---|---|---|
 | AX permission | Launch before and after granting | Stops explicitly when not granted; works after a restart |
 | Read-only | `make dry-run` with three normal windows | Plans in the log; nothing moved, minimized, or intercepted |
-| AX self-test | Focus a normal window, `xmonadctl self-test` | Standard window, settable attributes, same-frame write/read-back, CGWindow correlation all pass |
+| AX self-test | Focus a normal window, `xmonad self-test` | Standard window, settable attributes, same-frame write/read-back, CGWindow correlation all pass |
 | First tile | Open three windows, launch normally | All tiled inside the usable area; constraints logged |
 | Focus | Repeat `M-j` / `M-k`, then click another app | Keys move focus; passive observation never steals it |
 | Native tabs | Switch tabs in Terminal or Ghostty | Still one AX window; tabs are not mistaken for windows |
@@ -61,10 +61,10 @@ off, yabai/skhd stopped, and no unsaved work in the windows you test with.
 | Hidden app | `Cmd-H`, then unhide | The hidden app is not forced; it returns to management on reappearance |
 | Async race | Switch workspaces rapidly; move focus in Full | No bounce back to the old workspace, no stranded minimization |
 | Recompile | Change the ratio, then `M-q` | The engine swaps only after a successful build; the helper is untouched |
-| Reload | `xmonadctl reload` | Restarts the compiled engine and keeps the checkpoint |
+| Reload | `xmonad reload` | Restarts the compiled engine and keeps the checkpoint |
 | Compile failure | Introduce a syntax error, then `M-q` | The running engine keeps going; the failure appears in status and log |
-| Autostart | `xmonadctl autostart on`, log out and in | The bundle starts once; `off` stops it |
-| Helper crash | Kill the helper, then `make recover` | Uniquely identifiable windows are restored; ambiguous ones keep their record |
+| Autostart | `xmonad autostart on`, log out and in | The bundle starts once; `off` stops it |
+| Helper crash | Kill the helper, then `xmonad recover` | Uniquely identifiable windows are restored; ambiguous ones keep their record |
 | Engine crash | Kill only the engine | The helper pauses and restores owned minimizations |
 | Engine hang | `SIGSTOP` the engine | The watchdog pauses and restores; kill the stopped process afterwards |
 | Emergency | `Ctrl-Opt-Cmd-Esc` | Pause and restore without going through Haskell |
@@ -80,9 +80,9 @@ versions, and the display arrangement with your results.
 ## Debugging
 
 ```sh
-xmonadctl log        # follow the bridge log
-xmonadctl doctor     # environment, permissions, signature, recent log
-xmonadctl dump       # write a diagnostic snapshot
+xmonad log        # follow the bridge log
+xmonad doctor     # environment, permissions, signature, recent log
+xmonad dump       # write a diagnostic snapshot
 ```
 
 Enable **Log key events to bridge.log** from the menu when a binding looks
