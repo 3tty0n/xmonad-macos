@@ -3,8 +3,9 @@
 xmonad's policy core, ported to macOS. Your `xmonad.hs` is compiled as real
 Haskell and drives a signed Swift helper.
 
-> Compatibility: It is a subset, not a drop-in replacement. See
-> [Compatibility](docs/COMPATIBILITY.md) for the exact boundary.
+> [!IMPORTANT]
+> It is a subset, not a drop-in replacement. See [Compatibility](docs/COMPATIBILITY.md)
+> for the exact limitations.
 
 ## Install
 
@@ -28,8 +29,8 @@ Then,
 
 ## Limitations
 
-- One display
-- Stage manager is not supported
+- Subset: it supports limited APIs xmonad originally provides
+- Unsupported: Stage manager compatibility
 
 ## Run
 
@@ -105,9 +106,8 @@ for this because macOS forbids moving another app's window between them.
 Windows on other workspaces are placed off-screen. An app that refuses to be
 placed is minimized instead. Either way they return to where they were.
 
-### If something goes wrong
-
-Type `xmonad recover`. It puts every hidden window back.
+> [!TIP]
+> Type `xmonad recover`. It puts every hidden window back.
 
 ## Commands
 
