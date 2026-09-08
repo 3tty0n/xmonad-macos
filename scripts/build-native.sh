@@ -19,7 +19,15 @@ cp "$ROOT/build/XMonadMac" "$BUNDLE/Contents/MacOS/"
 cp "$ROOT/native/Info.plist" "$BUNDLE/Contents/Info.plist"
 cp "$ROOT/native/AppIcon.icns" "$ROOT/native/MenuBarIcon.pdf" "$BUNDLE/Contents/Resources/"
 cp "$ROOT/LICENSE" "$BUNDLE/Contents/Resources/LICENSE"
-/usr/bin/codesign --force --sign "${CODESIGN_IDENTITY:--}" \
+# A stable identity keeps the Accessibility grant across rebuilds. Creating
+# one needs a password prompt, so the build only uses one that already exists:
+# run scripts/signing-identity.sh once to set it up.
+IDENTITY="${CODESIGN_IDENTITY:-$("$ROOT/scripts/signing-identity.sh" --if-ready || echo -)}"
+if [ "$IDENTITY" = - ]; then
+  echo "Ad-hoc signing: run scripts/signing-identity.sh once to keep the" >&2
+  echo "Accessibility grant across rebuilds." >&2
+fi
+/usr/bin/codesign --force --sign "$IDENTITY" \
   --identifier org.xmonad.XMonadMac "$BUNDLE"
 /usr/bin/codesign --verify --strict --verbose=2 "$BUNDLE"
 echo "Built and signed $BUNDLE"

@@ -25,11 +25,21 @@ chmod 755 "$SUPPORT/recompile.sh" "$SUPPORT/autostart.sh" "$SUPPORT/xmonadctl"
 ln -sfn "$SUPPORT/xmonadctl" "$HOME/.local/bin/xmonadctl"
 # xmonad --recompile / --restart, for muscle memory from upstream xmonad.
 ln -sfn "$SUPPORT/xmonadctl" "$HOME/.local/bin/xmonad"
+requirement() { /usr/bin/codesign -d -r- "$1" 2>/dev/null | sed -n 's/^designated => //p'; }
+OLD_REQ="$(requirement "$APP")"
 if [ -d "$APP" ]; then
   rm -rf "$HOME/Applications/XMonadMac.previous.app"
   mv "$APP" "$HOME/Applications/XMonadMac.previous.app"
 fi
 /usr/bin/ditto "$ROOT/build/XMonadMac.app" "$APP"
+# A changed designated requirement leaves a stale Accessibility entry that
+# cannot be overridden by re-adding the app, so drop it and ask again.
+NEW_REQ="$(requirement "$APP")"
+if [ -n "$OLD_REQ" ] && [ "$OLD_REQ" != "$NEW_REQ" ]; then
+  tccutil reset Accessibility org.xmonad.XMonadMac >/dev/null 2>&1 || true
+  echo "The app signature changed; its Accessibility grant was reset."
+  echo "Re-add $APP under Privacy & Security -> Accessibility."
+fi
 if [ -x "$SUPPORT/xmonad-engine" ]; then cp "$SUPPORT/xmonad-engine" "$SUPPORT/xmonad-engine.previous"; fi
 cp "$ROOT/build/xmonad-engine" "$SUPPORT/xmonad-engine.new"
 chmod 755 "$SUPPORT/xmonad-engine.new"
