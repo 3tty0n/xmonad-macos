@@ -1,0 +1,44 @@
+# Changelog
+
+## Unreleased
+
+- Fixed the engine handshake: the helper read the engine's stdout with
+  `FileHandle.read(upToCount:)`, which blocks until the full count arrives, so
+  the `configure` line was never consumed and the watchdog paused every start.
+- Fixed the executable build: the staged config is now `Main.hs`, so
+  `import XMonad` no longer resolves to the config itself on a
+  case-insensitive filesystem.
+- `Full` now stacks every window at the full frame and raises the focused one,
+  instead of minimizing the others into the Dock.
+- Default `modMask` is `mod1Mask` (Option).
+- Added a tenth workspace: `M-0` and `M-S-0`.
+- Added `xmonad --recompile` and `xmonad --restart`, installed as
+  `~/.local/bin/xmonad` alongside `xmonadctl`.
+- Added `~/.xmonad/xmonad.hs` to the config search order.
+- Added a Makefile front end over `scripts/`.
+- Added app and menu bar icons derived from the xmonad logo.
+- Added an opt-in menu toggle that suppresses macOS window shortcuts
+  (`Cmd-Tab`, `` Cmd-` ``, `Ctrl-arrows`, `Cmd-H`, `Cmd-M`) while tiling.
+- Added an opt-in menu toggle that logs modified key presses to `bridge.log`.
+- Toolchain fallback no longer prepends Homebrew paths when `ghc` and `cabal`
+  are already on `PATH`.
+- Documentation translated to English and reorganized.
+
+## 0.3.0 - 2026-09-07
+
+- Added built-in `modMask` + left-drag move and right-drag resize using a native pointer event tap.
+- Kept mouse policy in Haskell: drag start emits `mouseFloat`, which updates `StackSet.floating` and focus intent.
+- Suppress stale/native layout moves for the active drag target until mouse-up to prevent snap-back races.
+- Added cross-display floating drag semantics: the window follows the visible logical workspace on the destination display.
+- Added `xmonadctl self-test` and menu AX self-test with same-frame write/read-back and public CGWindow correlation checks.
+- Added pointer protocol/config validation and expanded portable/static tests.
+
+## 0.2.0 - 2026-09-07
+
+- Added safe in-app `xmonad.hs` recompilation. The old engine remains installed until build and native key validation both succeed.
+- Changed the default `M-q` to recompile and reload, closer to upstream xmonad behavior.
+- Added a self-contained installed build kit under Application Support, so config rebuilds do not depend on the original checkout remaining in place.
+- Added `xmonadctl` for status, pause/resume, reload/recompile, recovery, diagnostics, logs and config access.
+- Added opt-in LaunchAgent management for login startup.
+- Added menu entries to recompile and open `xmonad.hs`.
+- Added a portable atomic-recompile smoke test and expanded static checks.

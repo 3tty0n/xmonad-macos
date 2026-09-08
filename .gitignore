@@ -1,0 +1,14 @@
+/build/
+/dist-newstyle/
+*.hi
+*.o
+*.dyn_hi
+*.dyn_o
+.DS_Store
+*.txt
+
+.claude/
+CLAUDE.md
+
+.codex/
+AGENTS.md

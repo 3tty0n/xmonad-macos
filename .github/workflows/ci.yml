@@ -1,0 +1,29 @@
+name: portability-prototype
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  haskell:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.12.2'
+          cabal-version: '3.14.2.0'
+      - run: cabal update
+      - run: ./scripts/test.sh
+  macos-sdk:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.12.2'
+          cabal-version: '3.14.2.0'
+      - run: cabal update
+      - run: ./scripts/test-portable.sh
+      - run: ./scripts/build.sh config/xmonad.hs
+      - run: python3 tests/integration.py build/xmonad-engine
+      # CI builds the macOS executable, but cannot grant interactive user TCC
+      # permissions or validate actual window movement in a logged-in desktop.
