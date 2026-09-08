@@ -19,11 +19,17 @@ import Control.Arrow ((***), second)
 import Control.Monad
 import Data.Maybe (fromMaybe)
 
+-- Messages every built-in layout understands.
 data Resize = Shrink | Expand
+
 newtype IncMasterN = IncMasterN Int
+
 instance Message Resize
+
 instance Message IncMasterN
+
 data Full a = Full deriving (Show,Read)
+
 instance LayoutClass Full a where
   -- Every window keeps the whole frame, so entering Full never minimizes the
   -- others into the Dock; the focused window is placed last and raised.
@@ -44,6 +50,8 @@ instance LayoutClass Tall a where
           resize Expand = Tall nmaster delta (min 1 $ frac+delta)
           inc (IncMasterN d) = Tall (max 0 $ nmaster+d) delta frac
   description _ = "Tall"
+-- Master area on the left holding nmaster windows, the rest stacked on the
+-- right. With no master, or no more windows than masters, one column.
 tile :: Rational -> Rectangle -> Int -> Int -> [Rectangle]
 tile f r nmaster n = if n <= nmaster || nmaster == 0
   then splitVertically n r
@@ -55,6 +63,7 @@ splitVertically n (Rectangle sx sy sw sh) = Rectangle sx sy sw smallh :
   splitVertically (n-1) (Rectangle sx (sy+smallh) sw (sh-smallh))
   where smallh = sh `div` n
 splitHorizontally n = map mirrorRect . splitVertically n . mirrorRect
+
 splitHorizontallyBy, splitVerticallyBy :: RealFrac r => r -> Rectangle -> (Rectangle,Rectangle)
 splitHorizontallyBy f (Rectangle sx sy sw sh) =
   (Rectangle sx sy leftw sh, Rectangle (sx+leftw) sy (sw-leftw) sh)
@@ -117,6 +126,7 @@ data Circle a = CircleRatio { circleDelta :: !Rational, circleFrac :: !Rational 
   deriving (Show,Read)
 pattern Circle :: Circle a
 pattern Circle = CircleRatio 0.03 0.707
+
 instance LayoutClass Circle a where
   pureLayout l r s = case splitAt (length $ W.up s) (circleLayout (circleFrac l) r ws) of
     (before,focused:after) -> before ++ after ++ [focused]
@@ -143,6 +153,7 @@ satellite (Rectangle sx sy sw sh) a =
         w = sw*10 `div` 25
         h = sh*10 `div` 25
 newtype Mirror l a = Mirror (l a) deriving (Show,Read)
+
 instance LayoutClass l a => LayoutClass (Mirror l) a where
   runLayout (W.Workspace i (Mirror l) ms) r =
     (map (second mirrorRect) *** fmap Mirror) <$>
@@ -153,18 +164,29 @@ mirrorRect :: Rectangle -> Rectangle
 mirrorRect (Rectangle x y w h) = Rectangle y x h w
 
 data ChangeLayout = FirstLayout | NextLayout deriving (Eq,Show)
+
 instance Message ChangeLayout
+
 newtype JumpToLayout = JumpToLayout String
+
 instance Message JumpToLayout
 (|||) :: l a -> r a -> Choose l r a
 (|||) = Choose CL
 infixr 5 |||
+
+-- Two layouts, one of them current. ||| chains these into a list, and
+-- NextLayout walks it; the layout being left is told to Hide.
 data Choose l r a = Choose CLR (l a) (r a) deriving (Read,Show)
+
 data CLR = CL | CR deriving (Read,Show,Eq)
+
 data NextNoWrap = NextNoWrap deriving (Eq,Show)
+
 instance Message NextNoWrap
+
 handle :: (LayoutClass l a, Message m) => l a -> m -> X (Maybe (l a))
 handle l m = handleMessage l (SomeMessage m)
+
 choose :: (LayoutClass l a, LayoutClass r a)
        => Choose l r a -> CLR -> Maybe (l a) -> Maybe (r a) -> X (Maybe (Choose l r a))
 choose (Choose d _ _) d' Nothing Nothing | d == d' = pure Nothing

@@ -25,7 +25,9 @@ import System.IO (hPutStrLn, stderr)
 type WindowSet = W.StackSet WorkspaceId (Layout Window) Window ScreenId ScreenDetail
 -- The same aliases upstream uses, so signatures stay readable.
 type WindowSpace = W.Workspace WorkspaceId (Layout Window) Window
+
 type WindowScreen = W.Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+
 newtype X a = X { unX :: ReaderT XConf (StateT XState IO) a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader XConf, MonadState XState)
 newtype Query a = Query { unQuery :: ReaderT Window X a }
@@ -35,6 +37,7 @@ instance Semigroup a => Semigroup (Query a) where
 instance Monoid a => Monoid (Query a) where mempty = pure mempty
 
 type ManageHook = Query (Endo WindowSet)
+
 data XConfig l = XConfig
   { terminal :: String
   , modMask :: KeyMask
@@ -46,8 +49,11 @@ data XConfig l = XConfig
   , logHook :: X ()
   }
 data XConf = XConf { config :: XConfig Layout }
+
 data NativeCommand = Close Window | Reload | Recompile | Quit | TogglePause
   deriving (Eq, Show)
+-- Everything policy knows: the window set, the last observation of the world,
+-- and what the helper still has to be told.
 data XState = XState
   { windowset :: WindowSet
   , windowInfo :: M.Map Window WindowInfo
@@ -60,12 +66,16 @@ data XState = XState
   }
 runX :: XConf -> XState -> X a -> IO (a, XState)
 runX c s (X a) = runStateT (runReaderT a c) s
+
 io :: IO a -> X a
 io = liftIO
+
 runQuery :: Query a -> Window -> X a
 runQuery (Query q) = runReaderT q
+
 liftX :: X a -> Query a
 liftX = Query . lift
+
 catchX :: X a -> X a -> X a
 catchX action fallback = X $ ReaderT $ \c -> StateT $ \s ->
   runX c s action `E.catch` \e -> case E.fromException e :: Maybe E.AsyncException of
@@ -74,13 +84,16 @@ catchX action fallback = X $ ReaderT $ \c -> StateT $ \s ->
                >> runX c s fallback
 trace :: String -> X ()
 trace = io . hPutStrLn stderr
+
 whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
 whenJust = flip $ maybe (pure ())
 
 -- The upstream layout interface, including stateful runLayout and messages.
 data Layout a = forall l. (LayoutClass l a, Read (l a)) => Layout (l a)
+
 readsLayout :: Layout a -> String -> [(Layout a, String)]
 readsLayout (Layout l) s = [(Layout (asTypeOf x l), rest) | (x,rest) <- reads s]
+
 class (Show (layout a), Typeable layout) => LayoutClass layout a where
   runLayout :: W.Workspace WorkspaceId (layout a) a -> Rectangle
             -> X ([(a,Rectangle)], Maybe (layout a))
@@ -104,12 +117,18 @@ instance LayoutClass Layout Window where
   handleMessage (Layout l) m = fmap Layout <$> handleMessage l m
   description (Layout l) = description l
 instance Show (Layout a) where show (Layout l) = show l
+
 class Typeable a => Message a
+
 data SomeMessage = forall a. Message a => SomeMessage a
+
 fromMessage :: Message a => SomeMessage -> Maybe a
 fromMessage (SomeMessage a) = cast a
+
 data LayoutMessages = Hide | ReleaseResources deriving (Eq, Show)
+
 instance Message LayoutMessages
 -- Only a lifecycle message, not a counterfeit X11 Event API.
 data WindowRemoved = WindowRemoved Window deriving (Show)
+
 instance Message WindowRemoved

@@ -13,7 +13,10 @@ later upstream `HEAD`.
 
 Parts of `StackSet.hs`, `Layout.hs`, and `Core.hs` are derivatives of the
 BSD-3-Clause sources below. Comments were abridged and the runtime was ported,
-so these are adaptations rather than byte-for-byte vendored copies. `LICENSE`
+so these are adaptations rather than byte-for-byte vendored copies. Later
+readability work in this port changed only layout and comments in these three
+files - every upstream identifier, signature and algorithm is unchanged, so
+they still diff usefully against the pinned commit. `LICENSE`
 keeps the original copyright and terms.
 
 - [`src/XMonad/StackSet.hs`](https://github.com/xmonad/xmonad/blob/a9a8b5c1b91b63b0836f5810634c9b28ec0af788/src/XMonad/StackSet.hs)
