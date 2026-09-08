@@ -275,17 +275,24 @@ final class AXStore {
                 }
             }
         }
+        // A window this scan did not enumerate. Only an element the window
+        // server has actually destroyed, or a dead process, proves it is gone:
+        // a busy application returns an incomplete window list, and an
+        // incomplete list is exactly what waking a display produces. Guessing
+        // here costs the window its workspace, because the engine then treats
+        // it as new and adopts it onto the workspace in view.
         for (id,r) in Array(records) where !seen.contains(id) {
-            if !livePIDs.contains(r.descriptor.pid) {
+            guard succeeded.contains(r.descriptor.pid) else { continue }
+            r.absent += 1
+            guard r.absent >= 2 else { continue }
+            var value: CFTypeRef?
+            let error=AXUIElementCopyAttributeValue(r.element,kAXRoleAttribute as CFString,&value)
+            if error == .invalidUIElement {
+                logMessage("Window \(id) removed: its element was destroyed")
                 releaseOwnership(r); records.removeValue(forKey:id)
-            } else if succeeded.contains(r.descriptor.pid) {
-                r.absent += 1
-                if r.absent >= 2 {
-                    var value: CFTypeRef?
-                    let error=AXUIElementCopyAttributeValue(r.element,kAXRoleAttribute as CFString,&value)
-                    if error == .invalidUIElement { releaseOwnership(r); records.removeValue(forKey:id) }
-                    else if r.token == nil { records.removeValue(forKey:id) }
-                }
+            } else if processIsGone(r.descriptor.pid) {
+                logMessage("Window \(id) removed: process \(r.descriptor.pid) exited")
+                releaseOwnership(r); records.removeValue(forKey:id)
             }
         }
         let cg=cgVisibleFrames()

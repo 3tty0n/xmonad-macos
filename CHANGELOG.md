@@ -6,6 +6,10 @@
   application reported hidden has to be reported hidden twice before its
   windows leave management. The log marks both edges of the pause, so a wake
   that still loses state can be traced.
+- A window is forgotten only when the window server says its element is
+  destroyed, or its process has exited. Previously a window missing from one
+  scan of an application list was enough, and waking a display produces
+  exactly that, which is what moved every window to one workspace.
 - Fixed every window moving to one workspace after a display wake. macOS
   briefly reports an incomplete application list, which made the helper
   forget its windows; the engine then adopted them as new ones on the
