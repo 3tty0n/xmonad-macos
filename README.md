@@ -27,17 +27,15 @@ Then,
 - Xcode Command Line Tools
 - Homebrew
 
-## Limitations
-
-- Subset: it supports limited APIs xmonad originally provides
-- Unsupported: Stage manager compatibility
-
 ## Run
 
 ```sh
 make dry-run     # read-only: logs what it would do, touches nothing
 make run
 ```
+
+> [!CAUTION]
+> Stage manager compatibility is unsupported
 
 ## Configure
 
@@ -72,9 +70,9 @@ A compile failure never replaces the running engine.
 Match windows with `bundleId` (stable), `className` (localized app name), or
 `title`.
 
-More layouts, hooks and ported contrib modules: [Compatibility](docs/COMPATIBILITY.md).
-
-Other config locations: [Usage](docs/USAGE.md).
+> [!NOTE]
+> More layouts, hooks and ported contrib modules: [Compatibility](docs/COMPATIBILITY.md).
+> Other config locations: [Usage](docs/USAGE.md).
 
 ## Keys
 
@@ -96,7 +94,8 @@ Other config locations: [Usage](docs/USAGE.md).
 | `M-q` / `M-S-q` | Recompile / quit |
 | `Ctrl-Opt-Cmd-Esc` | Emergency stop, restores every hidden window |
 
-Full list, including per-screen keys: [Usage](docs/USAGE.md).
+> [!TIP]
+> Full list, including per-screen keys: [Usage](docs/USAGE.md).
 
 ## Workspaces
 
@@ -138,8 +137,6 @@ Accessibility again. Run this once to stop that:
 ```
 
 It creates a local signing certificate, once, with a password prompt.
-
-Details: [Usage](docs/USAGE.md).
 
 ## Documentation
 
