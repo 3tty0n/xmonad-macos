@@ -384,10 +384,16 @@ final class AXStore {
     // brought back by the ordinary placement that follows.
     private func parkingSpot(for r: AXRecord) -> Rect {
         let right=displays.map { $0.usable.x+$0.usable.width }.max() ?? r.frame.x
-        return Rect(x:right+64,y:r.frame.y,width:r.frame.width,height:r.frame.height)
+        let bottom=displays.map { $0.usable.y+$0.usable.height }.max() ?? r.frame.y
+        return Rect(x:right+64,y:bottom+64,width:r.frame.width,height:r.frame.height)
     }
+    // AppKit will not let a window leave the screen completely: it keeps about
+    // 40 points of it in view. Parked into the bottom-right corner both limits
+    // apply at once and roughly 40x32 points remain, so anything under a
+    // 64-point square counts as hidden. Beyond that a window would show a
+    // visible strip over the workspace and has to be minimized instead.
     private func onAnyDisplay(_ rect: Rect) -> Bool {
-        displays.contains { $0.usable.intersectionArea(rect) > 0 }
+        displays.map { $0.usable.intersectionArea(rect) }.reduce(0,+) > 4096
     }
     private func show(_ r: AXRecord) {
         guard r.token != nil else { return }  // Never restore a user's hiding.
@@ -408,8 +414,10 @@ final class AXStore {
             return
         }
         guard let actual=axFrame(r.element) else { return }
-        let spot=parkingSpot(for:r)
-        guard !actual.near(spot,tolerance:8) else { r.wantsHidden=true; return }
+        // Already parked: the clamped position never equals the requested one,
+        // so compare visibility rather than coordinates or we rewrite it on
+        // every scan.
+        if r.token != nil,!onAnyDisplay(actual) { r.wantsHidden=true; return }
         guard r.descriptor.launch>0 else { logMessage("Cannot journal unknown application lifetime"); return }
         if r.token == nil {
             let entry=r.recovery
@@ -417,6 +425,7 @@ final class AXStore {
             catch { logMessage("Refusing to hide without a durable recovery record: \(error)"); return }
         }
         r.wantsHidden=true; r.hideRequestedAt=Date(); r.hideConfirmed=false
+        let spot=parkingSpot(for:r)
         var point=CGPoint(x:spot.x,y:spot.y)
         guard let pv=AXValueCreate(.cgPoint,&point) else { return }
         AXUIElementSetAttributeValue(r.element,kAXPositionAttribute as CFString,pv)
