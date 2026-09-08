@@ -7,8 +7,10 @@
 -- comments abridged. Tall/Mirror/Choose algorithms retained.
 module XMonad.Layout
   ( Full(..), Tall(..), Mirror(..), Resize(..), IncMasterN(..), Choose(..)
+  , ThreeCol(..), Circle(..)
   , (|||), CLR(..), ChangeLayout(..), JumpToLayout(..), mirrorRect
-  , splitVertically, splitHorizontally, splitHorizontallyBy, splitVerticallyBy, tile
+  , splitVertically, splitHorizontally, splitHorizontallyBy, splitVerticallyBy
+  , tile, tile3, split3HorizontallyBy
   ) where
 import XMonad.Core
 import qualified XMonad.StackSet as W
@@ -57,6 +59,77 @@ splitHorizontallyBy f (Rectangle sx sy sw sh) =
   (Rectangle sx sy leftw sh, Rectangle (sx+leftw) sy (sw-leftw) sh)
   where leftw = floor $ fromIntegral sw * f
 splitVerticallyBy f = (mirrorRect *** mirrorRect) . splitHorizontallyBy f . mirrorRect
+-- Adapted from xmonad-contrib XMonad.Layout.ThreeColumns (BSD-3-Clause),
+-- Copyright (c) Kai Grossjohann and the Xmonad Community. Master column plus
+-- two stacks; ThreeColMid puts the master between them. `description` names
+-- the two constructors apart, where upstream reports "ThreeCol" for both.
+data ThreeCol a = ThreeCol
+                    { threeColNMaster :: !Int, threeColDelta :: !Rational
+                    , threeColFrac :: !Rational }
+                | ThreeColMid
+                    { threeColNMaster :: !Int, threeColDelta :: !Rational
+                    , threeColFrac :: !Rational }
+  deriving (Show,Read)
+instance LayoutClass ThreeCol a where
+  pureLayout l r s = zip ws (tile3 (middle l) (threeColFrac l) r (threeColNMaster l) (length ws))
+    where ws = W.integrate s
+          middle ThreeColMid{} = True
+          middle ThreeCol{} = False
+  pureMessage l m = msum [resize <$> fromMessage m, inc <$> fromMessage m]
+    where resize Shrink = l {threeColFrac = max (-0.5) $ threeColFrac l - threeColDelta l}
+          resize Expand = l {threeColFrac = min 1 $ threeColFrac l + threeColDelta l}
+          inc (IncMasterN d) = l {threeColNMaster = max 0 $ threeColNMaster l + d}
+  description ThreeColMid{} = "ThreeColMid"
+  description ThreeCol{} = "ThreeCol"
+-- A negative fraction is upstream's way of asking for a master narrower than
+-- the side columns: it is read as 1+2f of the screen.
+tile3 :: Bool -> Rational -> Rectangle -> Int -> Int -> [Rectangle]
+tile3 middle f r nmaster n
+  | n <= nmaster || nmaster == 0 = splitVertically n r
+  | n <= nmaster+1 = splitVertically nmaster s1 ++ splitVertically (n-nmaster) s2
+  | otherwise = splitVertically nmaster r1
+             ++ splitVertically nmid r2 ++ splitVertically nright r3
+  where (r1,r2,r3) = split3HorizontallyBy middle (if f<0 then 1+2*f else f) r
+        (s1,s2) = splitHorizontallyBy (if f<0 then 1+f else f) r
+        nslave = n-nmaster
+        nmid = (nslave+1) `div` 2
+        nright = nslave-nmid
+split3HorizontallyBy :: RealFrac r => Bool -> r -> Rectangle
+                     -> (Rectangle,Rectangle,Rectangle)
+split3HorizontallyBy middle f (Rectangle sx sy sw sh)
+  | middle = (Rectangle (sx+r3w) sy r1w sh, Rectangle sx sy r3w sh
+             ,Rectangle (sx+r3w+r1w) sy r2w sh)
+  | otherwise = (Rectangle sx sy r1w sh, Rectangle (sx+r1w) sy r2w sh
+                ,Rectangle (sx+r1w+r2w) sy r3w sh)
+  where r1w = ceiling $ fromIntegral sw * f
+        r2w = ceiling $ fromIntegral (sw-r1w) / (2 :: Double)
+        r3w = sw-r1w-r2w
+-- Adapted from xmonad-contrib XMonad.Layout.Circle (BSD-3-Clause),
+-- Copyright (c) Peter De Wachter and the Xmonad Community. The master window
+-- takes a centred area and the rest orbit it, overlapping. The focused window
+-- is placed last, which is how this port raises a window.
+data Circle a = Circle deriving (Show,Read)
+instance LayoutClass Circle a where
+  pureLayout Circle r s = case splitAt (length $ W.up s) (circleLayout r (W.integrate s)) of
+    (before,focused:after) -> before ++ after ++ [focused]
+    (ps,[]) -> ps
+  description _ = "Circle"
+circleLayout :: Rectangle -> [a] -> [(a,Rectangle)]
+circleLayout _ [] = []
+circleLayout r (w:ws) = (w,centreRect r)
+  : zip ws (map (satellite r) [0,2*pi/fromIntegral (length ws) ..])
+centreRect :: Rectangle -> Rectangle
+centreRect (Rectangle sx sy sw sh) =
+  Rectangle (sx+(sw-w) `div` 2) (sy+(sh-h) `div` 2) w h
+  where w = round (fromIntegral sw / sqrt 2 :: Double)
+        h = round (fromIntegral sh / sqrt 2 :: Double)
+satellite :: Rectangle -> Double -> Rectangle
+satellite (Rectangle sx sy sw sh) a =
+  Rectangle (sx+round (rx+rx*cos a)) (sy+round (ry+ry*sin a)) w h
+  where rx = fromIntegral (sw-w)/2 :: Double
+        ry = fromIntegral (sh-h)/2 :: Double
+        w = sw*10 `div` 25
+        h = sh*10 `div` 25
 newtype Mirror l a = Mirror (l a) deriving (Show,Read)
 instance LayoutClass l a => LayoutClass (Mirror l) a where
   runLayout (W.Workspace i (Mirror l) ms) r =

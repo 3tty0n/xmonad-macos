@@ -116,6 +116,8 @@ main = xmonad $
     , workspaces = map show [1..9] ++ ["0"]
     , layoutHook = spacing 4 $
         Tall 1 (3/100) (1/2)
+        ||| ThreeCol 1 (3/100) (1/2)     -- or ThreeColMid, master centred
+        ||| Circle                        -- centred master, the rest around it
         ||| Mirror (Tall 1 (3/100) (1/2))
         ||| Full
     , manageHook = composeAll
@@ -153,7 +155,7 @@ A compile failure never replaces the running engine.
 |---|---|
 | `M-j` / `M-k` | Focus next / previous |
 | `M-S-j` / `M-S-k` | Swap position in the stack |
-| `M-Return` / `M-S-Return` | Launch terminal / swap with master |
+| `M-Return` / `M-S-Return` | Make the focused window master / launch terminal |
 | `M-h` / `M-l` | Shrink / expand the master area |
 | `M-Space` / `M-S-Space` | Next layout / reset to the default layout |
 | `M-1…9`, `M-0` | View that workspace |

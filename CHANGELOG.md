@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `ThreeCol`, `ThreeColMid` and `Circle` layouts, ported from xmonad-contrib.
+- `M-Return` makes the focused window the master and `M-S-Return` launches the
+  terminal, as upstream xmonad binds them. This swaps the two defaults.
+- The menu bar shows an xmobar-style workspace row, and `xmonad status`
+  publishes the same data for an external bar.
+- Menu bar items are grouped under Settings and Diagnostics.
+
 - Windows on another workspace are parked off-screen instead of minimized. No
   Dock animation, no apps refusing or delaying `AXMinimized`, and no restore
   race on switching back. A window whose app clamps the position back onto a

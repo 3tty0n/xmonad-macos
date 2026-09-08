@@ -55,6 +55,26 @@ main = do
     let rs=tile ratio r masters n
     check "tile count" (length rs==n)
     check "tile area" (sum [rect_width a*rect_height a | a<-rs]==800000)
+  -- ThreeCol: master column plus two stacks, filling the frame without gaps.
+  let frame3=Rectangle 0 24 1000 800
+      cols n=tile3 False (1/2) frame3 1 n
+      mids n=tile3 True (1/2) frame3 1 n
+  check "ThreeCol one window fills the frame" (cols 1==[frame3])
+  check "ThreeCol three columns" (length (cols 3)==3)
+  check "ThreeCol area" (sum [rect_width a*rect_height a | a<-cols 3]==800000)
+  check "ThreeCol columns do not overlap"
+    (sort (map rect_x (cols 3))==map rect_x (cols 3) &&
+     and [rect_x a+rect_width a<=rect_x b | (a,b) <- zip (cols 3) (drop 1 (cols 3))])
+  check "ThreeCol master is left, ThreeColMid master is centred"
+    (rect_x (head (cols 3))==0 && rect_x (head (mids 3)) > 0)
+  check "ThreeCol splits the stacks evenly" (length (cols 5)==5)
+  -- Circle: a centred master, satellites around it, focused window last.
+  let circle=pureLayout Circle frame3 (W.Stack 2 [1] [3,4])
+  check "Circle places every window" (length circle==4)
+  check "Circle raises the focused window last" (fst (last circle)==2)
+  check "Circle centres the master"
+    (let Just c=lookup 1 circle
+     in rect_x c > 0 && rect_y c > 24 && rect_width c < 1000)
   (_,s1) <- runX conf initial (reconcile snapshot)
   check "initial display assignment" (W.findTag 3 (windowset s1)==Just "2")
   check "observed focus" (W.peek (windowset s1)==Just 1)

@@ -15,12 +15,14 @@ defaultConfig = XConfig
   ,keys=defaultKeys, manageHook=mempty, startupHook=pure (), logHook=pure ()}
 defaultKeys :: XConfig Layout -> M.Map (KeyMask,KeySym) (X ())
 defaultKeys c = M.fromList $
-  [((m,xK_Return),spawn $ terminal c)
+  -- Upstream bindings: mod-Return makes the focused window the master,
+  -- mod-shift-Return launches the terminal.
+  [((m,xK_Return),windows W.swapMaster)
   ,((m,xK_j),windows W.focusDown),((m,xK_k),windows W.focusUp)
   ,((m,xK_Tab),windows W.focusDown),((m,xK_m),windows W.focusMaster)
   ,((m .|. shiftMask,xK_j),windows W.swapDown)
   ,((m .|. shiftMask,xK_k),windows W.swapUp)
-  ,((m .|. shiftMask,xK_Return),windows W.swapMaster)
+  ,((m .|. shiftMask,xK_Return),spawn $ terminal c)
   ,((m,xK_h),sendMessage Shrink),((m,xK_l),sendMessage Expand)
   ,((m,xK_comma),sendMessage $ IncMasterN 1)
   ,((m,xK_period),sendMessage $ IncMasterN (-1))

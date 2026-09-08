@@ -21,6 +21,14 @@ keeps the original copyright and terms.
 - [`src/XMonad/Core.hs`](https://github.com/xmonad/xmonad/blob/a9a8b5c1b91b63b0836f5810634c9b28ec0af788/src/XMonad/Core.hs)
 - [`LICENSE`](https://github.com/xmonad/xmonad/blob/a9a8b5c1b91b63b0836f5810634c9b28ec0af788/LICENSE)
 
+## Derived from xmonad-contrib
+
+`ThreeCol`, `ThreeColMid` and `Circle` in `src/XMonad/Layout.hs` are adapted
+from [`xmonad/xmonad-contrib`](https://github.com/xmonad/xmonad-contrib), also
+BSD-3-Clause: `XMonad.Layout.ThreeColumns` and `XMonad.Layout.Circle`. They
+live in this port's `XMonad.Layout` rather than under a contrib module path,
+because contrib itself is not supported.
+
 ## Platform references
 
 Why XQuartz is not the answer:
