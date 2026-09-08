@@ -1,23 +1,19 @@
 # XMonadMac
 
 A native macOS port of xmonad's policy core. Your `xmonad.hs` is compiled as
-real Haskell and drives `StackSet`, `LayoutClass`, and `Tall / Mirror / Full /
-Choose` over ordinary macOS windows. A separate Swift app owns the privileged
-side: the Accessibility API, the keyboard tap, and mod+mouse drag.
+real Haskell.
 
-No yabai, no skhd, no XQuartz, no X11 libraries, no private APIs, and no SIP
-changes at runtime.
-
-> **Scope.** This is a source-compatible *subset* of xmonad, not a drop-in
+> **Scope.** This is a source-compatible subset of xmonad, not a drop-in
 > replacement. Existing configurations do not run unchanged, and
-> xmonad-contrib is not supported. See [Compatibility](docs/COMPATIBILITY.md)
-> for the exact boundary.
+> xmonad-contrib is not supported. [Compatibility](docs/COMPATIBILITY.md) has
+> the exact boundary.
 
 ## Requirements
 
 - macOS 13 or later
 - Xcode Command Line Tools (`xcode-select --install`)
-- Homebrew — bootstrap installs `ghc@9.12` and `cabal-install` if missing
+- Homebrew. Bootstrap installs `ghc@9.12` and `cabal-install` if they are
+  missing
 - Network access to Hackage for the first build
 
 ## Install
@@ -25,50 +21,49 @@ changes at runtime.
 ```sh
 git clone <this-repo> xmonad-macos
 cd xmonad-macos
-make bootstrap
+                # runs tests, compiles your config,
+                # builds and sign the native app,
+make bootstrap  # and installs it
 ```
 
-`make bootstrap` runs the tests, compiles your config, builds and signs the
-native app, and installs it. It stops on the first compile error or test
-failure rather than pretending to succeed.
+### Permissions
 
-Then grant permissions: **System Settings → Privacy & Security →
-Accessibility** → add `~/Applications/XMonadMac.app`, quit the app, and start
-it again. The app itself performs the AX calls, not your terminal. If the
-keyboard tap is refused, check **Input Monitoring** for the same app.
+In System Settings, under Privacy & Security -> Accessibility, add
+`~/Applications/XMonadMac.app`, quit the app, and start it
+again.
 
-Rebuilding the native app changes its code signature, which invalidates the
+Rebuilding the native app changes its code signature, and that invalidates the
 Accessibility grant. Re-add the app after `make native`, or sign with a stable
-identity via `CODESIGN_IDENTITY=...`.
+identity through `CODESIGN_IDENTITY=...`.
 
 ## First run
 
-Start read-only, which logs a layout plan without moving windows or
-intercepting keys:
+Start read-only.
+It logs a layout plan without moving windows or intercepting keys:
 
 ```sh
 make dry-run
 xmonadctl log        # follow ~/Library/Logs/XMonadMac/bridge.log
 ```
 
-Quit XMonadMac from its menu, stop yabai/skhd yourself if you run them
-(`run.sh` refuses to start rather than editing your services), then:
+Quit XMonadMac from its menu. If you run yabai or skhd, stop them yourself:
+`run.sh` refuses to start rather than editing your services. Then:
 
 ```sh
 make run
 ```
 
-Try it first with two or three throwaway windows — Terminal, Finder — with no
-unsaved work. The tested configuration is one native Space per display with
-Stage Manager off.
+Try it first with two or three throwaway windows, such as Terminal and
+Finder, holding no unsaved work. The tested setup is one native Space per
+display with Stage Manager off.
 
-`--dry-run` skips `startupHook` and applies no native changes, but your config
-is an ordinary Haskell program: any IO you write in `manageHook` or `logHook`
-still runs. It is not a sandbox.
+`--dry-run` skips `startupHook` and changes nothing natively, but your config
+is an ordinary Haskell program. Any IO you wrote in `manageHook` or `logHook`
+still runs, so treat it as your own code rather than a sandbox.
 
 ## Configuration
 
-The config is searched in this order:
+XMonadMac looks for your config in this order:
 
 1. an explicit path argument
 2. `$XMONAD_CONFIG`
@@ -104,10 +99,11 @@ main = xmonad $
     ]
 ```
 
-Window matchers map to macOS concepts: `className` is the app's display name,
-`resource` / `appName` / `bundleId` are the bundle identifier, and `title` is
-`AXTitle`. Prefer `bundleId` — display names are localized. Native tabs are
-one window unless the app exposes each tab as its own AX window.
+Window matchers map onto macOS concepts. `className` is the app's display
+name, `resource`, `appName`, and `bundleId` are all the bundle identifier, and
+`title` is `AXTitle`. Prefer `bundleId`, because display names are localized.
+Native tabs count as one window unless the app exposes each tab as its own AX
+window.
 
 Apply changes:
 
@@ -143,21 +139,21 @@ A compile failure never replaces the running engine.
 | `M-S-p` | Pause and restore WM-minimized windows |
 | `Ctrl-Opt-Cmd-Esc` | Emergency stop and restore, bypassing Haskell |
 
-Bindings are matched by **physical key position** on a US layout. Character
-based resolution for AZERTY/QWERTZ and multi-stroke chords are not
+Bindings match physical key positions on a US layout. Character-based
+resolution for AZERTY and QWERTZ, and multi-stroke chords, are not
 implemented.
 
 Mouse drag uses the same modifier as `modMask`. Starting a drag updates
-`StackSet.floating` in Haskell and suppresses tiling for that window until
-mouse-up. A floating window dragged to another display joins the logical
+`StackSet.floating` in Haskell and stops tiling that window until you release
+the button. A floating window dragged onto another display joins the logical
 workspace visible there.
 
 ## Daily use
 
-`make install` creates `~/.local/bin/xmonadctl` and `~/.local/bin/xmonad`, and
-copies a self-contained build kit to
-`~/Library/Application Support/XMonadMac/build-kit`, so config recompiles keep
-working after you move or delete the checkout.
+`make install` creates `~/.local/bin/xmonadctl` and `~/.local/bin/xmonad`. It
+also copies a self-contained build kit to
+`~/Library/Application Support/XMonadMac/build-kit`, so recompiling your
+config keeps working after you move or delete the checkout.
 
 ```sh
 xmonadctl status         # bridge status as JSON
@@ -171,16 +167,17 @@ xmonadctl doctor         # environment, permissions, recent log
 xmonadctl autostart on   # opt-in LaunchAgent; also off / status
 ```
 
-The menu bar item offers the same operations, plus two toggles:
+The menu bar item offers the same operations, plus two toggles.
 
-- **Disable macOS window shortcuts** — swallows `Cmd-Tab`, ``Cmd-` ``,
-  `Ctrl-arrows` (Mission Control), `Cmd-H`, and `Cmd-M` while tiling is
-  active. Nothing is written to system preferences, so quitting restores
-  every shortcut.
-- **Log key events to bridge.log** — records modified key presses as
-  `key code=… mask=… bound=… consumed=…`. Use it when a binding appears
-  dead; the mask tells you which modifier actually arrived
-  (Shift=1, Control=4, Option=8, Command=64).
+"Disable macOS window shortcuts" swallows `Cmd-Tab`, ``Cmd-` ``, the
+`Ctrl-arrows` of Mission Control, `Cmd-H`, and `Cmd-M` while tiling is active.
+Nothing is written to system preferences, so quitting gives every shortcut
+back.
+
+"Log key events to bridge.log" records each modified key press as
+`key code=… mask=… bound=… consumed=…`. Turn it on when a binding looks dead:
+the mask tells you which modifier actually arrived, where Shift is 1, Control
+is 4, Option is 8, and Command is 64.
 
 ## Make targets
 
@@ -197,42 +194,45 @@ The menu bar item offers the same operations, plus two toggles:
 | `make icon` | Regenerate the icons from SVG (needs `rsvg-convert`) |
 | `make clean` | Remove `build/` and `dist-newstyle/` |
 
-Every target is a thin wrapper over the matching script in `scripts/`, and
-`CONFIG=path/to/xmonad.hs` overrides the config for build and reload targets.
+Every target is a thin wrapper over the matching script in `scripts/`.
+`CONFIG=path/to/xmonad.hs` overrides the config for the build and reload
+targets.
 
 ## Workspaces and recovery
 
-Logical workspaces are **not** macOS Spaces. Windows that a workspace switch
-hides are minimized through AX, so they appear in the Dock with the usual
-animation. The `Full` layout does *not* minimize anything — it stacks every
-window at the full frame and raises the focused one.
+Logical workspaces are not macOS Spaces. Windows hidden by a workspace switch
+are minimized through AX, so they land in the Dock with the usual animation.
+The `Full` layout minimizes nothing: it stacks every window at the full frame
+and raises the focused one.
 
-Windows you minimized yourself are excluded from management and are never
-restored automatically.
+Windows you minimized yourself are left out of management, and XMonadMac never
+restores them on its own.
 
-Before minimizing, an ownership record is written atomically to
-`~/Library/Application Support/XMonadMac/recovery.json`. Normal quit, engine
-failure, emergency stop, and the response watchdog all restore owned windows.
-A `SIGKILL` of the helper or an OS crash cannot restore immediately — use:
+Before minimizing, it writes an ownership record atomically to
+`~/Library/Application Support/XMonadMac/recovery.json`. A normal quit, an
+engine failure, an emergency stop, and the response watchdog all restore owned
+windows. A `SIGKILL` of the helper or an OS crash cannot restore anything
+immediately, so run:
 
 ```sh
 make recover     # or: xmonadctl recover
 make doctor
 ```
 
-If a window cannot be identified unambiguously, the record is kept and the
-window is left alone; restore it from the Dock and reconcile the log by hand.
-Deleting the record is not a restore. The journal tracks *WM-owned
-minimization only* — it is not a snapshot of your original window geometry.
+When a window cannot be identified unambiguously, XMonadMac keeps the record
+and leaves the window alone. Restore it from the Dock and reconcile the log by
+hand. Deleting the record is not a restore. The journal tracks WM-owned
+minimization and nothing else, so it is not a snapshot of your original window
+geometry.
 
 Switching native Spaces resets the logical epoch and restores owned windows.
-Moving windows between Spaces and controlling native full-screen are out of
-scope; tiling pauses while a native full-screen window is frontmost.
+Moving windows between Spaces and controlling native full-screen are both out
+of scope. Tiling pauses while a native full-screen window is frontmost.
 
 ## Working as an upstream fork
 
 This tree does not carry xmonad's full history. To graft it onto the real
-upstream history under `macos/`:
+upstream history under `macos/`, run:
 
 ```sh
 ./scripts/make-upstream-fork.sh ../xmonad-native-fork
@@ -240,9 +240,9 @@ cd ../xmonad-native-fork/macos
 make bootstrap
 ```
 
-Base commit `a9a8b5c1b91b63b0836f5810634c9b28ec0af788`, branch
-`macos-native`. The X11 tree is left intact; this port is a separate Haskell
-package, so it cannot break the existing build.
+That uses base commit `a9a8b5c1b91b63b0836f5810634c9b28ec0af788` and the
+branch `macos-native`. It leaves the X11 tree intact, and because this port is
+a separate Haskell package, it cannot break the existing build.
 
 ## Documentation
 
