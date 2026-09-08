@@ -11,7 +11,30 @@ caveat is the point of the row.
 | `XMonad.StackSet` | Upstream `view` / `greedyView` / `focus` / `swap` / `shift` / `float` / `sink` |
 | `LayoutClass` | `runLayout`, `doLayout`, `pureLayout`, `emptyLayout`, `handleMessage`, `pureMessage`, `description` |
 | `Tall` / `Mirror` / `Full` / `Choose` / `(\|\|\|)` | Upstream algorithms, made portable |
-| `ThreeCol` / `ThreeColMid` / `Circle` | Ported from xmonad-contrib. `XMonad` re-exports them, and `XMonad.Layout.ThreeColumns` / `XMonad.Layout.Circle` exist so contrib configs compile unchanged |
+| `ThreeCol` / `ThreeColMid` / `Circle` | Ported from xmonad-contrib; `Circle` additionally resizes with Shrink/Expand |
+
+## Ported xmonad-contrib modules
+
+The xmonad-contrib package cannot be a dependency: it is written against the
+X11 runtime this port replaces. Individual modules whose logic is pure
+`StackSet` or geometry are ported under their own module paths, so a config
+importing them compiles unchanged.
+
+| Module | Ported |
+|---|---|
+| `XMonad.Layout.ThreeColumns` | `ThreeCol`, `ThreeColMid` |
+| `XMonad.Layout.Circle` | `Circle`, plus Shrink/Expand resizing |
+| `XMonad.Layout.Grid` | `Grid`, `GridRatio` |
+| `XMonad.Layout.Simplest` | `Simplest` |
+| `XMonad.Layout.ResizableTile` | `ResizableTall`, `MirrorShrink`, `MirrorExpand` |
+| `XMonad.Actions.CycleWS` | `nextWS`, `prevWS`, `shiftToNext`, `shiftToPrev`, `toggleWS`, `moveTo`, `shiftTo`; not the predicate/`WSType` API |
+| `XMonad.Actions.WithAll` | `withAll`, `withAll'`, `killAll`, `sinkAll` |
+| `XMonad.Util.EZConfig` | `additionalKeysP`, `removeKeysP`, key parser |
+| `XMonad.Layout.Spacing` | `spacing` |
+
+Anything drawing with X11 (`Tabbed`, `Decoration`, `Prompt`, `NoBorders`) or
+reaching for `Display`, atoms, EWMH or `ExtensibleState` is out of reach
+without a runtime that does not exist here.
 | `Shrink` / `Expand` / `IncMasterN` / `NextLayout` / `JumpToLayout` | Handled as layout messages |
 | Custom pure layouts | Supported at source level, using portable types only |
 | Custom stateful layouts | Limited to what the `X` monad exposes; no X11 calls |

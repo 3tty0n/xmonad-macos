@@ -4,9 +4,11 @@ A native macOS port of xmonad's policy core. `xmonad.hs` is compiled as real
 Haskell and drives a signed Swift helper over NDJSON.
 
 Source-compatible subset, not a drop-in replacement: existing configurations
-do not run unchanged and xmonad-contrib is not supported, apart from the
-`ThreeColumns` and `Circle` layouts, which are ported.
-[Compatibility](docs/COMPATIBILITY.md) states the exact boundary.
+do not run unchanged. The xmonad-contrib package cannot be a dependency, but
+modules whose logic is pure `StackSet` or geometry are ported under their own
+module paths - `ThreeColumns`, `Circle`, `Grid`, `Simplest`, `ResizableTile`,
+`CycleWS`, `WithAll`. [Compatibility](docs/COMPATIBILITY.md) has the list and
+states the exact boundary.
 
 ## Requirements
 

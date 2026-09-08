@@ -51,6 +51,11 @@ library
     XMonad.Layout.Spacing
     XMonad.Layout.ThreeColumns
     XMonad.Layout.Circle
+    XMonad.Layout.Grid
+    XMonad.Layout.Simplest
+    XMonad.Layout.ResizableTile
+    XMonad.Actions.CycleWS
+    XMonad.Actions.WithAll
     XMonad.MacOS
     XMonad.MacOS.Types
     XMonad.MacOS.Protocol

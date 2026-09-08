@@ -5,6 +5,11 @@ import qualified XMonad.StackSet as W
 import XMonad.MacOS.Engine
 import XMonad.MacOS.Protocol
 import XMonad.Util.EZConfig (parseKey)
+import XMonad.Layout.Grid
+import XMonad.Layout.Simplest
+import XMonad.Layout.ResizableTile
+import XMonad.Actions.CycleWS
+import XMonad.Actions.WithAll
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.List (sort,nub)
@@ -83,6 +88,25 @@ main = do
   check "Circle centres the master"
     (let Just c=lookup 1 circle
      in rect_x c > 0 && rect_y c > 24 && rect_width c < 1000)
+  -- Ported contrib layouts: same frame, no gaps, no overlap.
+  let grid n = map snd (pureLayout Grid frame3 (W.Stack 0 [] [1..n-1]))
+  check "Grid places every window" (length (grid 4)==4)
+  check "Grid area" (sum [rect_width a*rect_height a | a <- grid 4]==800000)
+  check "Grid single window fills the frame" (grid 1==[frame3])
+  check "Simplest gives every window the frame"
+    (map snd (pureLayout Simplest frame3 (W.Stack 0 [] [1,2]))==replicate 3 frame3)
+  let rt = ResizableTall 1 (3/100) (1/2) []
+      heights l = map (rect_height . snd) (pureLayout l frame3 (W.Stack 1 [] [2,3]))
+  check "ResizableTall splits the stack evenly" (heights rt==[800,400,400])
+  check "ResizableTall honours per-window weights"
+    (heights (ResizableTall 1 (3/100) (1/2) [1,1.5,1])==[800,480,320])
+  (resized,_) <- runX conf initial $ do
+    modify $ \st -> st {windowset=W.insertUp 3 $ W.insertUp 2 $ W.insertUp 1 (windowset st)}
+    handleMessage rt (SomeMessage MirrorExpand)
+  check "MirrorExpand records a weight for the focused window"
+    (maybe False ((>0) . length . resizableSlaves) resized)
+  check "MirrorExpand leaves the other weights alone"
+    (maybe False (all (==1) . drop 1 . resizableSlaves) resized)
   (_,s1) <- runX conf initial (reconcile snapshot)
   check "initial display assignment" (W.findTag 3 (windowset s1)==Just "2")
   check "observed focus" (W.peek (windowset s1)==Just 1)
@@ -111,6 +135,17 @@ main = do
   (_,sUser) <- runX conf sOwn (reconcile userSnapshot)
   check "user-minimized window is not managed" (not $ W.member 1 $ windowset sUser)
   (_,cycleState) <- runX conf s2 $ sendMessage NextLayout >> sendMessage NextLayout >> sendMessage NextLayout
+  -- One screen, so a neighbour workspace is hidden rather than on a monitor.
+  let single=initialState cfg [head displays]
+  (_,cycled) <- runX conf single (nextWS >> nextWS)
+  check "nextWS walks the config order" (W.currentTag (windowset cycled)=="3")
+  (_,wrapped) <- runX conf single prevWS
+  check "prevWS wraps to the last workspace" (W.currentTag (windowset wrapped)=="0")
+  (_,back) <- runX conf single (nextWS >> toggleWS)
+  check "toggleWS returns to the previous workspace" (W.currentTag (windowset back)=="1")
+  (_,killed) <- runX conf s1 killAll
+  check "killAll closes every window on the workspace"
+    (length [w | Close w <- commands killed]==2)
   check "Choose cycles and wraps" (description (W.layout (W.workspace $ W.current $ windowset cycleState))=="Tall")
   -- A dropped/stale plan must not lose the user's focus intent. Conversely,
   -- the retry is bounded and a WM-hide animation cannot reverse a view.
