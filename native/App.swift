@@ -174,30 +174,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusItem.button?.image=icon
             statusItem.button?.imagePosition = .imageLeading
         }
-        let menu=NSMenu()
-        pauseItem=NSMenuItem(title:"Resume",action:#selector(togglePause),keyEquivalent:"")
-        pauseItem.target=self; menu.addItem(pauseItem)
-        suppressItem=NSMenuItem(title:"Disable macOS window shortcuts",
-          action:#selector(toggleSuppressShortcuts),keyEquivalent:"")
-        suppressItem.target=self; suppressItem.state=suppressShortcuts ? .on : .off
-        menu.addItem(suppressItem)
-        logKeysItem=NSMenuItem(title:"Log key events to bridge.log",
-          action:#selector(toggleLogKeys),keyEquivalent:"")
-        logKeysItem.target=self; logKeysItem.state=logKeys ? .on : .off
-        menu.addItem(logKeysItem)
-        for (title,selector) in [("Recompile xmonad.hs",#selector(recompileConfig)),
-          ("Reload compiled xmonad.hs",#selector(reloadEngine)),
-          ("Open xmonad.hs",#selector(openConfig)),
-          ("Pause and restore minimized windows",#selector(restoreWindows)),
-          ("Write diagnostic snapshot",#selector(dumpSnapshot)),
-          ("Run AX self-test",#selector(runSelfTest)),
-          ("Open log",#selector(openLog))] {
-            let item=NSMenuItem(title:title,action:selector,keyEquivalent:"")
-            item.target=self; menu.addItem(item)
+        func item(_ title: String,_ selector: Selector) -> NSMenuItem {
+            let i=NSMenuItem(title:title,action:selector,keyEquivalent:"")
+            i.target=self
+            return i
         }
+        func submenu(_ title: String,_ items: [NSMenuItem]) -> NSMenuItem {
+            let parent=NSMenuItem(title:title,action:nil,keyEquivalent:"")
+            let sub=NSMenu()
+            items.forEach { sub.addItem($0) }
+            parent.submenu=sub
+            return parent
+        }
+        // Everyday actions at the top; the rest is grouped so the menu stays
+        // short. "Pause" already restores hidden windows, so it is one item.
+        let menu=NSMenu()
+        pauseItem=item("Resume",#selector(togglePause))
+        menu.addItem(pauseItem)
+        menu.addItem(item("Recompile xmonad.hs",#selector(recompileConfig)))
+        menu.addItem(item("Open xmonad.hs",#selector(openConfig)))
         menu.addItem(NSMenuItem.separator())
-        let quit=NSMenuItem(title:"Quit XMonadMac",action:#selector(quitApp),keyEquivalent:"")
-        quit.target=self; menu.addItem(quit)
+        suppressItem=item("Disable macOS window shortcuts",#selector(toggleSuppressShortcuts))
+        suppressItem.state=suppressShortcuts ? .on : .off
+        logKeysItem=item("Log key events",#selector(toggleLogKeys))
+        logKeysItem.state=logKeys ? .on : .off
+        menu.addItem(submenu("Settings",[suppressItem,logKeysItem]))
+        menu.addItem(submenu("Diagnostics",[
+          item("Reload compiled xmonad.hs",#selector(reloadEngine)),
+          item("Open log",#selector(openLog)),
+          item("Write diagnostic snapshot",#selector(dumpSnapshot)),
+          item("Run AX self-test",#selector(runSelfTest))]))
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(item("Quit XMonadMac",#selector(quitApp)))
         statusItem.menu=menu
         setStatus("Paused")
     }
@@ -563,7 +571,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if FileManager.default.fileExists(atPath:Paths.config.path) { NSWorkspace.shared.open(Paths.config) }
         else { setStatus("Config missing: \(Paths.config.path)") }
     }
-    @objc private func restoreWindows() { pause(reason:"Paused; restoring only WM-minimized windows") }
     @objc private func dumpSnapshot() {
         if let s=lastSnapshot { writeSnapshot(s) }
         else { dumpNext=true; scheduleScan() }
@@ -599,7 +606,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "resume": resume()
         case "reload": reloadEngine()
         case "recompile": recompileConfig()
-        case "recover": restoreWindows()
+        case "recover": pause(reason:"Paused; restoring hidden windows")
         case "dump": dumpSnapshot()
         case "quit": NSApp.terminate(nil)
         default: break
