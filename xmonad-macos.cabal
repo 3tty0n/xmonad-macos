@@ -49,6 +49,8 @@ library
     XMonad.Config
     XMonad.Util.EZConfig
     XMonad.Layout.Spacing
+    XMonad.Layout.ThreeColumns
+    XMonad.Layout.Circle
     XMonad.MacOS
     XMonad.MacOS.Types
     XMonad.MacOS.Protocol

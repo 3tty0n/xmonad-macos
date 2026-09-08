@@ -11,7 +11,7 @@ caveat is the point of the row.
 | `XMonad.StackSet` | Upstream `view` / `greedyView` / `focus` / `swap` / `shift` / `float` / `sink` |
 | `LayoutClass` | `runLayout`, `doLayout`, `pureLayout`, `emptyLayout`, `handleMessage`, `pureMessage`, `description` |
 | `Tall` / `Mirror` / `Full` / `Choose` / `(\|\|\|)` | Upstream algorithms, made portable |
-| `ThreeCol` / `ThreeColMid` / `Circle` | Ported from xmonad-contrib; import from `XMonad`, not `XMonad.Layout.ThreeColumns` |
+| `ThreeCol` / `ThreeColMid` / `Circle` | Ported from xmonad-contrib. `XMonad` re-exports them, and `XMonad.Layout.ThreeColumns` / `XMonad.Layout.Circle` exist so contrib configs compile unchanged |
 | `Shrink` / `Expand` / `IncMasterN` / `NextLayout` / `JumpToLayout` | Handled as layout messages |
 | Custom pure layouts | Supported at source level, using portable types only |
 | Custom stateful layouts | Limited to what the `X` monad exposes; no X11 calls |

@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- `ThreeCol`, `ThreeColMid` and `Circle` layouts, ported from xmonad-contrib.
+- `ThreeCol`, `ThreeColMid` and `Circle` layouts, ported from xmonad-contrib,
+  reachable both from `XMonad` and from their contrib module paths
+  `XMonad.Layout.ThreeColumns` and `XMonad.Layout.Circle`.
 - `M-Return` makes the focused window the master and `M-S-Return` launches the
   terminal, as upstream xmonad binds them. This swaps the two defaults.
 - The menu bar shows an xmobar-style workspace row, and `xmonad status`
