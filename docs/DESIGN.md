@@ -208,6 +208,11 @@ separate process from the running engine; the new engine must pass
 atomic rename swaps it in. A syntax error, a type error, or an unsupported key
 therefore leaves the running engine untouched.
 
+The `xmonad` command is the compiled config itself, as upstream's is: control
+arguments are handled before any engine starts, so `xmonad status` works
+without a running helper and `xmonad --recompile` works from the binary it is
+about to replace.
+
 `M-q`, the menu's Recompile, and `xmonad --recompile` all take this path.
 `Reload compiled xmonad.hs` and `xmonad --restart` skip the build and restart
 the existing engine. Reinstalling the app refreshes the build kit and never

@@ -70,6 +70,7 @@ library
     XMonad.MacOS.Types
     XMonad.MacOS.Protocol
     XMonad.MacOS.Engine
+    XMonad.MacOS.CLI
 
 executable xmonad-engine
   import: defaults

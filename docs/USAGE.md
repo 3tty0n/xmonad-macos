@@ -93,7 +93,7 @@ xmonad status | jq -r '[.workspaces[] | select(.windows > 0 or .current)
 | Path | Contents |
 |---|---|
 | `~/Applications/XMonadMac.app` | The signed helper |
-| `~/.local/bin/xmonad` | The control command (`xmonadctl` is the same file) |
+| `~/.local/bin/xmonad` | The control command: a symlink to the compiled config (`xmonadctl` is the same file) |
 | `~/Library/Application Support/XMonadMac/xmonad-engine` | Compiled config |
 | `~/Library/Application Support/XMonadMac/build-kit` | Self-contained sources, so `xmonad --recompile` keeps working after the checkout moves |
 | `~/Library/Application Support/XMonadMac/recovery.json` | Windows currently hidden, for recovery after a crash |

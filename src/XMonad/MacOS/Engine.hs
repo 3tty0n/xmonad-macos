@@ -6,6 +6,7 @@ module XMonad.MacOS.Engine
   , checkpoint, restoreCheckpoint ) where
 import XMonad.Core
 import XMonad.MacOS.Protocol
+import XMonad.MacOS.CLI (handleCommand)
 import XMonad.Operations (broadcastMessage)
 import qualified XMonad.StackSet as W
 import qualified Data.Map.Strict as M
@@ -364,11 +365,14 @@ xmonad :: (LayoutClass l Window, Read (l Window)) => XConfig l -> IO ()
 xmonad user = do
   mapM_ (`hSetBuffering` LineBuffering) [stdin,stdout,stderr]
   hSetEncoding stderr utf8
+  -- A control command never starts an engine, and must work even when the
+  -- config it was compiled from is one this build would reject.
+  args <- getArgs
+  handleCommand args
   let c = user {layoutHook = Layout (layoutHook user)}
       conf = XConf c
       keymap = keys c c
   either (ioError . userError) pure (checkWorkspaces c)
-  args <- getArgs
   emit (handshake c keymap)
   unless ("--check-config" `elem` args) $ do
     (_,initial) <- runX conf (initialState c [])

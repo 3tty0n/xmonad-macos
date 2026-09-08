@@ -48,10 +48,15 @@ check(re.search(r'quit\s*=\s*request Quit', macos),'Quit must reach the helper')
 native_build=(root/'scripts/build-native.sh').read_text()
 check('native/Pointer.swift' in native_build,'Native build omits pointer backend')
 install=(root/'scripts/install.sh').read_text()
-for literal in ['build-kit','recompile-installed.sh','xmonadctl.sh','autostart.sh']:
+for literal in ['build-kit','recompile-installed.sh','autostart.sh']:
     check(literal in install,f'Install integration missing {literal}')
+cli=(root/'src/XMonad/MacOS/CLI.hs').read_text()
+check("bin/xmonad-engine" not in install and 'xmonad-engine" "$HOME/.local/bin/xmonad"' in install,
+      'xmonad must be the compiled config binary')
+for command in ['status','recompile','--restart','autostart','self-test','recover']:
+    check(f'"{command}"' in cli, f'CLI is missing {command}')
 check('mouseMask' in engine and 'floatObservedWindow' in engine,'Haskell mouse policy integration missing')
-for name in ['scripts/recompile-installed.sh','scripts/xmonadctl.sh','scripts/autostart.sh']:
+for name in ['scripts/recompile-installed.sh','scripts/autostart.sh']:
     check((root/name).is_file(),f'Missing operations helper {name}')
 for path in (root/'scripts').glob('*.sh'):
     check(path.read_text().startswith('#!/bin/bash'), f'Wrong shell: {path}')

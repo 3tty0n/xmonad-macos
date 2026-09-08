@@ -20,11 +20,12 @@ if [ -d "$SUPPORT/build-kit" ]; then mv "$SUPPORT/build-kit" "$SUPPORT/build-kit
 mv "$KIT_NEW" "$SUPPORT/build-kit"
 cp "$ROOT/scripts/recompile-installed.sh" "$SUPPORT/recompile.sh"
 cp "$ROOT/scripts/autostart.sh" "$SUPPORT/autostart.sh"
-cp "$ROOT/scripts/xmonadctl.sh" "$SUPPORT/xmonadctl"
-chmod 755 "$SUPPORT/recompile.sh" "$SUPPORT/autostart.sh" "$SUPPORT/xmonadctl"
-ln -sfn "$SUPPORT/xmonadctl" "$HOME/.local/bin/xmonadctl"
-# xmonad --recompile / --restart, for muscle memory from upstream xmonad.
-ln -sfn "$SUPPORT/xmonadctl" "$HOME/.local/bin/xmonad"
+chmod 755 "$SUPPORT/recompile.sh" "$SUPPORT/autostart.sh"
+rm -f "$SUPPORT/xmonadctl"
+# The control commands live in the compiled config, as upstream's do, so both
+# names are the engine binary itself.
+ln -sfn "$SUPPORT/xmonad-engine" "$HOME/.local/bin/xmonadctl"
+ln -sfn "$SUPPORT/xmonad-engine" "$HOME/.local/bin/xmonad"
 requirement() { /usr/bin/codesign -d -r- "$1" 2>/dev/null | sed -n 's/^designated => //p'; }
 OLD_REQ="$(requirement "$APP")"
 if [ -d "$APP" ]; then
@@ -50,5 +51,5 @@ if [ ! -e "$HOME/.config/xmonad-mac/xmonad.hs" ] && [ ! -e "$HOME/.xmonad/xmonad
 fi
 echo "Installed: $APP"
 echo "Config: $HOME/.config/xmonad-mac/xmonad.hs"
-echo "Control: $HOME/.local/bin/xmonadctl"
+echo "Control: $HOME/.local/bin/xmonad (and xmonadctl)"
 echo "Start a read-only preview: ./scripts/run.sh --dry-run"
