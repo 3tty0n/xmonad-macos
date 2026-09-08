@@ -76,6 +76,9 @@ final class AXRecord {
     var lastMinimized: Bool?
     // Consecutive scans a known window has failed the on-screen match.
     var offScreen=0
+    // Consecutive scans this window's application was missing from the
+    // running-application list.
+    var appAbsent=0
     var eligible=false
     var absent=0
     var lastTarget: Rect?
@@ -167,6 +170,11 @@ final class AXStore {
             AXObserverAddNotification(observer,r.element,name as CFString,context)
         }
     }
+    // ESRCH means no such process; anything else means it is still there, or
+    // that we may not ask, and either way the window is not proven gone.
+    private func processIsGone(_ pid: pid_t) -> Bool {
+        kill(pid,0) == -1 && errno == ESRCH
+    }
     private func releaseOwnership(_ r: AXRecord) {
         guard let token=r.token else { return }
         do { try journal.remove(token); r.token=nil }
@@ -188,8 +196,19 @@ final class AXStore {
         latestGeneration=generation; activeEpoch=epoch
         self.displays=displays
         let livePIDs=Set(apps.map(\.pid))
-        for (id,r) in Array(records) where !apps.contains(where: { $0.pid == r.descriptor.pid && abs($0.launch-r.descriptor.launch)<0.01 }) {
-            releaseOwnership(r); records.removeValue(forKey:id)
+        // An application missing from one scan is not proof that it exited:
+        // coming back from display sleep, NSWorkspace briefly reports an
+        // incomplete list. Forgetting a window here is expensive, because the
+        // engine then treats it as new and adopts it onto the workspace in
+        // view, so wait for a second scan and ask the kernel as well.
+        for (id,r) in Array(records) {
+            let listed=apps.contains { $0.pid == r.descriptor.pid
+              && abs($0.launch-r.descriptor.launch) < 0.01 }
+            if listed { r.appAbsent=0; continue }
+            r.appAbsent += 1
+            if r.appAbsent >= 2,processIsGone(r.descriptor.pid) {
+                releaseOwnership(r); records.removeValue(forKey:id)
+            }
         }
         for pid in Array(observers.keys) where !livePIDs.contains(pid) {
             if let ob=observers.removeValue(forKey:pid) {

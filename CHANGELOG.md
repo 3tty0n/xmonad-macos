@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Fixed every window moving to one workspace after a display wake. macOS
+  briefly reports an incomplete application list, which made the helper
+  forget its windows; the engine then adopted them as new ones on the
+  workspace in view. An application now has to be absent twice and be
+  confirmed dead before its windows are dropped.
+
 - More xmonad-contrib modules ported under their own module paths:
   `Layout.Grid`, `Layout.Simplest`, `Layout.ResizableTile`, `Layout.Renamed`,
   `Layout.Reflect`, `Layout.PerWorkspace`, `Layout.TwoPane`,

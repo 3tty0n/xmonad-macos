@@ -470,8 +470,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard running,configured,!scanInFlight else { return }
         let displays=displayInfo()
         guard !displays.isEmpty else { return }
+        // An empty application list means the system is not answering yet,
+        // as after a display wake. Scanning on it would report a world with no
+        // windows in it.
+        let apps=descriptors()
+        guard !apps.isEmpty else { scheduleScan(); return }
         scanInFlight=true; scanAgain=false; sequence += 1
-        let seq=sequence, ep=currentEpoch, apps=descriptors(), token=runToken
+        let seq=sequence, ep=currentEpoch, token=runToken
         axQueue.async { [weak self] in
             guard let self=self else { return }
             let result=self.store.scan(apps:apps,displays:displays,generation:seq,epoch:ep)

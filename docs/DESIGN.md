@@ -88,7 +88,12 @@ deliberately narrow.
 
 Each reconciliation removes windows that vanished from the snapshot, inserts
 new ones into the workspace of the display they appeared on, and applies
-`manageHook` once per window. Windows the WM minimized stay in the snapshot:
+`manageHook` once per window. Because a window that disappears loses its
+workspace, the helper never reports one gone on a single observation: an
+application missing from `NSWorkspace.runningApplications` has to be missing
+twice and be confirmed dead with `kill(pid,0)`, and a scan with no
+applications at all is discarded. Coming back from display sleep, macOS
+briefly reports both. Windows the WM minimized stay in the snapshot:
 treating them as destroyed would drop their logical workspace every time,
 which is why user-minimized and owned-hidden are distinguished.
 
