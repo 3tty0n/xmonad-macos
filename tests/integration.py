@@ -38,11 +38,22 @@ def run(engine: str) -> None:
         assert plan['focus'] == 1, plan
         assert any(x['wid'] == 1 and x['frame'] == win(1)['frame'] for x in plan['frames']), plan
         plan = key(ord('j')); assert plan['focus'] == 2, plan
-        plan = key(32); assert plan['layout'] == 'Mirror Tall', plan
-        # Full hides other tiled windows; the floating window 1 stays visible.
-        plan = key(32)
-        assert plan['layout'] == 'Full' and plan['hide'] == [], plan
-        assert sorted(x['wid'] for x in plan['frames']) == [1, 2], plan
+        # The layout list belongs to the config being tested, which anyone may
+        # edit, so assert that NextLayout cycles rather than naming layouts.
+        first = plan['layout']
+        seen = []
+        for _ in range(12):
+            plan = key(32)
+            if plan['layout'] == first:
+                break
+            assert plan['layout'] not in seen, ('layout repeats early', seen, plan)
+            seen.append(plan['layout'])
+            if plan['layout'] == 'Full':
+                # Full hides nothing: the floating window 1 stays visible too.
+                assert plan['hide'] == [], plan
+                assert sorted(x['wid'] for x in plan['frames']) == [1, 2], plan
+        assert seen, 'NextLayout did not change the layout'
+        assert plan['layout'] == first, ('NextLayout did not wrap', plan)
         plan = key(ord('2')); assert plan['workspace'] == '2' and sorted(plan['hide']) == [1,2]
         plan = key(ord('1')); assert plan['workspace'] == '1'
         plan = key(ord('2'), mod | 1); assert plan['workspace'] == '1'

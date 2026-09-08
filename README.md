@@ -1,226 +1,151 @@
 # XMonadMac
 
-A native macOS port of xmonad's policy core.
+xmonad's policy core, ported to macOS. Your `xmonad.hs` is compiled as real
+Haskell and drives a signed Swift helper.
 
-- `xmonad.hs` is compiled as real Haskell and drives a signed Swift helper
-  over NDJSON.
-- Source-compatible subset, not a drop-in replacement: existing configurations
-  do not run unchanged.
-- xmonad-contrib cannot be a dependency, but modules whose logic is pure
-  `StackSet` or geometry are ported: `ThreeColumns`, `Circle`, `Grid`,
-  `Simplest`, `ResizableTile`, `CycleWS`, `WithAll`.
-- [Compatibility](docs/COMPATIBILITY.md) states the exact boundary.
-
-## Requirements
-
-- macOS 13 or later, a single display, Stage Manager off.
-- Xcode Command Line Tools and Homebrew.
-- `ghc@9.12` and `cabal-install` - installed by `make bootstrap`.
-- Hackage access for the first build.
+> Compatibility: It is a subset, not a drop-in replacement. See
+> [Compatibility](docs/COMPATIBILITY.md) for the exact boundary.
 
 ## Install
 
 ```sh
 git clone <this-repo> xmonad-macos
 cd xmonad-macos
-make bootstrap        # test, build, sign, install
+make bootstrap
 ```
 
-- Grant Accessibility to `~/Applications/XMonadMac.app` in System Settings ->
-  Privacy & Security -> Accessibility, then restart the app.
-- The app is ad-hoc signed, so every rebuild changes its identity and the
-  grant has to be given again.
-- To avoid that, run `./scripts/signing-identity.sh` once. It creates a local
-  certificate in your login keychain and asks for your login password.
-- `CODESIGN_IDENTITY=...` signs with your own identity instead.
-- A changed identity invalidates the grant, and macOS ignores a re-add while
-  the stale entry stands, so `make install` clears it with `tccutil`.
+Then,
+
+- System Settings -> Privacy & Security -> Accessibility
+- Add `~/Applications/XMonadMac.app`
+- Restart it
+
+## Prerequisite
+
+- macOS 13+
+- Xcode Command Line Tools
+- Homebrew
+
+## Limitations
+
+- One display
+- Stage manager is not supported
 
 ## Run
 
 ```sh
-make dry-run          # read-only: logs plans, moves nothing, grabs no keys
+make dry-run     # read-only: logs what it would do, touches nothing
 make run
 ```
 
-- `--dry-run` skips `startupHook`, but `manageHook` and `logHook` are your own
-  Haskell and still run.
-- Stop yabai or skhd first; `run.sh` refuses to start rather than touching
-  your services.
-- Try it with throwaway windows before trusting it with unsaved work.
+## Configure
 
-## Workspaces
-
-- Workspaces are XMonadMac's own. macOS Desktops are unrelated and cannot be
-  used: the window server refuses to let an ordinary process move another
-  app's window to another Desktop.
-- Hiding parks the window past the bottom-right corner of the displays.
-- AppKit keeps about 40 points of a window on screen; an app that enforces
-  that has its window minimized instead.
-- Both kinds return to the frame recorded before hiding.
-- `Full` hides nothing: every window keeps the full frame, focused one raised.
-- Windows you minimized yourself are never managed and never undone.
-- Keep macOS on one Desktop. `Control-N`, a swipe or Mission Control switches
-  the native Desktop, which resets workspace assignments and unhides windows.
-
-Recovery:
-
-- Before hiding, an ownership record is written atomically to
-  `~/Library/Application Support/XMonadMac/recovery.json`.
-- A normal quit, engine failure, emergency stop or watchdog restores owned
-  windows. After a `SIGKILL` or an OS crash, run `xmonad recover`.
-- A window that cannot be identified unambiguously keeps its record and is
-  left alone; deleting the record is not a restore.
-- Tiling pauses while a native full-screen window is frontmost.
-
-## Configuration
-
-Config search order:
-
-1. explicit path argument
-2. `$XMONAD_CONFIG`
-3. `~/.xmonad/xmonad.hs`
-4. `~/.config/xmonad-mac/xmonad.hs`
-
-A `lib/` directory beside the config is staged with it.
+Put your config in `~/.config/xmonad-mac/xmonad.hs` (or `~/.xmonad/`):
 
 ```haskell
 import XMonad
-import qualified XMonad.StackSet as W
 import XMonad.Util.EZConfig
-import XMonad.Layout.Spacing
 import XMonad.MacOS
 
 main :: IO ()
-main = xmonad $
-  def
-    { terminal = "open -a Terminal"
-    , modMask = mod1Mask
-    , workspaces = map show [1..9] ++ ["0"]
-    , layoutHook = spacing 4 $
-        Tall 1 (3/100) (1/2)
-        ||| ThreeCol 1 (3/100) (1/2)   -- ThreeColMid centres the master
-        ||| Circle                     -- centred master, M-h/M-l resize it
-        ||| Mirror (Tall 1 (3/100) (1/2))
-        ||| Full
-    , manageHook = composeAll
-        [ bundleId =? "com.apple.systempreferences" --> doFloat ]
-    }
-  `additionalKeysP`
-    [ ("M-f", toggleFloat)
-    , ("M-S-p", pause)
-    , ("M-S-m", windows W.shiftMaster)
-    ]
+main = xmonad $ def
+  { terminal = "open -a Terminal"
+  , modMask = mod1Mask                       -- Option
+  , workspaces = map show [1..9] ++ ["0"]
+  , layoutHook = Tall 1 (3/100) (1/2) ||| Full
+  , manageHook = composeAll
+      [ bundleId =? "com.apple.systempreferences" --> doFloat ]
+  }
+  `additionalKeysP` [ ("M-f", toggleFloat) ]
 ```
 
-Window matchers map onto macOS:
+Apply it:
 
-- `className` - the app's display name.
-- `resource`, `appName`, `bundleId` - the bundle identifier. Prefer
-  `bundleId`, because display names are localized.
-- `title` - `AXTitle`.
-- Native tabs count as one window unless the app exposes each tab as an AX
-  window.
+```sh
+xmonad --recompile     # compile; the running engine keeps going
+xmonad --restart       # run the new one
+```
 
-Applying changes:
+A compile failure never replaces the running engine.
 
-- `xmonad --recompile` - compile and install; the running engine is untouched.
-- `xmonad --restart` - run the compiled config, starting the app if needed.
-- `xmonad recompile` - both.
-- A compile failure never replaces the running engine.
+Match windows with `bundleId` (stable), `className` (localized app name), or
+`title`.
 
-## Default keys
+More layouts, hooks and ported contrib modules: [Compatibility](docs/COMPATIBILITY.md).
 
-- `M` is Option (`mod1Mask`); use `mod4Mask` for Command. `S` is Shift.
-- Bindings follow physical key positions on a US layout.
-- AZERTY/QWERTZ character resolution and multi-stroke chords are not
-  implemented.
+Other config locations: [Usage](docs/USAGE.md).
+
+## Keys
+
+`M` is Option, `S` is Shift.
 
 | Key | Action |
 |---|---|
 | `M-j` / `M-k` | Focus next / previous |
-| `M-S-j` / `M-S-k` | Swap position in the stack |
-| `M-Return` / `M-S-Return` | Make focused window master / launch terminal |
-| `M-h` / `M-l` | Shrink / expand the master area, Circle's centre included |
-| `M-Space` / `M-S-Space` | Next layout / reset to the default layout |
-| `M-1...9`, `M-0` | View that workspace |
-| `M-S-1...9`, `M-S-0` | Move the focused window to that workspace |
-| `M-w` / `M-e` / `M-r` | Focus screen 0 / 1 / 2 |
-| `M-S-w` / `M-S-e` / `M-S-r` | Move to the workspace on that screen |
-| `M-f` / `M-t` | Toggle float / sink back into the tiling |
-| `M-S-c` | Press the window's Close button; never force-quits |
-| `M-q` / `M-S-q` | Recompile and reload / quit |
-| `M-S-p` | Pause and restore hidden windows |
-| `M` + left / right drag | Float and move / float and resize |
-| `Ctrl-Opt-Cmd-Esc` | Emergency stop and restore, bypassing Haskell |
+| `M-S-j` / `M-S-k` | Move window down / up the stack |
+| `M-Return` | Make the focused window master |
+| `M-S-Return` | Launch the terminal |
+| `M-h` / `M-l` | Shrink / expand the master area |
+| `M-Space` | Next layout |
+| `M-1…0` | Go to that workspace |
+| `M-S-1…0` | Send the window to that workspace |
+| `M-f` / `M-t` | Float / unfloat |
+| `M` + drag | Move (left button) or resize (right button) |
+| `M-S-c` | Close the window |
+| `M-q` / `M-S-q` | Recompile / quit |
+| `Ctrl-Opt-Cmd-Esc` | Emergency stop, restores every hidden window |
 
-- A drag sets `StackSet.floating` and suspends tiling for that window until
-  release.
-- Dragged to another display, the window joins the workspace visible there.
+Full list, including per-screen keys: [Usage](docs/USAGE.md).
+
+## Workspaces
+
+Workspaces are XMonadMac's own:  **not** macOS Desktops, which cannot be used
+for this because macOS forbids moving another app's window between them.
+
+Windows on other workspaces are placed off-screen. An app that refuses to be
+placed is minimized instead. Either way they return to where they were.
+
+If something goes wrong, `xmonad recover` puts every hidden window back.
 
 ## Commands
 
-- `make` builds; `xmonad` drives a running instance.
-- `make install` creates `~/.local/bin/xmonad` and copies a self-contained
-  build kit to `~/Library/Application Support/XMonadMac/build-kit`, so
-  recompiling keeps working after the checkout moves.
-- Each make target is a thin wrapper over the matching script in `scripts/`.
+`make` builds, `xmonad` drives a running instance.
 
-| Command | Purpose |
+| | |
 |---|---|
 | `make bootstrap` | Toolchain, build, install |
-| `make build` | Engine and native app (`CONFIG=` overrides the config) |
-| `make install` | App, engine and the `xmonad` command |
-| `make run` / `make dry-run` | Launch normally / read-only |
-| `make check` | Swift, Haskell, integration and packaging tests |
-| `make icon` / `make clean` | Icons from SVG / remove build output |
+| `make build` / `make install` | Build / install |
+| `make run` / `make dry-run` | Launch / launch read-only |
+| `make check` | Run the tests |
 | `xmonad --recompile` / `--restart` | Compile the config / run it |
-| `xmonad status` / `doctor` / `log` | JSON status / diagnostics / follow log |
-| `xmonad pause` / `resume` / `quit` | Suspend, resume, quit |
-| `xmonad recover` | Restore windows XMonadMac hid |
-| `xmonad config` / `self-test` / `dump` | Open config / AX check / snapshot |
-| `xmonad autostart on\|off\|status` | Login item |
+| `xmonad status` / `log` / `doctor` | What it is doing, and why not |
+| `xmonad pause` / `resume` / `recover` | Suspend / resume / unhide windows |
+| `xmonad autostart on` | Start at login |
 
-## Status bar
+The menu bar shows the workspace row and layout, xmobar style: `[2] 1 3 -
+Tall`, and `xmonad status` publishes the same as JSON for sketchybar or
+Übersicht. Menu toggles and installed paths: [Usage](docs/USAGE.md).
 
-- The menu bar shows the workspace row and layout, xmobar style:
-  `[2] 1 3 - Tall`.
-- Current workspace in brackets, one visible on another screen in parentheses,
-  empty workspaces omitted.
-- Its menu holds Pause, Recompile and Open, with the rest under Settings and
-  Diagnostics.
-- `xmonad status` publishes the same data under `workspaces`, one entry per
-  workspace with `tag`, `windows`, `current` and `visible`.
+## Keeping the Accessibility grant
+
+Rebuilding changes the app's identity, so macOS asks you to grant
+Accessibility again. Run this once to stop that:
 
 ```sh
-xmonad status | jq -r '[.workspaces[] | select(.windows > 0 or .current)
-  | if .current then "[\(.tag)]" else .tag end] | join(" ")'
+./scripts/signing-identity.sh
 ```
 
-Two toggles live under Settings:
-
-- *Disable macOS window shortcuts* swallows `Cmd-Tab`, ``Cmd-` ``, the Mission
-  Control arrows, `Cmd-H` and `Cmd-M` while tiling, without writing to system
-  preferences.
-- *Log key events* logs every modified key as
-  `key code=... mask=... bound=... consumed=...`. The mask is Shift 1,
-  Control 4, Option 8, Command 64.
-
-## Upstream fork
-
-- `./scripts/make-upstream-fork.sh ../xmonad-native-fork` grafts this tree
-  under `macos/` onto xmonad's real history.
-- Base commit `a9a8b5c1`, branch `macos-native`.
-- The X11 tree stays intact; this port is a separate Haskell package and
-  cannot break its build.
+It creates a local signing certificate, once, with a password prompt. Details:
+[Usage](docs/USAGE.md).
 
 ## Documentation
 
-- [Design](docs/DESIGN.md) - architecture and the reasoning behind it.
-- [Compatibility](docs/COMPATIBILITY.md) - what of xmonad's API works.
-- [Protocol](docs/PROTOCOL.md) - the NDJSON contract between the two halves.
-- [Testing](docs/TESTING.md) - automated checks and the manual matrix.
-- [Upstream](docs/UPSTREAM.md) - attribution and primary sources.
+- [Usage](docs/USAGE.md) — every key, menu, path and recovery step.
+- [Design](docs/DESIGN.md) — how it works and why.
+- [Compatibility](docs/COMPATIBILITY.md) — what of xmonad's API works.
+- [Protocol](docs/PROTOCOL.md) — the contract between the two halves.
+- [Testing](docs/TESTING.md) — automated checks and the manual matrix.
+- [Upstream](docs/UPSTREAM.md) — attribution and primary sources.
 
 ## License
 
