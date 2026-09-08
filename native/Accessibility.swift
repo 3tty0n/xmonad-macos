@@ -150,8 +150,12 @@ final class AXStore {
     private var displays: [DisplayInfo]=[]
     // How long a destroyed element may wait for its replacement. Measured on
     // display wake: replacements arrive about five seconds after the old
-    // elements die, so this is generous rather than tight.
+    // elements die, so this is generous rather than tight. It applies only
+    // after a wake, which is the one event that recycles elements: a window
+    // closed with cmd-W is gone at once, and waiting on it would leave a hole
+    // in the layout for the whole grace.
     private let orphanGrace: TimeInterval=30
+    private var wokeAt=Date.distantPast
     private var pointerDrag: PointerDragSession?
     init(journal: RecoveryJournal,relay: NotificationRelay) {
         self.journal=journal; self.relay=relay
@@ -187,6 +191,14 @@ final class AXStore {
     // that we may not ask, and either way the window is not proven gone.
     private func processIsGone(_ pid: pid_t) -> Bool {
         kill(pid,0) == -1 && errno == ESRCH
+    }
+    func displaysWoke() { wokeAt=Date() }
+    // A record whose element died is worth keeping only while a wake may still
+    // hand out replacements.
+    private func awaitingReplacement(_ r: AXRecord) -> Bool {
+        guard let at=r.orphanedAt,Date().timeIntervalSince(wokeAt) < orphanGrace
+        else { return false }
+        return Date().timeIntervalSince(at) <= orphanGrace
     }
     private func releaseOwnership(_ r: AXRecord) {
         guard let token=r.token else { return }
@@ -343,7 +355,7 @@ final class AXStore {
             if error == .invalidUIElement {
                 r.orphanedScans += 1
                 if r.orphanedAt == nil { r.orphanedAt=Date() }
-                guard Date().timeIntervalSince(r.orphanedAt ?? Date()) > orphanGrace else { continue }
+                guard !awaitingReplacement(r) else { continue }
                 logMessage("Window \(id) removed: its element was destroyed")
                 releaseOwnership(r); records.removeValue(forKey:id)
             } else if processIsGone(r.descriptor.pid) {
@@ -387,7 +399,7 @@ final class AXStore {
             // An orphaned record keeps reporting its last state until its
             // replacement element is adopted or the grace runs out. Dropping
             // it from the snapshot would make the engine forget its workspace.
-            let orphaned=r.orphanedAt.map { Date().timeIntervalSince($0) <= orphanGrace } ?? false
+            let orphaned=awaitingReplacement(r)
             guard own || orphaned || (!mini && (onScreen || known)) else {
                 if !mini && visible > 0 { ambiguous += 1 }
                 continue

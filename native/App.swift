@@ -527,6 +527,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private func resumeScanning(_ reason: String) {
         settledAt = Date().addingTimeInterval(2)
+        store?.displaysWoke()
         logMessage("Scanning resumes in 2s: \(reason)")
         DispatchQueue.main.asyncAfter(deadline:.now()+2.1) { [weak self] in self?.scheduleScan() }
     }
