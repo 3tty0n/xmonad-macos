@@ -128,31 +128,31 @@ Remembering display affinity permanently across reconnects is not implemented.
 
 ## Workspaces
 
-With one display and the Space bridge available, workspace *N* **is** Desktop
-*N*: the *N*-th user Space in Mission Control order. Switching workspaces
-switches the Space (`SLSManagedDisplaySetCurrentSpace`) and sending a window
-moves it (`SLSMoveWindowsToManagedSpace`, addressing the window by the
-`CGWindowID` behind its AX element). Nothing is minimized, and a Space the
-user switches to by any other means — `Control-N`, a swipe, Mission Control —
-is reported in the next snapshot and simply becomes the current workspace.
+Hiding a window means parking it past the bottom-right corner of the display
+arrangement, keeping its size. There is no X11 unmap to use, and `AXMinimized`
+- the obvious substitute - involves the Dock, an animation whose intermediate
+states AX reports inconsistently, and apps that refuse or delay it. Parking is
+a plain position write on the same path as tiling.
 
-These are not public API, so they are resolved with `dlsym` at startup and the
-whole path is skipped if any symbol is missing. A second display also falls
-back, because Spaces are per display and one workspace list cannot yet address
-several Space lists. More workspaces than Desktops logs a warning; the extra
-workspaces have nowhere to go.
+`NSWindow.constrainFrameRect` keeps roughly 40 points of a window on screen:
+parking an 880-point window past a 3360-point display's right edge lands it at
+3320, not 3424. In the corner both limits apply at once and about 40x32 points
+remain, which the admission rule treats as hidden. An app that clamps harder
+would leave a visible strip over the workspace, so `hide` re-reads the frame
+and minimizes that window instead - the old mechanism, kept for the apps that
+need it. The `Full` layout hides nothing at all.
 
-## Logical workspaces (fallback)
-
-Hiding a window means `AXMinimized = true`. Unlike an X11 unmap, that involves
-the Dock, an animation, and apps that may refuse or clamp. It is the initial
-implementation chosen to build workspaces on public API alone, not a full
-substitute for Spaces. The `Full` layout avoids it entirely by stacking every
-window at the same frame and raising the focused one.
+Native Spaces would be the natural home for workspaces, and are not usable.
+`SLSMoveWindowsToManagedSpace` silently ignores a window owned by another
+process, so a workspace switch could change Desktop while the window stayed
+behind; this was measured, not assumed. Doing it properly requires injecting
+into `Dock.app` with SIP disabled, which is outside this project's
+public-API premise, and `tests/static_checks.py` fails the build if a `CGS`,
+`SLS` or `_AXUIElementGetWindow` symbol appears in the sources.
 
 A native Space switch bumps the epoch so older plans are discarded, restores
-hidden windows to their recorded frames, and rebuilds Haskell state. Logical workspaces that
-span native Spaces are not guaranteed at this stage. Tiling pauses while a
+hidden windows to their recorded frames, and rebuilds Haskell state. Logical
+workspaces that span native Spaces are not guaranteed. Tiling pauses while a
 native full-screen window is frontmost.
 
 ## Validation and recovery
@@ -163,10 +163,10 @@ and hidden, focus on a hidden window, or an invalid rectangle. Stale plans are
 never applied; when one is dropped under load, the next reconciliation
 recomputes placement from the still-authoritative policy state.
 
-Before minimizing, an ownership record is written atomically to a private
-file. If that write fails, the window is not minimized. Restore only touches
-windows with an ownership token, and the token is kept until AX confirms the
-window is back. A short settling interval covers minimize/restore transitions
+Before hiding a window, an ownership record with its current frame is written
+atomically to a private file. If that write fails, the window is not hidden.
+Restore only touches windows with an ownership token, and the token is kept
+until a scan sees the window back on a display. A short settling interval covers minimize/restore transitions
 that arrive out of order.
 
 While the owning process lives, restoration works through the AX object.
