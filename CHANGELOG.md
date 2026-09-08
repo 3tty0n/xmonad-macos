@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `Circle` resizes its centred master with `M-h` / `M-l`, which upstream
+  cannot do; plain `Circle` keeps upstream's proportions.
 - `ThreeCol`, `ThreeColMid` and `Circle` layouts, ported from xmonad-contrib,
   reachable both from `XMonad` and from their contrib module paths
   `XMonad.Layout.ThreeColumns` and `XMonad.Layout.Circle`.

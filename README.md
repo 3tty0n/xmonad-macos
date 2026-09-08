@@ -96,7 +96,7 @@ main = xmonad $
     , layoutHook = spacing 4 $
         Tall 1 (3/100) (1/2)
         ||| ThreeCol 1 (3/100) (1/2)   -- ThreeColMid centres the master
-        ||| Circle                     -- centred master, the rest around it
+        ||| Circle                     -- centred master, M-h/M-l resize it
         ||| Mirror (Tall 1 (3/100) (1/2))
         ||| Full
     , manageHook = composeAll
@@ -133,7 +133,7 @@ character resolution and multi-stroke chords are not implemented.
 | `M-j` / `M-k` | Focus next / previous |
 | `M-S-j` / `M-S-k` | Swap position in the stack |
 | `M-Return` / `M-S-Return` | Make focused window master / launch terminal |
-| `M-h` / `M-l` | Shrink / expand the master area |
+| `M-h` / `M-l` | Shrink / expand the master area, including Circle's centre |
 | `M-Space` / `M-S-Space` | Next layout / reset to the default layout |
 | `M-1...9`, `M-0` | View that workspace |
 | `M-S-1...9`, `M-S-0` | Move the focused window to that workspace |

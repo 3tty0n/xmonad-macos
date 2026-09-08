@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PatternGuards #-}
 -- Adapted from xmonad Layout.hs, upstream a9a8b5c1. BSD-3-Clause.
@@ -7,7 +8,7 @@
 -- comments abridged. Tall/Mirror/Choose algorithms retained.
 module XMonad.Layout
   ( Full(..), Tall(..), Mirror(..), Resize(..), IncMasterN(..), Choose(..)
-  , ThreeCol(..), Circle(..)
+  , ThreeCol(..), Circle(CircleRatio,Circle), circleDelta, circleFrac
   , (|||), CLR(..), ChangeLayout(..), JumpToLayout(..), mirrorRect
   , splitVertically, splitHorizontally, splitHorizontallyBy, splitVerticallyBy
   , tile, tile3, split3HorizontallyBy
@@ -108,21 +109,32 @@ split3HorizontallyBy middle f (Rectangle sx sy sw sh)
 -- Copyright (c) Peter De Wachter and the Xmonad Community. The master window
 -- takes a centred area and the rest orbit it, overlapping. The focused window
 -- is placed last, which is how this port raises a window.
-data Circle a = Circle deriving (Show,Read)
+--
+-- Upstream fixes the centre at 1/sqrt 2 of the frame. Here it is a field so
+-- Shrink and Expand can resize it; `Circle` is that layout with upstream's
+-- proportions, so an existing config keeps working unchanged.
+data Circle a = CircleRatio { circleDelta :: !Rational, circleFrac :: !Rational }
+  deriving (Show,Read)
+pattern Circle :: Circle a
+pattern Circle = CircleRatio 0.03 0.707
 instance LayoutClass Circle a where
-  pureLayout Circle r s = case splitAt (length $ W.up s) (circleLayout r (W.integrate s)) of
+  pureLayout l r s = case splitAt (length $ W.up s) (circleLayout (circleFrac l) r ws) of
     (before,focused:after) -> before ++ after ++ [focused]
     (ps,[]) -> ps
+    where ws = W.integrate s
+  pureMessage l m = resize <$> fromMessage m
+    where resize Shrink = l {circleFrac = max 0.1 $ circleFrac l - circleDelta l}
+          resize Expand = l {circleFrac = min 1 $ circleFrac l + circleDelta l}
   description _ = "Circle"
-circleLayout :: Rectangle -> [a] -> [(a,Rectangle)]
-circleLayout _ [] = []
-circleLayout r (w:ws) = (w,centreRect r)
+circleLayout :: Rational -> Rectangle -> [a] -> [(a,Rectangle)]
+circleLayout _ _ [] = []
+circleLayout frac r (w:ws) = (w,centreRect frac r)
   : zip ws (map (satellite r) [0,2*pi/fromIntegral (length ws) ..])
-centreRect :: Rectangle -> Rectangle
-centreRect (Rectangle sx sy sw sh) =
+centreRect :: Rational -> Rectangle -> Rectangle
+centreRect frac (Rectangle sx sy sw sh) =
   Rectangle (sx+(sw-w) `div` 2) (sy+(sh-h) `div` 2) w h
-  where w = round (fromIntegral sw / sqrt 2 :: Double)
-        h = round (fromIntegral sh / sqrt 2 :: Double)
+  where w = max 1 $ round (fromIntegral sw * frac)
+        h = max 1 $ round (fromIntegral sh * frac)
 satellite :: Rectangle -> Double -> Rectangle
 satellite (Rectangle sx sy sw sh) a =
   Rectangle (sx+round (rx+rx*cos a)) (sy+round (ry+ry*sin a)) w h

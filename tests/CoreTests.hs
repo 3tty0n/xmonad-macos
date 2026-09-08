@@ -8,6 +8,7 @@ import XMonad.Util.EZConfig (parseKey)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.List (sort,nub)
+import Data.Maybe (fromMaybe)
 import Data.Aeson
 import Control.Monad (forM_,unless)
 
@@ -72,6 +73,13 @@ main = do
   let circle=pureLayout Circle frame3 (W.Stack 2 [1] [3,4])
   check "Circle places every window" (length circle==4)
   check "Circle raises the focused window last" (fst (last circle)==2)
+  let bigger=fromMaybe Circle (pureMessage Circle (SomeMessage Expand))
+      wide=lookup 1 (pureLayout bigger frame3 (W.Stack 2 [1] [3,4]))
+      base=lookup 1 circle
+  check "Circle master grows with Expand" (fmap rect_width wide > fmap rect_width base)
+  check "Circle master shrinks with Shrink"
+    (fmap rect_width (lookup 1 (pureLayout (fromMaybe Circle $ pureMessage Circle (SomeMessage Shrink))
+       frame3 (W.Stack 2 [1] [3,4]))) < fmap rect_width base)
   check "Circle centres the master"
     (let Just c=lookup 1 circle
      in rect_x c > 0 && rect_y c > 24 && rect_width c < 1000)
