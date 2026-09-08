@@ -23,6 +23,9 @@ import qualified Data.Set as S
 import System.IO (hPutStrLn, stderr)
 
 type WindowSet = W.StackSet WorkspaceId (Layout Window) Window ScreenId ScreenDetail
+-- The same aliases upstream uses, so signatures stay readable.
+type WindowSpace = W.Workspace WorkspaceId (Layout Window) Window
+type WindowScreen = W.Screen WorkspaceId (Layout Window) Window ScreenId ScreenDetail
 newtype X a = X { unX :: ReaderT XConf (StateT XState IO) a }
   deriving (Functor, Applicative, Monad, MonadIO, MonadReader XConf, MonadState XState)
 newtype Query a = Query { unQuery :: ReaderT Window X a }

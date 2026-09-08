@@ -1,15 +1,24 @@
 {-# LANGUAGE OverloadedStrings #-}
+-- The NDJSON contract with the native helper: what it tells us about the
+-- world, and what we tell it to do. docs/PROTOCOL.md is the reference.
 module XMonad.MacOS.Protocol where
 import XMonad.Core
 import Data.Aeson
 import Data.Aeson.Types (Parser)
 
+-- One observation of every managed window, and the displays they are on.
 data Snapshot = Snapshot
   { snapGeneration :: Int, snapEpoch :: Int, snapDisplays :: [DisplayInfo]
   , snapWindows :: [WindowInfo], snapFocused :: Maybe Window
   , snapRestore :: Maybe Value
   } deriving (Show)
-data InputEvent = SnapshotEvent Snapshot | KeyEvent KeyMask KeySym | MouseFloatEvent Window | PingEvent | ExitEvent
+-- Everything the helper can send us.
+data InputEvent
+  = SnapshotEvent Snapshot     -- the world changed
+  | KeyEvent KeyMask KeySym    -- a bound key was pressed
+  | MouseFloatEvent Window     -- a mod-drag started on this window
+  | PingEvent                  -- liveness check
+  | ExitEvent                  -- shut down
   deriving (Show)
 instance FromJSON InputEvent where
   parseJSON = withObject "InputEvent" $ \o -> do
@@ -34,6 +43,8 @@ instance ToJSON WorkspaceInfo where
 data Placement = Placement Window Rectangle deriving (Show,Eq)
 instance ToJSON Placement where
   toJSON (Placement w r) = object ["wid" .= w,"frame" .= r]
+-- What the helper should make true: place these, hide the rest, focus at most
+-- one, and show this workspace row.
 data Plan = Plan
   { planGeneration :: Int, planEpoch :: Int
   , planFrames :: [Placement], planHide :: [Window], planFocus :: Maybe Window

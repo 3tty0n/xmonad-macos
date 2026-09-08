@@ -1,5 +1,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
+-- Types shared by policy and protocol. Deliberately free of X11: geometry is
+-- logical points with a top-left origin, as AX and Quartz use, and a Window
+-- is a handle the helper hands out, not an XID.
 module XMonad.MacOS.Types where
 import Data.Aeson
 import Data.Word (Word64)
