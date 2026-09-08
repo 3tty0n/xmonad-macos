@@ -67,6 +67,7 @@ final class AXRecord {
     var token: String?
     var hideRequestedAt=Date.distantPast
     var wantsHidden=false
+    var hideConfirmed=false
     var restoreRequestedAt=Date.distantPast
     var eligible=false
     var absent=0
@@ -206,13 +207,32 @@ final class AXStore {
                     AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
                 }
                 seen.insert(r.wid); r.absent=0
-                r.eligible=axString(e,kAXRoleAttribute) == kAXWindowRole &&
-                  axString(e,kAXSubroleAttribute) == kAXStandardWindowSubrole &&
-                  !axBool(e,"AXFullScreen") && axSettable(e,kAXPositionAttribute) &&
-                  axSettable(e,kAXSizeAttribute) && axSettable(e,kAXMinimizedAttribute)
-                if r.token != nil && axBoolean(e,kAXMinimizedAttribute) == false &&
-                   ((!r.wantsHidden && Date().timeIntervalSince(r.restoreRequestedAt)>0.12) ||
-                    (r.wantsHidden && Date().timeIntervalSince(r.hideRequestedAt)>0.7)) { releaseOwnership(r) }
+                // While minimized, apps report AXSubrole as AXDialog rather
+                // than AXStandardWindow. Re-testing eligibility for a window we
+                // are the ones hiding would drop it from the snapshot, and the
+                // engine would forget the workspace it belongs to, so keep the
+                // verdict from when it was last on screen.
+                if !(r.token != nil && axBoolean(e,kAXMinimizedAttribute) == true) {
+                    r.eligible=axString(e,kAXRoleAttribute) == kAXWindowRole &&
+                      axString(e,kAXSubroleAttribute) == kAXStandardWindowSubrole &&
+                      !axBool(e,"AXFullScreen") && axSettable(e,kAXPositionAttribute) &&
+                      axSettable(e,kAXSizeAttribute) && axSettable(e,kAXMinimizedAttribute)
+                }
+                // Ownership is released on observation, never on a timeout: an
+                // app that minimizes slowly must not lose its recovery record,
+                // or the window is stranded in the Dock and dropped from the
+                // snapshot. A hide that was confirmed and then reversed means
+                // the user restored the window, so hand it back.
+                if r.token != nil {
+                    let mini=axBoolean(e,kAXMinimizedAttribute)
+                    if r.wantsHidden {
+                        if mini == true { r.hideConfirmed=true }
+                        else if r.hideConfirmed { releaseOwnership(r) }
+                    } else if mini == false,
+                              Date().timeIntervalSince(r.restoreRequestedAt)>0.12 {
+                        releaseOwnership(r)
+                    }
+                }
             }
         }
         for (id,r) in Array(records) where !seen.contains(id) {
@@ -316,7 +336,7 @@ final class AXStore {
         guard r.token != nil else { return }  // Never restore a user's minimization.
         guard let mini=axBoolean(r.element,kAXMinimizedAttribute) else { return }
         let cancelPendingHide=r.wantsHidden
-        r.wantsHidden=false
+        r.wantsHidden=false; r.hideConfirmed=false
         if mini || cancelPendingHide {
             r.restoreRequestedAt=Date()
             let error=AXUIElementSetAttributeValue(r.element,kAXMinimizedAttribute as CFString,kCFBooleanFalse)
@@ -335,7 +355,7 @@ final class AXStore {
             do { try journal.add(entry); r.token=entry.token }
             catch { logMessage("Refusing to minimize without a durable recovery record: \(error)"); return }
         }
-        r.wantsHidden=true; r.hideRequestedAt=Date()
+        r.wantsHidden=true; r.hideConfirmed=false; r.hideRequestedAt=Date()
         let error=AXUIElementSetAttributeValue(r.element,kAXMinimizedAttribute as CFString,kCFBooleanTrue)
         if error != .success {
             logMessage("Minimize failed for window \(r.wid): \(error.rawValue)")

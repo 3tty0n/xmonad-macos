@@ -352,6 +352,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             catch { pause(reason:"Invalid input configuration: \(error)"); return }
             configured=true; updateKeyState(); scheduleScan()
         case .plan(let plan):
+            if logKeys {
+                logMessage("plan gen=\(plan.generation)/\(latestSent) epoch=\(plan.epoch)/\(currentEpoch) ws=\(plan.workspace) frames=\(plan.frames.map(\.wid)) hide=\(plan.hide)")
+            }
             guard configured,!fullScreen,plan.epoch == currentEpoch,plan.generation == latestSent else { return }
             if dryRun {
                 do { try PlanSafety.validate(plan,active:Set(lastSnapshot?.windows.map(\.wid) ?? [])) }
