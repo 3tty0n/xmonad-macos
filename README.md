@@ -200,7 +200,9 @@ xmonad autostart on      # opt-in LaunchAgent; also off / status
 The menu bar item shows the workspace row and the current layout, in the style
 of xmobar: `[2] 1 3 · Tall`. The current workspace is in brackets, a workspace
 visible on another screen is in parentheses, and a workspace with no windows is
-left out. It offers the same operations as `xmonad`, plus two toggles.
+left out. Its menu keeps Pause, Recompile and Open to hand, with the rest under
+Settings (the macOS-shortcut and key-logging toggles) and Diagnostics (reload,
+log, snapshot, AX self-test).
 
 For a real status bar — sketchybar, Übersicht, a shell loop — the same data is
 in `xmonad status` under `workspaces`, one entry per workspace with `tag`,
@@ -211,12 +213,12 @@ xmonad status | jq -r '[.workspaces[] | select(.windows > 0 or .current)
   | if .current then "[\(.tag)]" else .tag end] | join(" ")'
 ```
 
-"Disable macOS window shortcuts" swallows `Cmd-Tab`, ``Cmd-` ``, the
+Settings → "Disable macOS window shortcuts" swallows `Cmd-Tab`, ``Cmd-` ``, the
 `Ctrl-arrows` of Mission Control, `Cmd-H`, and `Cmd-M` while tiling is active.
 Nothing is written to system preferences, so quitting gives every shortcut
 back.
 
-"Log key events to bridge.log" records each modified key press as
+Settings → "Log key events" records each modified key press as
 `key code=… mask=… bound=… consumed=…`. Turn it on when a binding looks dead:
 the mask tells you which modifier actually arrived, where Shift is 1, Control
 is 4, Option is 8, and Command is 64.
