@@ -68,6 +68,10 @@ final class AXRecord {
     // Consecutive scans the element was found destroyed while no
     // replacement was adopted.
     var orphanedScans=0
+    // When the element was first found destroyed. Display wake destroys every
+    // element and the replacements take several seconds to appear, so the
+    // record, with its last known state, stands in for the window meanwhile.
+    var orphanedAt: Date?
     var token: String?
     var hideRequestedAt=Date.distantPast
     var wantsHidden=false
@@ -144,6 +148,10 @@ final class AXStore {
     private var activeEpoch = 0
     private var lastAmbiguityWarning=Date.distantPast
     private var displays: [DisplayInfo]=[]
+    // How long a destroyed element may wait for its replacement. Measured on
+    // display wake: replacements arrive about five seconds after the old
+    // elements die, so this is generous rather than tight.
+    private let orphanGrace: TimeInterval=30
     private var pointerDrag: PointerDragSession?
     init(journal: RecoveryJournal,relay: NotificationRelay) {
         self.journal=journal; self.relay=relay
@@ -275,14 +283,14 @@ final class AXStore {
                     AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
                     if let frame=axFrame(e) { r.frame=frame }
                     r.title=axString(e,kAXTitleAttribute)
-                    r.absent=0; r.orphanedScans=0; r.appAbsent=0; r.appHidden=0
+                    r.absent=0; r.orphanedScans=0; r.orphanedAt=nil; r.appAbsent=0; r.appHidden=0
                     logMessage("Window \(r.wid) re-identified after its element was recycled")
                 } else {
                     guard let frame=axFrame(e) else { continue }
                     r=AXRecord(nextID,e,app,frame); nextID += 1; records[r.wid]=r
                     AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
                 }
-                seen.insert(r.wid); r.absent=0; r.orphanedScans=0
+                seen.insert(r.wid); r.absent=0; r.orphanedScans=0; r.orphanedAt=nil
                 // Freeze eligibility while we own the window. It is hidden for
                 // a non-visible workspace, and a minimized window reports
                 // AXSubrole as AXDialog; recomputing would drop it from the
@@ -334,7 +342,8 @@ final class AXStore {
             let error=AXUIElementCopyAttributeValue(r.element,kAXRoleAttribute as CFString,&value)
             if error == .invalidUIElement {
                 r.orphanedScans += 1
-                guard r.orphanedScans >= 3 else { continue }
+                if r.orphanedAt == nil { r.orphanedAt=Date() }
+                guard Date().timeIntervalSince(r.orphanedAt ?? Date()) > orphanGrace else { continue }
                 logMessage("Window \(id) removed: its element was destroyed")
                 releaseOwnership(r); records.removeValue(forKey:id)
             } else if processIsGone(r.descriptor.pid) {
@@ -375,7 +384,11 @@ final class AXStore {
             // the engine treat it as closed and re-insert it on the workspace in
             // view, which silently migrates windows on every workspace switch.
             let known=active.contains(r.wid) && r.offScreen<3
-            guard own || (!mini && (onScreen || known)) else {
+            // An orphaned record keeps reporting its last state until its
+            // replacement element is adopted or the grace runs out. Dropping
+            // it from the snapshot would make the engine forget its workspace.
+            let orphaned=r.orphanedAt.map { Date().timeIntervalSince($0) <= orphanGrace } ?? false
+            guard own || orphaned || (!mini && (onScreen || known)) else {
                 if !mini && visible > 0 { ambiguous += 1 }
                 continue
             }

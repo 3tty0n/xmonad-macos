@@ -6,6 +6,9 @@
   application reported hidden has to be reported hidden twice before its
   windows leave management. The log marks both edges of the pause, so a wake
   that still loses state can be traced.
+- A window whose element was destroyed stays in the snapshot, with its last
+  known state, for up to 30 seconds while its replacement is awaited; the
+  replacements were measured arriving about five seconds after wake.
 - Windows keep their identity, and so their workspace, across display sleep.
   macOS destroys every window's AXUIElement on wake and issues new ones; the
   helper now adopts the replacement into the existing record, matched by
