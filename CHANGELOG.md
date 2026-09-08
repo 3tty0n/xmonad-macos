@@ -6,6 +6,10 @@
   Control arguments are handled before any engine starts, and both
   `~/.local/bin/xmonad` and `xmonadctl` are symlinks to it; the shell
   implementation is gone.
+- The wait for a replacement element runs for its full 30 seconds from the
+  moment the element died, and displays that sleep again do not spend it.
+  Previously the wait was also cut off 30 seconds after the wake itself, which
+  reset every workspace when a long sleep ended in a brief wake.
 - A window closed with cmd-W is forgotten on the next scan instead of holding
   its place in the layout for 30 seconds. The grace for a destroyed element
   now applies only after a display wake, the one event that recycles them.

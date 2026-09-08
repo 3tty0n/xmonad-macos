@@ -72,6 +72,10 @@ final class AXRecord {
     // element and the replacements take several seconds to appear, so the
     // record, with its last known state, stands in for the window meanwhile.
     var orphanedAt: Date?
+    // Whether a wake had just recycled the elements when this one died. Decided
+    // once, when the element is first found destroyed: a window closed with
+    // cmd-W is gone for good and must not wait for a replacement.
+    var awaitsReplacement=false
     var token: String?
     var hideRequestedAt=Date.distantPast
     var wantsHidden=false
@@ -193,12 +197,13 @@ final class AXStore {
         kill(pid,0) == -1 && errno == ESRCH
     }
     func displaysWoke() { wokeAt=Date() }
-    // A record whose element died is worth keeping only while a wake may still
-    // hand out replacements.
+    // The grace runs from the later of the element's death and the last wake:
+    // displays that sleep again immediately, as they do when a wake is only the
+    // machine stirring, must not spend it, because the replacement elements
+    // arrive after the next wake rather than while the displays are off.
     private func awaitingReplacement(_ r: AXRecord) -> Bool {
-        guard let at=r.orphanedAt,Date().timeIntervalSince(wokeAt) < orphanGrace
-        else { return false }
-        return Date().timeIntervalSince(at) <= orphanGrace
+        guard r.awaitsReplacement,let at=r.orphanedAt else { return false }
+        return Date().timeIntervalSince(max(at,wokeAt)) <= orphanGrace
     }
     private func releaseOwnership(_ r: AXRecord) {
         guard let token=r.token else { return }
@@ -295,7 +300,8 @@ final class AXStore {
                     AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
                     if let frame=axFrame(e) { r.frame=frame }
                     r.title=axString(e,kAXTitleAttribute)
-                    r.absent=0; r.orphanedScans=0; r.orphanedAt=nil; r.appAbsent=0; r.appHidden=0
+                    r.absent=0; r.orphanedScans=0; r.orphanedAt=nil; r.awaitsReplacement=false
+                    r.appAbsent=0; r.appHidden=0
                     logMessage("Window \(r.wid) re-identified after its element was recycled")
                 } else {
                     guard let frame=axFrame(e) else { continue }
@@ -303,6 +309,7 @@ final class AXStore {
                     AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
                 }
                 seen.insert(r.wid); r.absent=0; r.orphanedScans=0; r.orphanedAt=nil
+                r.awaitsReplacement=false
                 // Freeze eligibility while we own the window. It is hidden for
                 // a non-visible workspace, and a minimized window reports
                 // AXSubrole as AXDialog; recomputing would drop it from the
@@ -354,7 +361,10 @@ final class AXStore {
             let error=AXUIElementCopyAttributeValue(r.element,kAXRoleAttribute as CFString,&value)
             if error == .invalidUIElement {
                 r.orphanedScans += 1
-                if r.orphanedAt == nil { r.orphanedAt=Date() }
+                if r.orphanedAt == nil {
+                    r.orphanedAt=Date()
+                    r.awaitsReplacement=Date().timeIntervalSince(wokeAt) < orphanGrace
+                }
                 guard !awaitingReplacement(r) else { continue }
                 logMessage("Window \(id) removed: its element was destroyed")
                 releaseOwnership(r); records.removeValue(forKey:id)
