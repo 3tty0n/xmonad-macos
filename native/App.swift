@@ -238,7 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let apps=descriptors()
             axQueue.async { [weak self] in
                 guard let self=self else { return }
-                self.store.recover(apps:apps)
+                self.store.recover(apps:apps,displays:displayInfo())
                 let remaining=self.store.journal.entries.count
                 DispatchQueue.main.async {
                     self.recovering=false
@@ -684,7 +684,7 @@ struct XMonadMacMain {
             let fd=try acquireLock(); defer { close(fd) }
             let journal=try RecoveryJournal(Paths.recovery)
             let store=AXStore(journal:journal,relay:NotificationRelay())
-            store.recover(apps:descriptors())
+            store.recover(apps:descriptors(),displays:displayInfo())
             print("Unresolved recovery entries: \(journal.entries.count)")
             if !journal.entries.isEmpty { exit(2) }
         } catch { fputs("Recovery: \(error)\n",stderr); exit(1) }

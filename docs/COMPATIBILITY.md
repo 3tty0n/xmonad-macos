@@ -17,8 +17,9 @@ caveat is the point of the row.
 | `Rectangle` | Signed `Int` logical points, not the X11 `CShort`/`CUShort` ABI |
 | `Window` | A per-session `Word64` handle, not an XID or `CGWindowID` |
 
-`Full` stacks every window at the full frame and raises the focused one, so
-switching to it never minimizes windows into the Dock.
+Workspaces are XMonadMac's own, unrelated to macOS Desktops: a hidden window is
+parked off-screen. `Full` stacks every window at the full frame and raises the
+focused one, so switching to it hides nothing at all.
 
 ## Hooks and matching
 

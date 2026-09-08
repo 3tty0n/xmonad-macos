@@ -45,8 +45,12 @@ The two halves are separate processes rather than one GHC-FFI binary so that
 the AppKit main thread, code signature, and TCC grant stay stable while your
 Haskell config is recompiled. The signed `.app` runs the engine from
 Application Support as a child, so a config change never re-signs the app.
-Rebuilding the helper itself *does* change the signature, and the
-Accessibility grant must be given again.
+Rebuilding the helper changes its code directory hash, which invalidates an
+ad-hoc signature's TCC grant. `scripts/signing-identity.sh` creates a
+persistent local certificate once; TCC then keys the grant on the certificate
+and the rebuilt helper keeps it. Trusting the certificate needs a password
+prompt, so the build never does it implicitly — it probes with `--if-ready`
+and falls back to ad-hoc with a hint.
 
 ## What was ported
 
@@ -117,7 +121,23 @@ that returns with the same display ID reclaims its workspaces; a disconnected
 display's workspaces become hidden rather than losing their windows.
 Remembering display affinity permanently across reconnects is not implemented.
 
-## Logical workspaces
+## Workspaces
+
+With one display and the Space bridge available, workspace *N* **is** Desktop
+*N*: the *N*-th user Space in Mission Control order. Switching workspaces
+switches the Space (`SLSManagedDisplaySetCurrentSpace`) and sending a window
+moves it (`SLSMoveWindowsToManagedSpace`, addressing the window by the
+`CGWindowID` behind its AX element). Nothing is minimized, and a Space the
+user switches to by any other means — `Control-N`, a swipe, Mission Control —
+is reported in the next snapshot and simply becomes the current workspace.
+
+These are not public API, so they are resolved with `dlsym` at startup and the
+whole path is skipped if any symbol is missing. A second display also falls
+back, because Spaces are per display and one workspace list cannot yet address
+several Space lists. More workspaces than Desktops logs a warning; the extra
+workspaces have nowhere to go.
+
+## Logical workspaces (fallback)
 
 Hiding a window means `AXMinimized = true`. Unlike an X11 unmap, that involves
 the Dock, an animation, and apps that may refuse or clamp. It is the initial
@@ -126,7 +146,7 @@ substitute for Spaces. The `Full` layout avoids it entirely by stacking every
 window at the same frame and raising the focused one.
 
 A native Space switch bumps the epoch so older plans are discarded, restores
-WM-owned minimizations, and rebuilds Haskell state. Logical workspaces that
+hidden windows to their recorded frames, and rebuilds Haskell state. Logical workspaces that
 span native Spaces are not guaranteed at this stage. Tiling pauses while a
 native full-screen window is frontmost.
 

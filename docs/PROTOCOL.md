@@ -33,8 +33,9 @@ Snapshot of the observed world:
 - `wid` — the helper's per-session identifier.
 - `screens` — usable logical-point rectangles.
 - `focused` — `null` means no managed window is confirmed to hold focus.
-- `ownedHidden` — true for windows the WM minimized; they stay listed so
-  their logical workspace is not lost.
+- `ownedHidden` — true for windows the WM hid, by parking them off-screen or,
+  where an app clamps that, by minimizing them; they stay listed so their
+  logical workspace is not lost.
 
 Key press, and the start of a mod+mouse drag:
 
@@ -56,8 +57,8 @@ A placement plan:
 ```
 
 - `frames` — windows to show and place, in stacking order, focused last.
-- `hide` — managed windows to hide for this layout or workspace. A window may
-  never appear in both lists.
+- `hide` — managed windows to hide for this layout or workspace, by parking
+  them past the edge of the displays. A window may never appear in both lists.
 - `focus` — set only for explicit user-driven focus intent.
 - Windows ignored by `manageHook` appear in neither list.
 
