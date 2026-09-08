@@ -77,8 +77,9 @@ final class AXRecord {
     // Consecutive scans a known window has failed the on-screen match.
     var offScreen=0
     // Consecutive scans this window's application was missing from the
-    // running-application list.
+    // running-application list, or reported as hidden.
     var appAbsent=0
+    var appHidden=0
     var eligible=false
     var absent=0
     var lastTarget: Rect?
@@ -291,7 +292,12 @@ final class AXStore {
         let all=Array(records.values)
         var result: [WindowInfo]=[], ambiguous=0
         for r in all.sorted(by:{ $0.wid < $1.wid }) {
-            guard r.eligible,!hiddenPIDs.contains(r.descriptor.pid) else { continue }
+            guard r.eligible else { continue }
+            // Cmd-H takes an application's windows out of management, but one
+            // observation is not enough: on wake macOS reports applications
+            // hidden that are not, and dropping them here costs the workspace.
+            if hiddenPIDs.contains(r.descriptor.pid) { r.appHidden += 1 } else { r.appHidden=0 }
+            guard r.appHidden < 2 else { continue }
             // A busy app can fail this read for one scan, typically during its
             // own minimize animation. Dropping the window from the snapshot
             // would make the engine treat it as closed and re-insert it on the

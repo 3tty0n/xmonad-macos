@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Nothing is scanned for two seconds after the displays wake, and an
+  application reported hidden has to be reported hidden twice before its
+  windows leave management. The log marks both edges of the pause, so a wake
+  that still loses state can be traced.
 - Fixed every window moving to one workspace after a display wake. macOS
   briefly reports an incomplete application list, which made the helper
   forget its windows; the engine then adopted them as new ones on the

@@ -109,6 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lastResponse=Date()
     private var checkpoint: JSONValue?
     private var sendCheckpoint=false
+    // Nothing is scanned before this instant. Waking a display leaves macOS
+    // answering for a second or two with an incomplete world: missing
+    // applications, unreadable frames, windows the window server has not
+    // placed yet. Acting on that is what loses the workspace assignments.
+    private var settledAt=Date.distantPast
     private var lastSnapshot: Snapshot?
     private var label="Paused"
     private var suppressShortcuts=UserDefaults.standard.bool(forKey:suppressDefaultsKey)
@@ -148,6 +153,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           object:nil,queue:.main) { [weak self] _ in self?.spaceChanged() })
         observers.append(center.addObserver(forName:NSWorkspace.willSleepNotification,
           object:nil,queue:.main) { [weak self] _ in self?.pause(reason:"Paused for sleep; choose Resume after wake") })
+        // Display sleep, unlike system sleep, keeps everything running.
+        for name in [NSWorkspace.screensDidSleepNotification,
+                     NSWorkspace.sessionDidResignActiveNotification] {
+            observers.append(center.addObserver(forName:name,object:nil,queue:.main) {
+              [weak self] _ in self?.holdScanning("displays asleep") })
+        }
+        for name in [NSWorkspace.screensDidWakeNotification,NSWorkspace.didWakeNotification,
+                     NSWorkspace.sessionDidBecomeActiveNotification] {
+            observers.append(center.addObserver(forName:name,object:nil,queue:.main) {
+              [weak self] _ in self?.resumeScanning("displays awake") })
+        }
         observers.append(NotificationCenter.default.addObserver(forName:NSApplication.didChangeScreenParametersNotification,
           object:nil,queue:.main) { [weak self] _ in self?.scheduleScan() })
         for sig in [SIGTERM,SIGINT] {
@@ -468,6 +484,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private func performScan() {
         guard running,configured,!scanInFlight else { return }
+        guard Date() >= settledAt else { return }
         let displays=displayInfo()
         guard !displays.isEmpty else { return }
         // An empty application list means the system is not answering yet,
@@ -500,6 +517,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if self.scanAgain { self.scheduleScan() }
             }
         }
+    }
+    // Stop observing until the world is trustworthy again. Plans already in
+    // flight are dropped by the generation check, and nothing is moved or
+    // hidden while this holds.
+    private func holdScanning(_ reason: String) {
+        settledAt = .distantFuture
+        logMessage("Scanning held: \(reason)")
+    }
+    private func resumeScanning(_ reason: String) {
+        settledAt = Date().addingTimeInterval(2)
+        logMessage("Scanning resumes in 2s: \(reason)")
+        DispatchQueue.main.asyncAfter(deadline:.now()+2.1) { [weak self] in self?.scheduleScan() }
     }
     private func spaceChanged() {
         currentEpoch += 1; checkpoint=nil; latestSent = -1; fullScreen=false
