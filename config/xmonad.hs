@@ -18,6 +18,7 @@ main = xmonad $ def
       Tall 1 (3/100) (1/2)
       ||| ThreeColMid 1 (3/100) (1/2)     -- ThreeColMid for a centred master
       ||| Circle
+      ||| Mirror (Tall 1 (3/100) (1/2))
       ||| Full
   , manageHook = composeAll
       [ bundleId =? "com.apple.systempreferences" --> doFloat
