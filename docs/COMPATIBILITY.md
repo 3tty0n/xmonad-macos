@@ -79,6 +79,15 @@ focused one, so switching to it hides nothing at all.
 | Native tabs, tab grouping, Stage Manager, moving windows between Spaces | Not implemented |
 | `borderWidth`, `borderColor`, `focusFollowsMouse` | Not implemented; the fields do not exist |
 
+## Displays
+
+| API | Status |
+|---|---|
+| Multiple screens | Supported: one workspace per display, per-display layout |
+| `screenWorkspace`, `M-w`/`M-e`/`M-r` | Work as upstream |
+| Hotplug | Workspaces survive unplug and return on replug by display ID |
+| Xinerama-specific config | Not applicable; screens come from `NSScreen` |
+
 ## Not supported, deliberately
 
 | Feature | Why |

@@ -137,6 +137,21 @@ main = do
   (_,cycleState) <- runX conf s2 $ sendMessage NextLayout >> sendMessage NextLayout >> sendMessage NextLayout
   -- One screen, so a neighbour workspace is hidden rather than on a monitor.
   let single=initialState cfg [head displays]
+  -- Two displays: a workspace each, laid out in that display's own frame.
+  check "each display shows its own workspace"
+    (map (W.tag . W.workspace) (W.screens $ windowset s1)==["1","2"])
+  (twoScreen,_) <- runX conf s1 makePlan
+  let onDisplay10=[r | Placement w r <- planFrames twoScreen, w `elem` [1,2]]
+      onDisplay20=[r | Placement w r <- planFrames twoScreen, w == 3]
+  check "windows are placed on the display they appeared on"
+    (all ((>=0) . rect_x) onDisplay10 && all ((<0) . rect_x) onDisplay20)
+  check "nothing is hidden while both displays are visible" (null (planHide twoScreen))
+  -- Sending a window to the other screen's workspace moves it there.
+  (_,acrossScreens) <- runX conf s1 $ do
+    target <- screenWorkspace 1
+    whenJust target (windows . W.shift)
+  check "shift to another screen moves the window"
+    (W.findTag 1 (windowset acrossScreens)==Just "2")
   (_,cycled) <- runX conf single (nextWS >> nextWS)
   check "nextWS walks the config order" (W.currentTag (windowset cycled)=="3")
   (_,wrapped) <- runX conf single prevWS

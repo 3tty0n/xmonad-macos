@@ -44,6 +44,21 @@ A drag sets `StackSet.floating` and suspends tiling for that window until
 release. Dragged to another display, the window joins the workspace visible
 there.
 
+## Several displays
+
+Each display shows one workspace and is laid out in its own frame, as upstream
+xmonad does with Xinerama. `M-w` / `M-e` / `M-r` focus screens 0, 1 and 2;
+`M-S-w` and friends send the focused window to the workspace showing there.
+
+- A display that comes back with the same display ID reclaims its workspaces.
+- A disconnected display's workspaces become hidden rather than losing
+  windows.
+- A window hidden by a workspace switch parks past the right edge of the
+  whole arrangement, so it never lands on another display.
+- Display affinity is not remembered permanently across reconnects.
+- macOS gives every display its own Mission Control Desktops. Those are still
+  not workspaces, and switching them still resets assignments.
+
 ## Menu bar
 
 The status item shows the workspace row and the current layout, xmobar style:

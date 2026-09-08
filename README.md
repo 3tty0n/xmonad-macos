@@ -105,7 +105,9 @@ for this because macOS forbids moving another app's window between them.
 Windows on other workspaces are placed off-screen. An app that refuses to be
 placed is minimized instead. Either way they return to where they were.
 
-If something goes wrong, `xmonad recover` puts every hidden window back.
+### If something goes wrong
+
+Type `xmonad recover`. It puts every hidden window back.
 
 ## Commands
 
@@ -135,17 +137,18 @@ Accessibility again. Run this once to stop that:
 ./scripts/signing-identity.sh
 ```
 
-It creates a local signing certificate, once, with a password prompt. Details:
-[Usage](docs/USAGE.md).
+It creates a local signing certificate, once, with a password prompt.
+
+Details: [Usage](docs/USAGE.md).
 
 ## Documentation
 
-- [Usage](docs/USAGE.md) — every key, menu, path and recovery step.
-- [Design](docs/DESIGN.md) — how it works and why.
-- [Compatibility](docs/COMPATIBILITY.md) — what of xmonad's API works.
-- [Protocol](docs/PROTOCOL.md) — the contract between the two halves.
-- [Testing](docs/TESTING.md) — automated checks and the manual matrix.
-- [Upstream](docs/UPSTREAM.md) — attribution and primary sources.
+- [Usage](docs/USAGE.md): every key, menu, path and recovery step.
+- [Design](docs/DESIGN.md): how it works and why.
+- [Compatibility](docs/COMPATIBILITY.md): what of xmonad's API works.
+- [Protocol](docs/PROTOCOL.md): the contract between the two halves.
+- [Testing](docs/TESTING.md): automated checks and the manual matrix.
+- [Upstream](docs/UPSTREAM.md): attribution and primary sources.
 
 ## License
 
