@@ -62,8 +62,12 @@ final class RecoveryJournal {
     func remove(_ token: String) throws { try persist(entries.filter { $0.token != token }) }
 }
 final class AXRecord {
-    let wid: UInt64, element: AXUIElement, descriptor: AppDescriptor
+    let wid: UInt64, descriptor: AppDescriptor
+    var element: AXUIElement
     var frame: Rect, title: String, identifier: String
+    // Consecutive scans the element was found destroyed while no
+    // replacement was adopted.
+    var orphanedScans=0
     var token: String?
     var hideRequestedAt=Date.distantPast
     var wantsHidden=false
@@ -193,6 +197,28 @@ final class AXStore {
                        width:Int(r.width.rounded()),height:Int(r.height.rounded())))
         }
     }
+    // A stale record adopts a replacement element only when the match is
+    // unique: by AXIdentifier when the element has one, otherwise by title
+    // plus either a nearby old frame or ownership (a token means we may have
+    // moved the window ourselves, so its frame is not a reliable anchor).
+    // Two stale records matching the same element is never guessed at.
+    private func adoptStale(_ stale: [AXRecord],_ adopted: Set<UInt64>,_ e: AXUIElement) -> AXRecord? {
+        let candidates=stale.filter { !adopted.contains($0.wid) }
+        let ident=axString(e,kAXIdentifierAttribute)
+        let matches: [AXRecord]
+        if !ident.isEmpty {
+            matches=candidates.filter { $0.identifier == ident }
+        } else {
+            let title=axString(e,kAXTitleAttribute)
+            let frame=axFrame(e)
+            matches=candidates.filter { r in
+                guard r.title == title else { return false }
+                let framesNear=frame.map { r.frame.near($0,tolerance:8) } ?? false
+                return framesNear || r.token != nil
+            }
+        }
+        return matches.count == 1 ? matches.first : nil
+    }
     func scan(apps: [AppDescriptor],displays: [DisplayInfo],generation: Int,epoch: Int) -> ScanResult {
         latestGeneration=generation; activeEpoch=epoch
         self.displays=displays
@@ -226,6 +252,14 @@ final class AXStore {
             observe(app,root)
             guard let windows=axCopy(root,kAXWindowsAttribute) as? [AXUIElement] else { continue }
             succeeded.insert(app.pid)
+            // Display sleep/wake makes macOS destroy every AXUIElement and hand
+            // out fresh ones for the same windows. A record whose element none
+            // of this scan's windows matches is a candidate to re-identify by
+            // AXIdentifier, or by title+frame, onto a replacement element below.
+            let stale=records.values.filter { r in
+                r.descriptor.pid == app.pid && !windows.contains { CFEqual($0,r.element) }
+            }
+            var adopted: Set<UInt64>=[]
             for e in windows {
                 let r: AXRecord
                 if let old=records.values.first(where:{ $0.descriptor.pid == app.pid && CFEqual($0.element,e) }) {
@@ -235,12 +269,20 @@ final class AXStore {
                     r=old
                     if let frame=axFrame(e) { r.frame=frame }
                     r.title=axString(e,kAXTitleAttribute)
+                } else if let match=adoptStale(stale,adopted,e) {
+                    r=match; adopted.insert(r.wid)
+                    r.element=e
+                    AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
+                    if let frame=axFrame(e) { r.frame=frame }
+                    r.title=axString(e,kAXTitleAttribute)
+                    r.absent=0; r.orphanedScans=0; r.appAbsent=0; r.appHidden=0
+                    logMessage("Window \(r.wid) re-identified after its element was recycled")
                 } else {
                     guard let frame=axFrame(e) else { continue }
                     r=AXRecord(nextID,e,app,frame); nextID += 1; records[r.wid]=r
                     AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
                 }
-                seen.insert(r.wid); r.absent=0
+                seen.insert(r.wid); r.absent=0; r.orphanedScans=0
                 // Freeze eligibility while we own the window. It is hidden for
                 // a non-visible workspace, and a minimized window reports
                 // AXSubrole as AXDialog; recomputing would drop it from the
@@ -280,7 +322,10 @@ final class AXStore {
         // a busy application returns an incomplete window list, and an
         // incomplete list is exactly what waking a display produces. Guessing
         // here costs the window its workspace, because the engine then treats
-        // it as new and adopts it onto the workspace in view.
+        // it as new and adopts it onto the workspace in view. A destroyed
+        // element gets three scans for its replacement to be adopted above,
+        // because display wake recycles every element at once and the
+        // replacement may not appear in the very first scan after wake.
         for (id,r) in Array(records) where !seen.contains(id) {
             guard succeeded.contains(r.descriptor.pid) else { continue }
             r.absent += 1
@@ -288,6 +333,8 @@ final class AXStore {
             var value: CFTypeRef?
             let error=AXUIElementCopyAttributeValue(r.element,kAXRoleAttribute as CFString,&value)
             if error == .invalidUIElement {
+                r.orphanedScans += 1
+                guard r.orphanedScans >= 3 else { continue }
                 logMessage("Window \(id) removed: its element was destroyed")
                 releaseOwnership(r); records.removeValue(forKey:id)
             } else if processIsGone(r.descriptor.pid) {

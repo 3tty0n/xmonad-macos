@@ -6,6 +6,11 @@
   application reported hidden has to be reported hidden twice before its
   windows leave management. The log marks both edges of the pause, so a wake
   that still loses state can be traced.
+- Windows keep their identity, and so their workspace, across display sleep.
+  macOS destroys every window's AXUIElement on wake and issues new ones; the
+  helper now adopts the replacement into the existing record, matched by
+  AXIdentifier, or by title and frame. This was the actual cause of every
+  window moving to one workspace after a wake.
 - A window is forgotten only when the window server says its element is
   destroyed, or its process has exited. Previously a window missing from one
   scan of an application list was enough, and waking a display produces

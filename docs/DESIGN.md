@@ -72,6 +72,13 @@ helper runs. It is deliberately not a `CGWindowID` or an XID. `AXUIElement`
 values are re-identified with `CFEqual` inside a per-PID registry, and the
 app's launch date is tracked so PID reuse cannot alias two processes.
 
+The element is not the identity, though: waking a display makes macOS destroy
+every window's element and issue a fresh one. A record whose element has gone
+is kept for three scans, and a new element from the same application is
+adopted into it when it matches uniquely - by `AXIdentifier`, or by title plus
+either the old frame or our own ownership of the window. Two candidates for
+one element is never guessed at; those windows are re-admitted as new.
+
 Using public APIs only, this implementation does not claim to correlate an AX
 window with its `CGWindow` perfectly. It matches PID and frame against the
 currently visible CG windows, and conservatively excludes candidates whenever
