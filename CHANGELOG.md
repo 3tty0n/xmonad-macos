@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- The `xmonad` command is the compiled config binary itself, as upstream's is.
+  Control arguments are handled before any engine starts, and both
+  `~/.local/bin/xmonad` and `xmonadctl` are symlinks to it; the shell
+  implementation is gone.
+- A window closed with cmd-W is forgotten on the next scan instead of holding
+  its place in the layout for 30 seconds. The grace for a destroyed element
+  now applies only after a display wake, the one event that recycles them.
+
 - Nothing is scanned for two seconds after the displays wake, and an
   application reported hidden has to be reported hidden twice before its
   windows leave management. The log marks both edges of the pause, so a wake
