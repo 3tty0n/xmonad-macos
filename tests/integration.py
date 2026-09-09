@@ -62,6 +62,15 @@ def run(engine: str) -> None:
         row = [(w['tag'], w['windows'], w['current']) for w in plan['workspaces']]
         assert ('2', 1, True) in row and ('1', 1, False) in row, plan['workspaces']
         assert [w['tag'] for w in plan['workspaces']][:3] == ['1', '2', '3'], plan
+        # M-w / M-e follow the physical screens on a multi-display setup.
+        two = dict(type='snapshot',generation=2,epoch=1,
+                   screens=[dict(display=10,usable=dict(x=0,y=24,width=1600,height=1000)),
+                            dict(display=20,usable=dict(x=1600,y=0,width=1200,height=800))],
+                   windows=[win(1),win(2)],focused=1)
+        plan = send(two)
+        assert plan['screen'] == 10, plan
+        plan = key(ord('e')); assert plan['screen'] == 20, plan
+        plan = key(ord('w')); assert plan['screen'] == 10, plan
         checkpoint = plan['checkpoint']
         assert checkpoint['savedVersion'] == 1
         assert send({'type':'ping'})['type'] == 'pong'

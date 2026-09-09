@@ -53,7 +53,7 @@ and the next snapshot synchronizes the relative float rectangle.
 A placement plan:
 
 ```json
-{"type":"plan","generation":3,"epoch":1,"frames":[{"wid":1,"frame":{"x":4,"y":28,"width":1592,"height":992}}],"hide":[],"focus":null,"workspace":"1","layout":"Tall","checkpoint":{}}
+{"type":"plan","generation":3,"epoch":1,"frames":[{"wid":1,"frame":{"x":4,"y":28,"width":1592,"height":992}}],"hide":[],"focus":null,"workspace":"1","layout":"Tall","screen":10,"checkpoint":{}}
 ```
 
 - `frames` — windows to show and place, in stacking order, focused last.
@@ -62,6 +62,9 @@ A placement plan:
 - `workspaces` — one entry per workspace in config order, with `tag`,
   `windows`, `current` and `visible`, for the menu bar and external bars.
 - `focus` — set only for explicit user-driven focus intent.
+- `screen` — the display the current screen sits on. The helper moves the
+  pointer there when it is on another display, so a screen change is visible
+  even when the workspace there holds no window.
 - Windows ignored by `manageHook` appear in neither list.
 
 `generation` is the observation generation; `epoch` is the policy generation,

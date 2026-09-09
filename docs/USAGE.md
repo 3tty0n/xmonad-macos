@@ -49,6 +49,9 @@ there.
 Each display shows one workspace and is laid out in its own frame, as upstream
 xmonad does with Xinerama. `M-w` / `M-e` / `M-r` focus screens 0, 1 and 2;
 `M-S-w` and friends send the focused window to the workspace showing there.
+Screen 0 is the display macOS calls primary; the rest follow in display-ID
+order. Focusing a screen moves the pointer there when it is on another
+display, because macOS has nothing else that says which screen is current.
 
 - A display that comes back with the same display ID reclaims its workspaces.
 - A disconnected display's workspaces become hidden rather than losing

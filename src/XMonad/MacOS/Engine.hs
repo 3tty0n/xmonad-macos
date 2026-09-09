@@ -217,6 +217,7 @@ makePlan = do
     , planHide = W.allWindows ws \\ shown
     , planFocus = requestedFocus s shown
     , planWorkspace = W.currentTag ws
+    , planScreen = displayID . W.screenDetail . W.current $ ws
     , planLayout = description . W.layout . W.workspace $ W.current ws
     , planCheckpoint = checkpoint s
     , planWorkspaces = workspaceSummary c ws

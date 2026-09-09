@@ -42,6 +42,7 @@ struct Plan: Decodable {
     var generation: Int, epoch: Int, frames: [Placement], hide: [UInt64]
     var focus: UInt64?, workspace: String, layout: String, checkpoint: JSONValue
     var workspaces: [WorkspaceInfo]?
+    var screen: Int?
 }
 // xmobar-style row: every workspace that holds windows, plus the current one.
 // "[2]" is current, a bare tag has windows, so an empty desktop stays quiet.

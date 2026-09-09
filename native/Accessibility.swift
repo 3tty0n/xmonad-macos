@@ -161,6 +161,9 @@ final class AXStore {
     private let orphanGrace: TimeInterval=30
     private var wokeAt=Date.distantPast
     private var pointerDrag: PointerDragSession?
+    // The display the pointer was last sent to; -1 until the first plan, so
+    // starting up never moves it.
+    private var pointerScreen = -1
     init(journal: RecoveryJournal,relay: NotificationRelay) {
         self.journal=journal; self.relay=relay
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(),0.2)
@@ -606,6 +609,24 @@ final class AXStore {
             AXUIElementSetAttributeValue(r.element,kAXMainAttribute as CFString,kCFBooleanTrue)
             AXUIElementPerformAction(r.element,kAXRaiseAction as CFString)
         }
+        if let screen=p.screen { followScreen(screen) }
+    }
+    // The current screen is a policy idea with no macOS counterpart: with no
+    // window to focus on the display it moved to, nothing would tell the system
+    // or the user that it changed. Move the pointer instead, as upstream's
+    // UpdatePointer does, and only when it is on another display, so ordinary
+    // plans and the user's own pointer are left alone.
+    private func followScreen(_ display: Int) {
+        defer { pointerScreen=display }
+        guard pointerScreen != -1,display != pointerScreen,
+              let d=displays.first(where:{ $0.display == display }),
+              let here=CGEvent(source:nil)?.location else { return }
+        let r=d.usable
+        let inside=here.x >= CGFloat(r.x) && here.x < CGFloat(r.x+r.width)
+          && here.y >= CGFloat(r.y) && here.y < CGFloat(r.y+r.height)
+        guard !inside else { return }
+        CGWarpMouseCursorPosition(CGPoint(x:CGFloat(r.x+r.width/2),
+                                          y:CGFloat(r.y+r.height/2)))
     }
     func close(_ id: UInt64) {
         guard let r=records[id],active.contains(id),

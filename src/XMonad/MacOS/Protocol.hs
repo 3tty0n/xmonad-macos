@@ -49,6 +49,8 @@ data Plan = Plan
   { planGeneration :: Int, planEpoch :: Int
   , planFrames :: [Placement], planHide :: [Window], planFocus :: Maybe Window
   , planWorkspace :: String, planLayout :: String, planCheckpoint :: Value
+  -- The display the current screen sits on, so the helper can follow it.
+  , planScreen :: Int
   , planWorkspaces :: [WorkspaceInfo]
   } deriving (Show)
 instance ToJSON Plan where
@@ -56,6 +58,7 @@ instance ToJSON Plan where
     ["type" .= ("plan" :: String),"generation" .= planGeneration p,"epoch" .= planEpoch p
     ,"frames" .= planFrames p,"hide" .= planHide p,"focus" .= planFocus p
     ,"workspace" .= planWorkspace p,"layout" .= planLayout p,"checkpoint" .= planCheckpoint p
+    ,"screen" .= planScreen p
     ,"workspaces" .= planWorkspaces p]
 commandJSON :: NativeCommand -> Value
 commandJSON c = case c of

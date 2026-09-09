@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Focusing a screen with `M-w` / `M-e` / `M-r` moves the pointer to that
+  display when it is elsewhere. The bindings existed, but with no window to
+  focus on the target display nothing marked the change, and the observed
+  focus pulled the current screen back a few ticks later. Plans now carry the
+  current screen's display.
+
 - The `xmonad` command is the compiled config binary itself, as upstream's is.
   Control arguments are handled before any engine starts, and both
   `~/.local/bin/xmonad` and `xmonadctl` are symlinks to it; the shell
