@@ -7,7 +7,7 @@ module XMonad.MacOS.Engine
 import XMonad.Core
 import XMonad.MacOS.Protocol
 import XMonad.MacOS.CLI (handleCommand)
-import XMonad.Operations (broadcastMessage)
+import XMonad.Operations (broadcastMessage, windows)
 import qualified XMonad.StackSet as W
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -394,7 +394,9 @@ handshake :: XConfig Layout -> M.Map (KeyMask,KeySym) (X ()) -> Value
 handshake c keymap = object
   ["type" .= ("configure" :: String),"protocol" .= (1::Int)
   ,"keys" .= [object ["mask" .= m,"sym" .= k] | (m,k) <- M.keys keymap]
-  ,"mouseMask" .= modMask c]
+  ,"mouseMask" .= modMask c
+  ,"borderWidth" .= borderWidth c,"borderColor" .= focusedBorderColor c
+  ,"focusFollowsMouse" .= focusFollowsMouse c]
 
 -- One line in, one plan out. A protocol error is reported and skipped rather
 -- than fatal, so a single bad line cannot take the session down.
@@ -426,6 +428,10 @@ handleEvent :: M.Map (KeyMask,KeySym) (X ()) -> InputEvent -> X ()
 handleEvent keymap event = case event of
   SnapshotEvent snap -> reconcile snap
   MouseFloatEvent w -> floatObservedWindow w
+  -- Focus follows the mouse only when the helper is configured to report it.
+  PointerFocusEvent w -> do
+    known <- gets (W.member w . windowset)
+    when known $ windows (W.focusWindow w)
   -- A bound key is the one thing that may ask the helper to change focus.
   KeyEvent m k -> whenJust (M.lookup (m,k) keymap) $ \action -> do
     modify $ \st -> st {focusRequested=True,focusAgeTicks=0,commands=[]}

@@ -44,6 +44,23 @@ A drag sets `StackSet.floating` and suspends tiling for that window until
 release. Dragged to another display, the window joins the workspace visible
 there.
 
+## Focus border and the mouse
+
+`borderWidth` and `focusedBorderColor` trace the focused window; `borderWidth =
+0` turns the border off. `focusFollowsMouse` is on by default, as upstream:
+
+```haskell
+main = xmonad $ def
+  { borderWidth = 2
+  , focusedBorderColor = "#61afef"
+  , focusFollowsMouse = False
+  }
+```
+
+The border is an overlay window of the helper's own, because AX cannot give
+another application's window a border. It is click-through, and follows the
+window as the helper observes it move, so it lags a fast drag slightly.
+
 ## Several displays
 
 Each display shows one workspace and is laid out in its own frame, as upstream

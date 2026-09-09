@@ -80,15 +80,30 @@ enum WireError: Error, CustomStringConvertible {
     case invalid(String)
     var description: String { if case .invalid(let s) = self { return s }; return "invalid" }
 }
+// Appearance and pointer policy, decided by the config and applied by the helper.
+struct Appearance {
+    var borderWidth=0
+    var borderColor="#ff0000"
+    var focusFollowsMouse=false
+}
 enum EngineMessage: Decodable {
-    case configure(Int, [KeyBinding], Int), plan(Plan), command(String, UInt64?), pong
-    private enum CodingKeys: String, CodingKey { case type, `protocol`, keys, mouseMask, name, wid }
+    case configure(Int, [KeyBinding], Int, Appearance), plan(Plan)
+    case command(String, UInt64?), pong
+    private enum CodingKeys: String, CodingKey {
+        case type, `protocol`, keys, mouseMask, name, wid
+        case borderWidth, borderColor, focusFollowsMouse
+    }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .type) {
-        case "configure": self = .configure(try c.decode(Int.self,forKey:.protocol),
-                                             try c.decode([KeyBinding].self,forKey:.keys),
-                                             try c.decodeIfPresent(Int.self,forKey:.mouseMask) ?? 0)
+        case "configure":
+            let look=Appearance(
+              borderWidth: try c.decodeIfPresent(Int.self,forKey:.borderWidth) ?? 0,
+              borderColor: try c.decodeIfPresent(String.self,forKey:.borderColor) ?? "#ff0000",
+              focusFollowsMouse: try c.decodeIfPresent(Bool.self,forKey:.focusFollowsMouse) ?? false)
+            self = .configure(try c.decode(Int.self,forKey:.protocol),
+                              try c.decode([KeyBinding].self,forKey:.keys),
+                              try c.decodeIfPresent(Int.self,forKey:.mouseMask) ?? 0,look)
         case "plan": self = .plan(try Plan(from: decoder))
         case "command": self = .command(try c.decode(String.self,forKey:.name),
                                          try c.decodeIfPresent(UInt64.self,forKey:.wid))

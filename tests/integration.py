@@ -62,6 +62,8 @@ def run(engine: str) -> None:
         row = [(w['tag'], w['windows'], w['current']) for w in plan['workspaces']]
         assert ('2', 1, True) in row and ('1', 1, False) in row, plan['workspaces']
         assert [w['tag'] for w in plan['workspaces']][:3] == ['1', '2', '3'], plan
+        plan = send({'type':'pointerFocus','wid':1}); assert plan['focus'] == 1, plan
+        plan = send({'type':'pointerFocus','wid':2}); assert plan['focus'] == 2, plan
         # M-w / M-e follow the physical screens on a multi-display setup.
         two = dict(type='snapshot',generation=2,epoch=1,
                    screens=[dict(display=10,usable=dict(x=0,y=24,width=1600,height=1000)),

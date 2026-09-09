@@ -47,6 +47,11 @@ data XConfig l = XConfig
   , manageHook :: ManageHook
   , startupHook :: X ()
   , logHook :: X ()
+  -- The helper draws the border itself: another application's window cannot be
+  -- given one, so it is an overlay following the focused window. Zero is off.
+  , borderWidth :: Int
+  , focusedBorderColor :: String
+  , focusFollowsMouse :: Bool
   }
 data XConf = XConf { config :: XConfig Layout }
 

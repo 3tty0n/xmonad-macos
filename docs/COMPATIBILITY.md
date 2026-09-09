@@ -87,7 +87,9 @@ focused one, so switching to it hides nothing at all.
 | State across a config reload | Workspace, layout, and float state survive inside one helper |
 | State across a helper restart | Not implemented; only the ownership journal persists |
 | Native tabs, tab grouping, Stage Manager, moving windows between Spaces | Not implemented |
-| `borderWidth`, `borderColor`, `focusFollowsMouse` | Not implemented; the fields do not exist |
+| `borderWidth`, `focusedBorderColor` | An overlay traced around the focused window; another app's window cannot be given a real border |
+| `normalBorderColor` | Not implemented; unfocused windows get no border |
+| `focusFollowsMouse` | Implemented; on by default, as upstream |
 
 ## Displays
 

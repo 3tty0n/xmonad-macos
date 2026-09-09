@@ -13,7 +13,11 @@ final class PointerTap {
     private var port: CFMachPort?
     private var runLoop: CFRunLoop?
     private var thread: Thread?
+    private var hoverEnabled=false
+    private var lastHover=Date.distantPast
     var onPointer: ((PointerMode, PointerPhase, CGPoint) -> Void)?
+    // Reported at most every 80ms, and never during a mod-drag.
+    var onHover: ((CGPoint) -> Void)?
     var onReady: (() -> Void)?
     var onFailure: ((String) -> Void)?
 
@@ -27,12 +31,14 @@ final class PointerTap {
         lock.unlock()
     }
     func cancelGesture() { lock.lock(); activeMode=nil; lock.unlock() }
+    func setHover(_ value: Bool) { lock.lock(); hoverEnabled=value; lock.unlock() }
     func start() {
         guard thread == nil else { return }
         let t=Thread { [weak self] in
             guard let self=self else { return }
             let types: [CGEventType] = [.leftMouseDown,.leftMouseDragged,.leftMouseUp,
-                                        .rightMouseDown,.rightMouseDragged,.rightMouseUp]
+                                        .rightMouseDown,.rightMouseDragged,.rightMouseUp,
+                                        .mouseMoved]
             let mask=types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
             let context=Unmanaged.passUnretained(self).toOpaque()
             guard let tap=CGEvent.tapCreate(tap:.cgSessionEventTap,place:.headInsertEventTap,
@@ -72,6 +78,15 @@ final class PointerTap {
             return Unmanaged.passUnretained(event)
         }
         let location=event.location
+        if type == .mouseMoved {
+            lock.lock()
+            let report=hoverEnabled && activeMode == nil
+              && Date().timeIntervalSince(lastHover) > 0.08
+            if report { lastHover=Date() }
+            lock.unlock()
+            if report { DispatchQueue.main.async { [weak self] in self?.onHover?(location) } }
+            return Unmanaged.passUnretained(event)
+        }
         lock.lock()
         let isEnabled=enabled, wanted=modifierMask
         var mode=activeMode

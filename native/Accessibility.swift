@@ -628,6 +628,20 @@ final class AXStore {
         CGWarpMouseCursorPosition(CGPoint(x:CGFloat(r.x+r.width/2),
                                           y:CGFloat(r.y+r.height/2)))
     }
+    // The window under the pointer, topmost first. The window server's list is
+    // front to back, which AX does not report, so it decides the overlap.
+    func window(at point: CGPoint) -> UInt64? {
+        for (pid,rect) in cgVisibleFrames() {
+            guard point.x >= CGFloat(rect.x),point.x < CGFloat(rect.x+rect.width),
+                  point.y >= CGFloat(rect.y),point.y < CGFloat(rect.y+rect.height)
+            else { continue }
+            if let r=records.values.first(where:{ $0.descriptor.pid == pid
+                 && $0.frame.near(rect) && active.contains($0.wid) && $0.token == nil }) {
+                return r.wid
+            }
+        }
+        return nil
+    }
     func close(_ id: UInt64) {
         guard let r=records[id],active.contains(id),
               let button=axElement(r.element,kAXCloseButtonAttribute) else { return }

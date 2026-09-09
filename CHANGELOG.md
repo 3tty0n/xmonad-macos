@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `borderWidth`, `focusedBorderColor` and `focusFollowsMouse` exist, with
+  upstream's defaults. The border is a click-through overlay the helper draws
+  around the focused window, since AX cannot give another application's window
+  one; focus follows the mouse through a new `pointerFocus` event that policy
+  is free to ignore.
+
 - Focusing a screen with `M-w` / `M-e` / `M-r` moves the pointer to that
   display when it is elsewhere. The bindings existed, but with no window to
   focus on the target display nothing marked the change, and the observed

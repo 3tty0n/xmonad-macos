@@ -55,9 +55,14 @@ import Foundation
         }
         check(keyCodeForSym[106] == 38,"J physical key")
         check(keyCodeForSym[0xffd1] == 90,"F20 mapping")
-        let config=Data("{\"type\":\"configure\",\"protocol\":1,\"keys\":[{\"mask\":68,\"sym\":106}],\"mouseMask\":68}".utf8)
-        if case .configure(let v,let keys,let mouseMask)=try JSONDecoder().decode(EngineMessage.self,from:config) {
+        let config=Data(("{\"type\":\"configure\",\"protocol\":1,\"keys\":[{\"mask\":68,\"sym\":106}]"
+          + ",\"mouseMask\":68,\"borderWidth\":2,\"borderColor\":\"#00ff00\""
+          + ",\"focusFollowsMouse\":true}").utf8)
+        if case .configure(let v,let keys,let mouseMask,let look)=try JSONDecoder().decode(EngineMessage.self,from:config) {
             check(v == 1 && keys.count == 1 && mouseMask == 68,"configure decoding")
+            check(look.borderWidth == 2 && look.focusFollowsMouse,"appearance decoding")
+            check(BorderOverlay.parse(look.borderColor)?.greenComponent == 1,"border colour")
+            check(BorderOverlay.parse("nope") == nil,"bad border colour rejected")
         } else { fatalError("configuration") }
         try validatePointerMask(68); count += 1
         do { try validatePointerMask(128); fatalError("invalid pointer modifier accepted") }

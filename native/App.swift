@@ -83,6 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let writer=DispatchQueue(label:"org.xmonad.XMonadMac.engine-input")
     private let keyboard=KeyboardTap()
     private let pointer=PointerTap()
+    private let border=BorderOverlay()
+    private var hoverWid: UInt64?
     private let relay=NotificationRelay()
     private var store: AXStore!
     private var statusItem: NSStatusItem!
@@ -139,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keyboard.onFailure={ [weak self] problem in self?.pause(reason:problem) }
         keyboard.onDebug={ [weak self] line in _=self; logMessage(line) }
         pointer.onPointer={ [weak self] mode,phase,point in self?.handlePointer(mode:mode,phase:phase,point:point) }
+        pointer.onHover={ [weak self] point in self?.handleHover(point) }
         pointer.onReady={ [weak self] in self?.pointerReady=true; self?.updateKeyState() }
         pointer.onFailure={ [weak self] problem in self?.pause(reason:problem) }
         DistributedNotificationCenter.default().addObserver(self,selector:#selector(receivedCommand(_:)),
@@ -375,10 +378,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard running else { return }
         lastResponse=Date()
         switch message {
-        case .configure(let version,let keys,let mouseMask):
+        case .configure(let version,let keys,let mouseMask,let look):
             guard version == 1 else { pause(reason:"Protocol version mismatch"); return }
             do { try keyboard.configure(keys); try pointer.configure(modifierMask:mouseMask) }
             catch { pause(reason:"Invalid input configuration: \(error)"); return }
+            border.configure(width:look.borderWidth,color:look.borderColor)
+            pointer.setHover(look.focusFollowsMouse)
             configured=true; updateKeyState(); scheduleScan()
         case .plan(let plan):
             if logKeys {
@@ -450,6 +455,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+    // Draw the focused window's border where the scan just saw it.
+    private func traceFocus(_ result: ScanResult) {
+        guard running,configured,!fullScreen,
+              let wid=result.focused,
+              let window=result.windows.first(where:{ $0.wid == wid }),
+              !window.minimized,!window.ownedHidden
+        else { border.hide(); hoverWid=result.focused; return }
+        border.show(window.frame)
+        // Keep the hover filter honest about what actually holds focus.
+        hoverWid=wid
+    }
+    // Focus follows the mouse: the helper only reports it when the config asked
+    // for it, and policy decides whether the window may take focus.
+    private func handleHover(_ point: CGPoint) {
+        guard running,configured,!dryRun,!fullScreen else { return }
+        axQueue.async { [weak self] in
+            guard let self=self else { return }
+            let wid=self.store.window(at:point)
+            DispatchQueue.main.async {
+                guard self.running,let wid=wid,wid != self.hoverWid else { return }
+                self.hoverWid=wid
+                self.sendObject(["type":"pointerFocus","wid":wid])
+            }
+        }
+    }
     private func handlePointer(mode: PointerMode,phase: PointerPhase,point: CGPoint) {
         guard running,configured,!dryRun,!fullScreen else { return }
         switch phase {
@@ -504,6 +534,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 self.fullScreen=result.nativeFullScreen
                 self.updateKeyState()
+                self.traceFocus(result)
                 if self.fullScreen {
                     self.setStatus("Native full-screen; tiling suspended")
                 } else {
@@ -542,6 +573,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private func pause(reason: String) {
         running=false; scanWork?.cancel(); scanWork=nil; scanAgain=false; resetPointerCoalescer()
+        border.hide()
         stopEngine(); setStatus(reason); logMessage(reason)
         if store != nil { axQueue.async { [weak self] in self?.store.cancelPointerDrag(); self?.store.restoreAll() } }
     }
@@ -679,7 +711,7 @@ struct XMonadMacMain {
         if let i=args.firstIndex(of:"--validate-config"),i+1<args.count {
             do {
                 let data=try Data(contentsOf:URL(fileURLWithPath:args[i+1]))
-                guard case .configure(let version,let keys,let mouseMask)=try JSONDecoder().decode(EngineMessage.self,from:data), version == 1 else {
+                guard case .configure(let version,let keys,let mouseMask,_)=try JSONDecoder().decode(EngineMessage.self,from:data), version == 1 else {
                     throw WireError.invalid("Expected protocol-1 configure object")
                 }
                 for key in keys { try validateBinding(key) }; try validatePointerMask(mouseMask)

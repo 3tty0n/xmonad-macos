@@ -14,15 +14,21 @@ peer is the helper's own child.
 The engine emits `configure` first:
 
 ```json
-{"type":"configure","protocol":1,"keys":[{"mask":8,"sym":106}],"mouseMask":8}
+{"type":"configure","protocol":1,"keys":[{"mask":8,"sym":106}],"mouseMask":8,"borderWidth":1,"borderColor":"#ff0000","focusFollowsMouse":true}
 ```
 
 `mask` is the OR of Shift=1, Control=4, Option=8, Command=64. `sym` is a
 restricted set of X keysym numbers that the helper maps to physical key
 positions. `mouseMask` is the modifier for the built-in move/resize drag —
 currently `modMask` verbatim. A `mouseMask` of 0 is rejected for safety.
+`borderWidth` and `borderColor` describe the overlay traced around the focused
+window; a width of 0 turns it off. `focusFollowsMouse` decides whether the
+helper reports the window under the pointer at all.
 
 ## Helper → engine
+
+`{"type":"pointerFocus","wid":N}` says the pointer moved onto a window, and is
+sent only while `focusFollowsMouse` is on. Policy decides what to do with it.
 
 Snapshot of the observed world:
 

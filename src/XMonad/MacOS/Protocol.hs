@@ -17,6 +17,7 @@ data InputEvent
   = SnapshotEvent Snapshot     -- the world changed
   | KeyEvent KeyMask KeySym    -- a bound key was pressed
   | MouseFloatEvent Window     -- a mod-drag started on this window
+  | PointerFocusEvent Window   -- the pointer moved onto this window
   | PingEvent                  -- liveness check
   | ExitEvent                  -- shut down
   deriving (Show)
@@ -29,6 +30,7 @@ instance FromJSON InputEvent where
         <*> o .: "windows" <*> o .:? "focused" <*> o .:? "restore")
       "key" -> KeyEvent <$> o .: "mask" <*> o .: "sym"
       "mouseFloat" -> MouseFloatEvent <$> o .: "wid"
+      "pointerFocus" -> PointerFocusEvent <$> o .: "wid"
       "ping" -> pure PingEvent
       "exit" -> pure ExitEvent
       _ -> fail $ "Unknown input type: " ++ t

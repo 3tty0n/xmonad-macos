@@ -20,6 +20,9 @@ defaultConfig = XConfig
   , manageHook = mempty
   , startupHook = pure ()
   , logHook = pure ()
+  , borderWidth = 1
+  , focusedBorderColor = "#ff0000"
+  , focusFollowsMouse = True
   }
 
 -- Upstream's bindings, with the same keys doing the same things: mod-Return
