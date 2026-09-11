@@ -2,7 +2,7 @@
 -- snapshot the helper sent, so they describe macOS windows rather than X11
 -- properties: see the module comments on each.
 module XMonad.ManageHook
-  ( className, resource, appName, title, queryInfo
+  ( className, resource, appName, title, subrole, queryInfo
   , (=?), (-->), (<&&>), (<||>), composeAll
   , doF, doIgnore, doShift, doFloat
   ) where
@@ -21,11 +21,13 @@ queryInfo f fallback = do
 
 -- className is the application's display name, which is localized; resource
 -- and appName are its bundle identifier, which is not. title is AXTitle.
-className, resource, appName, title :: Query String
+-- subrole is the AX subrole (AXStandardWindow, AXDialog, ...).
+className, resource, appName, title, subrole :: Query String
 className = queryInfo app ""
 resource = queryInfo bundle ""
 appName = resource
 title = queryInfo titleText ""
+subrole = queryInfo subroleText "AXStandardWindow"
 
 (=?) :: Eq a => Query a -> a -> Query Bool
 q =? v = (==v) <$> q

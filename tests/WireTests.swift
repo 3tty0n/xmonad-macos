@@ -80,6 +80,40 @@ import Foundation
         let window=(object["windows"] as! [[String:Any]])[0]
         check(window["titleText"] as? String == "α\nβ","title escaping")
         check(window["ownedHidden"] as? Bool == false,"ownership wire name")
+        check(window["subrole"] as? String == "AXStandardWindow","default subrole")
+        check(isManagedPopupSubrole("AXDialog") && isManagedPopupSubrole("AXSystemDialog")
+              && isManagedPopupSubrole("AXFloatingWindow") && isManagedPopupSubrole("AXSystemFloatingWindow"),
+              "popup subroles")
+        check(!isManagedPopupSubrole("AXStandardWindow") && !isManagedPopupSubrole("AXSheet")
+              && !isManagedPopupSubrole("AXUnknown"),"sheets stay unmanaged")
+        check(cgWindowIsApplicationLayer(0) && cgWindowIsApplicationLayer(3)
+              && cgWindowIsApplicationLayer(8) && cgWindowIsApplicationLayer(19),"application layers")
+        check(!cgWindowIsApplicationLayer(-1) && !cgWindowIsApplicationLayer(20)
+              && !cgWindowIsApplicationLayer(24),"dock and menu layers excluded")
+        check(bundleOmitsOnScreenCGWindows("com.google.Chrome")
+              && bundleOmitsOnScreenCGWindows("com.google.Chrome.beta")
+              && bundleOmitsOnScreenCGWindows("com.google.Chrome.canary"),
+              "Chrome withholds on-screen CGWindow metadata")
+        check(!bundleOmitsOnScreenCGWindows("com.apple.Safari")
+              && !bundleOmitsOnScreenCGWindows("com.mitchellh.ghostty"),
+              "AppKit apps still require CGWindow correlation")
+        let screen=[DisplayInfo(display:1,usable:Rect(x:0,y:0,width:1800,height:1169))]
+        let parked=Rect(x:1864,y:1233,width:782,height:1120)
+        let finder=Rect(x:1013,y:44,width:782,height:1120)
+        check(parkedOffDisplay(parked,screen) && !parkedOffDisplay(finder,screen),"corner clamp is parked")
+        check(cgShowsOriginal(pid:1,original:finder,windows:[(1,finder)],displays:screen),
+              "CG still at the original on-display frame")
+        check(!cgShowsOriginal(pid:1,original:finder,windows:[(1,parked)],displays:screen),
+              "CG at the parking clamp is not the original")
+        check(parksByMinimizing("com.apple.finder"),"Finder hides by minimizing")
+        check(!parksByMinimizing("com.apple.Safari") && !parksByMinimizing("com.google.Chrome"),
+              "other apps still park first")
+        // Finder has no NSRunningApplication launch date, and a hide without a
+        // process instance is refused. Every live process has a start time.
+        let started=processStartTime(getpid())
+        check(started>0 && started<=Date().timeIntervalSince1970,"process start time is readable")
+        check(processStartTime(getpid())==started,"process start time is stable")
+        check(processStartTime(-1)==0,"no start time for a process that cannot exist")
         // Geometry stress: round trips hold for logical-coordinate rectangles.
         for x in stride(from:-6000,through:6000,by:1200) {
             for y in stride(from:-3000,through:3000,by:600) {

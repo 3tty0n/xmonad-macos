@@ -36,6 +36,46 @@ func axFrame(_ e: AXUIElement) -> Rect? {
     return Rect(x:Int(point.x.rounded()),y:Int(point.y.rounded()),
                 width:Int(size.width.rounded()),height:Int(size.height.rounded()))
 }
+func windowEligible(_ e: AXUIElement, subrole: String) -> Bool {
+    guard axString(e,kAXRoleAttribute) == kAXWindowRole, !axBool(e,"AXFullScreen"),
+          axSettable(e,kAXPositionAttribute) else { return false }
+    if subrole == kAXStandardWindowSubrole {
+        return axSettable(e,kAXSizeAttribute) && axSettable(e,kAXMinimizedAttribute)
+    }
+    // Dialogs often cannot be minimized; parking still hides them. Size is
+    // left as observed when it is not settable.
+    return isManagedPopupSubrole(subrole)
+}
+// System-wide AXFocusedApplication is empty for Chromium even while the
+// browser is frontmost. The workspace PID plus that app's AXFocusedWindow
+// is the public fallback.
+func focusedAXWindow() -> AXUIElement? {
+    let system=AXUIElementCreateSystemWide()
+    if let app=axElement(system,kAXFocusedApplicationAttribute),
+       let window=axElement(app,kAXFocusedWindowAttribute) {
+        return window
+    }
+    guard let pid=NSWorkspace.shared.frontmostApplication?.processIdentifier,
+          pid != getpid() else { return nil }
+    let app=AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(app,0.15)
+    return axElement(app,kAXFocusedWindowAttribute)
+}
+// Chromium animates or drops AX geometry writes while this is on. Toggle it
+// only around a write, then restore, so VoiceOver is not left disabled.
+func withImmediateAXGeometry<T>(_ pid: pid_t, _ body: () -> T) -> T {
+    let app=AXUIElementCreateApplication(pid)
+    let enhanced=axBoolean(app,"AXEnhancedUserInterface") == true
+    if enhanced {
+        AXUIElementSetAttributeValue(app,"AXEnhancedUserInterface" as CFString,kCFBooleanFalse)
+    }
+    defer {
+        if enhanced {
+            AXUIElementSetAttributeValue(app,"AXEnhancedUserInterface" as CFString,kCFBooleanTrue)
+        }
+    }
+    return body()
+}
 struct AppDescriptor {
     var pid: pid_t, name: String, bundle: String, launch: Double, hidden: Bool
 }
@@ -93,6 +133,7 @@ final class AXRecord {
     var appAbsent=0
     var appHidden=0
     var eligible=false
+    var subrole=""
     var absent=0
     var lastTarget: Rect?
     var lastActual: Rect?
@@ -100,6 +141,7 @@ final class AXRecord {
     init(_ wid: UInt64, _ e: AXUIElement, _ app: AppDescriptor, _ frame: Rect) {
         self.wid=wid; element=e; descriptor=app; self.frame=frame
         title=axString(e,kAXTitleAttribute); identifier=axString(e,kAXIdentifierAttribute)
+        subrole=axString(e,kAXSubroleAttribute)
     }
     var recovery: RecoveryEntry {
         RecoveryEntry(token:UUID().uuidString,pid:descriptor.pid,launch:descriptor.launch,
@@ -217,7 +259,8 @@ final class AXStore {
         guard let list=CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],
                        kCGNullWindowID) as? [[String:Any]] else { return [] }
         return list.compactMap { d in
-            guard (d[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+            guard let layer=(d[kCGWindowLayer as String] as? NSNumber)?.intValue,
+                  cgWindowIsApplicationLayer(layer),
                   let pid=(d[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
                   let bounds=d[kCGWindowBounds as String] as? [String:Any],
                   let r=CGRect(dictionaryRepresentation:bounds as CFDictionary) else { return nil }
@@ -307,7 +350,11 @@ final class AXStore {
                     r.appAbsent=0; r.appHidden=0
                     logMessage("Window \(r.wid) re-identified after its element was recycled")
                 } else {
-                    guard let frame=axFrame(e) else { continue }
+                    // The desktop is an AXScrollArea in Finder's window list.
+                    // Recording it would inflate same-PID/same-frame peers and
+                    // drop the real Finder window from every snapshot.
+                    guard axString(e,kAXRoleAttribute) == kAXWindowRole,
+                          let frame=axFrame(e) else { continue }
                     r=AXRecord(nextID,e,app,frame); nextID += 1; records[r.wid]=r
                     AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
                 }
@@ -315,13 +362,12 @@ final class AXStore {
                 r.awaitsReplacement=false
                 // Freeze eligibility while we own the window. It is hidden for
                 // a non-visible workspace, and a minimized window reports
-                // AXSubrole as AXDialog; recomputing would drop it from the
-                // snapshot, and the engine would forget which workspace owns it.
+                // AXSubrole as AXDialog; recomputing would drop a standard
+                // window that no longer looks settable, and the engine would
+                // forget which workspace owns it.
                 if r.token == nil {
-                    r.eligible=axString(e,kAXRoleAttribute) == kAXWindowRole &&
-                      axString(e,kAXSubroleAttribute) == kAXStandardWindowSubrole &&
-                      !axBool(e,"AXFullScreen") && axSettable(e,kAXPositionAttribute) &&
-                      axSettable(e,kAXSizeAttribute) && axSettable(e,kAXMinimizedAttribute)
+                    r.subrole=axString(e,kAXSubroleAttribute)
+                    r.eligible=windowEligible(e,subrole:r.subrole)
                 }
                 // An owned window is driven to the last requested state until AX
                 // agrees, in both directions. Hidden: if it comes back on its own
@@ -333,12 +379,7 @@ final class AXStore {
                 // and ownership is dropped only once the window is really back.
                 if r.token != nil,let mini=axBoolean(e,kAXMinimizedAttribute) {
                     if mini { r.hideConfirmed=true }
-                    if r.wantsHidden {
-                        if !mini,onAnyDisplay(r.frame),
-                           Date().timeIntervalSince(r.hideRequestedAt)>0.5 {
-                            hide(r)   // Came back on its own: park it again.
-                        }
-                    } else if Date().timeIntervalSince(r.restoreRequestedAt)>0.12 {
+                    if !r.wantsHidden,Date().timeIntervalSince(r.restoreRequestedAt)>0.12 {
                         if mini {
                             r.restoreRequestedAt=Date()
                             AXUIElementSetAttributeValue(e,kAXMinimizedAttribute as CFString,kCFBooleanFalse)
@@ -377,6 +418,21 @@ final class AXStore {
             }
         }
         let cg=cgVisibleFrames()
+        // Other apps can report a parked AX frame while CG still shows the
+        // original on-display rectangle. Wait a beat so a just-issued park is
+        // not mistaken for that, then minimize if CG still shows the original.
+        // Finder never parks (a corner sliver is not a hide), so retry until
+        // AXMinimized sticks. Re-parking every scan left the clamped strip in
+        // the corner and fought the user's own moves.
+        for r in records.values where r.token != nil && r.wantsHidden {
+            guard Date().timeIntervalSince(r.hideRequestedAt)>0.5 else { continue }
+            if r.lastMinimized == true { continue }
+            let origin=journal.entries.first(where:{ $0.token == r.token })?.frame
+            let stuck=origin.map { cgShowsOriginal(pid:r.descriptor.pid,original:$0,windows:cg,displays:displays) } ?? false
+            if onAnyDisplay(r.frame) || stuck || parksByMinimizing(r.descriptor.bundle) {
+                hide(r, cgStuckAtOrigin:stuck)
+            }
+        }
         let all=Array(records.values)
         var result: [WindowInfo]=[], ambiguous=0
         for r in all.sorted(by:{ $0.wid < $1.wid }) {
@@ -390,16 +446,24 @@ final class AXStore {
             // own minimize animation. Dropping the window from the snapshot
             // would make the engine treat it as closed and re-insert it on the
             // workspace in view, so fall back to the last observed state.
-            guard let mini=axBoolean(r.element,kAXMinimizedAttribute) ?? r.lastMinimized
-            else { continue }
-            r.lastMinimized=mini
+            // Dialogs often have no AXMinimized attribute at all; treat that as
+            // not minimized rather than skipping the window every scan.
+            if let observed=axBoolean(r.element,kAXMinimizedAttribute) {
+                r.lastMinimized=observed
+            } else if r.lastMinimized == nil && isManagedPopupSubrole(r.subrole) {
+                r.lastMinimized=false
+            }
+            guard let mini=r.lastMinimized else { continue }
             let own=r.token != nil
             // On-screen association uses public PID + bounds only. Ambiguous
             // same-PID/same-frame windows across native Spaces are NOT touched.
-            let peers=all.filter { $0.descriptor.pid == r.descriptor.pid &&
-              $0.frame.near(r.frame) && !axBool($0.element,kAXMinimizedAttribute) }.count
+            let peers=all.filter { $0.eligible && $0.descriptor.pid == r.descriptor.pid &&
+              $0.frame.near(r.frame) && $0.lastMinimized != true }.count
             let visible=cg.filter { $0.0 == r.descriptor.pid && $0.1.near(r.frame) }.count
-            let onScreen=visible > 0 && visible >= peers
+            // visible==0 is normally another Space. Chrome withholds CGWindow
+            // metadata instead, and AX already hides its other-Space windows.
+            let onScreen=(visible > 0 && visible >= peers)
+              || (visible == 0 && bundleOmitsOnScreenCGWindows(r.descriptor.bundle))
             if onScreen || mini { r.offScreen=0 } else { r.offScreen += 1 }
             // The on-screen match decides which windows may be *admitted*: an
             // ambiguous one across native Spaces is never touched. Retaining a
@@ -420,7 +484,8 @@ final class AXStore {
             // Keep WM-owned minimized windows; user-minimized windows are excluded.
             result.append(WindowInfo(wid:r.wid,pid:r.descriptor.pid,app:r.descriptor.name,
               bundle:r.descriptor.bundle,titleText:r.title,onDisplay:bestDisplay(for:r.frame,in:displays),
-              frame:r.frame,minimized:mini,ownedHidden:own))
+              frame:r.frame,minimized:mini,ownedHidden:own,
+              subrole:r.subrole.isEmpty ? "AXStandardWindow" : r.subrole))
         }
         if ambiguous > 0 && Date().timeIntervalSince(lastAmbiguityWarning)>30 {
             logMessage("Skipped \(ambiguous) ambiguous on-screen windows (same PID/frame). Use one native Space per display.")
@@ -439,11 +504,10 @@ final class AXStore {
         }
         active=next
         var focused: UInt64?, fullScreen=false
-        if let app=axElement(AXUIElementCreateSystemWide(),kAXFocusedApplicationAttribute),
-           let window=axElement(app,kAXFocusedWindowAttribute) {
+        if let window=focusedAXWindow() {
             fullScreen=axBool(window,"AXFullScreen")
             focused=all.first(where:{ CFEqual($0.element,window) && active.contains($0.wid) &&
-              axBoolean($0.element,kAXMinimizedAttribute) == false })?.wid
+              axBoolean($0.element,kAXMinimizedAttribute) != true })?.wid
         }
         return ScanResult(windows:result,focused:focused,nativeFullScreen:fullScreen)
     }
@@ -468,7 +532,7 @@ final class AXStore {
     }
     func beginPointerDrag(at point: CGPoint,mode: PointerMode) -> UInt64? {
         guard pointerDrag == nil,let r=windowAt(point),
-              axBoolean(r.element,kAXMinimizedAttribute) == false,
+              axBoolean(r.element,kAXMinimizedAttribute) != true,
               let frame=axFrame(r.element) else { return nil }
         pointerDrag=PointerDragSession(wid:r.wid,mode:mode,start:point,initial:frame)
         return r.wid
@@ -509,9 +573,7 @@ final class AXStore {
     // apply at once and roughly 40x32 points remain, so anything under a
     // 64-point square counts as hidden. Beyond that a window would show a
     // visible strip over the workspace and has to be minimized instead.
-    private func onAnyDisplay(_ rect: Rect) -> Bool {
-        displays.map { $0.usable.intersectionArea(rect) }.reduce(0,+) > 4096
-    }
+    private func onAnyDisplay(_ rect: Rect) -> Bool { !parkedOffDisplay(rect,displays) }
     private func show(_ r: AXRecord) {
         guard r.token != nil else { return }  // Never restore a user's hiding.
         r.wantsHidden=false
@@ -523,44 +585,52 @@ final class AXStore {
         }
         // Placement puts it back on screen; ownership ends when a scan agrees.
     }
-    private func hide(_ r: AXRecord) {
-        guard (axBoolean(r.element,kAXMinimizedAttribute) ?? r.lastMinimized) == false
-        else {
-            // Ours is already hidden; only someone else's minimization is news.
+    private func hide(_ r: AXRecord, cgStuckAtOrigin: Bool = false) {
+        let minimizeOnly=parksByMinimizing(r.descriptor.bundle)
+        let axMini=axBoolean(r.element,kAXMinimizedAttribute) ?? r.lastMinimized
+        if axMini == true,!cgStuckAtOrigin {
             if r.token == nil { logMessage("Hide skipped for window \(r.wid): user-minimized") }
             return
         }
-        guard let actual=axFrame(r.element) else { return }
         // Already parked: the clamped position never equals the requested one,
         // so compare visibility rather than coordinates or we rewrite it on
-        // every scan.
-        if r.token != nil,!onAnyDisplay(actual) { r.wantsHidden=true; return }
-        guard r.descriptor.launch>0 else { logMessage("Cannot journal unknown application lifetime"); return }
+        // every scan. Finder never parks; a corner sliver of any other app is
+        // a successful hide. Do not require an AX frame to minimize Finder.
+        if !minimizeOnly {
+            guard let actual=axFrame(r.element) else { return }
+            if r.token != nil,!onAnyDisplay(actual),!cgStuckAtOrigin {
+                r.wantsHidden=true; return
+            }
+        }
+        guard r.descriptor.launch>0 else {
+            logMessage("Hide skipped for window \(r.wid): \(r.descriptor.name) has no "
+              + "readable process start time, so the hide cannot be journaled")
+            return
+        }
         if r.token == nil {
             let entry=r.recovery
             do { try journal.add(entry); r.token=entry.token }
             catch { logMessage("Refusing to hide without a durable recovery record: \(error)"); return }
         }
         r.wantsHidden=true; r.hideRequestedAt=Date(); r.hideConfirmed=false
-        let spot=parkingSpot(for:r)
-        var point=CGPoint(x:spot.x,y:spot.y)
-        guard let pv=AXValueCreate(.cgPoint,&point) else { return }
-        AXUIElementSetAttributeValue(r.element,kAXPositionAttribute as CFString,pv)
-        // Apps may clamp a position back onto a display. Such a window would
-        // cover the workspace, so fall back to minimizing that one.
-        if let observed=axFrame(r.element) {
-            r.frame=observed
-            if onAnyDisplay(observed) {
-                let error=AXUIElementSetAttributeValue(r.element,kAXMinimizedAttribute as CFString,kCFBooleanTrue)
-                if error != .success {
-                    logMessage("Window \(r.wid) refuses to be parked or minimized")
-                    releaseOwnership(r)
+        if !minimizeOnly {
+            let spot=parkingSpot(for:r)
+            var point=CGPoint(x:spot.x,y:spot.y)
+            if let pv=AXValueCreate(.cgPoint,&point) {
+                withImmediateAXGeometry(r.descriptor.pid) { () -> Void in
+                    AXUIElementSetAttributeValue(r.element,kAXPositionAttribute as CFString,pv)
                 }
             }
+            if let observed=axFrame(r.element) { r.frame=observed }
+            guard onAnyDisplay(r.frame) || cgStuckAtOrigin else { return }
+        }
+        let error=AXUIElementSetAttributeValue(r.element,kAXMinimizedAttribute as CFString,kCFBooleanTrue)
+        if error != .success {
+            logMessage("Window \(r.wid) refuses to be parked or minimized")
         }
     }
     private func move(_ r: AXRecord,_ target: Rect) {
-        guard axBoolean(r.element,kAXMinimizedAttribute) == false,let actual=axFrame(r.element) else { return }
+        guard axBoolean(r.element,kAXMinimizedAttribute) != true,let actual=axFrame(r.element) else { return }
         if actual.near(target) { return }
         if r.lastTarget == target,r.lastActual == actual,
            Date().timeIntervalSince(r.lastAttempt)<2 { return }
@@ -569,10 +639,12 @@ final class AXStore {
         var point=CGPoint(x:target.x,y:target.y)
         guard let sv=AXValueCreate(.cgSize,&size),let pv=AXValueCreate(.cgPoint,&point) else { return }
         // Size-position-size handles many cross-display AppKit constraint cases.
-        let e1=AXUIElementSetAttributeValue(r.element,kAXSizeAttribute as CFString,sv)
-        let e2=AXUIElementSetAttributeValue(r.element,kAXPositionAttribute as CFString,pv)
-        let e3=AXUIElementSetAttributeValue(r.element,kAXSizeAttribute as CFString,sv)
-        let observed=axFrame(r.element)
+        let (e1,e2,e3,observed)=withImmediateAXGeometry(r.descriptor.pid) { () -> (AXError,AXError,AXError,Rect?) in
+            let e1=AXUIElementSetAttributeValue(r.element,kAXSizeAttribute as CFString,sv)
+            let e2=AXUIElementSetAttributeValue(r.element,kAXPositionAttribute as CFString,pv)
+            let e3=AXUIElementSetAttributeValue(r.element,kAXSizeAttribute as CFString,sv)
+            return (e1,e2,e3,axFrame(r.element))
+        }
         let warn=r.lastActual != observed || (e1 != .success || e2 != .success || e3 != .success)
         r.lastActual=observed
         if warn,let observed=observed,!observed.near(target,tolerance:4) {
@@ -600,7 +672,7 @@ final class AXStore {
             guard let r=records[id] else { logMessage("Hide skipped for window \(id): no record"); continue }
             hide(r)
         }
-        if let id=p.focus,let r=records[id],axBoolean(r.element,kAXMinimizedAttribute) == false {
+        if let id=p.focus,let r=records[id],axBoolean(r.element,kAXMinimizedAttribute) != true {
             if let app=NSRunningApplication(processIdentifier:r.descriptor.pid) {
                 app.activate(options:[.activateIgnoringOtherApps]) // Deliberate hotkey focus only; never activateAllWindows.
             }
@@ -640,7 +712,9 @@ final class AXStore {
                 return r.wid
             }
         }
-        return nil
+        // Chrome is absent from the on-screen CG list; AX hit-testing still
+        // finds the window under the pointer.
+        return windowAt(point)?.wid
     }
     func close(_ id: UInt64) {
         guard let r=records[id],active.contains(id),
@@ -710,9 +784,7 @@ func runAXSelfTest() -> AXSelfTestReport {
       frameReadable:false,sameFrameWriteSucceeded:false,readBackMatched:false,onScreenCorrelation:false,
       nativeFullScreen:false,pid:nil,title:nil,frame:nil,errors:[])
     guard report.accessibilityTrusted else { report.errors.append("Accessibility permission is not granted"); return report }
-    let system=AXUIElementCreateSystemWide()
-    guard let app=axElement(system,kAXFocusedApplicationAttribute),
-          let window=axElement(app,kAXFocusedWindowAttribute) else {
+    guard let window=focusedAXWindow() else {
         report.errors.append("No focused Accessibility window"); return report
     }
     report.focusedWindowFound=true
@@ -730,8 +802,10 @@ func runAXSelfTest() -> AXSelfTestReport {
     var point=CGPoint(x:frame.x,y:frame.y),size=CGSize(width:frame.width,height:frame.height)
     if report.positionSettable && report.sizeSettable,
        let pv=AXValueCreate(.cgPoint,&point),let sv=AXValueCreate(.cgSize,&size) {
-        let p1=AXUIElementSetAttributeValue(window,kAXPositionAttribute as CFString,pv)
-        let s1=AXUIElementSetAttributeValue(window,kAXSizeAttribute as CFString,sv)
+        let (p1,s1)=withImmediateAXGeometry(report.pid ?? 0) {
+            (AXUIElementSetAttributeValue(window,kAXPositionAttribute as CFString,pv),
+             AXUIElementSetAttributeValue(window,kAXSizeAttribute as CFString,sv))
+        }
         report.sameFrameWriteSucceeded=(p1 == .success && s1 == .success)
         if !report.sameFrameWriteSucceeded { report.errors.append("Same-frame AX write failed: \(p1.rawValue)/\(s1.rawValue)") }
         if let observed=axFrame(window) { report.readBackMatched=observed.near(frame,tolerance:4) }
@@ -739,7 +813,8 @@ func runAXSelfTest() -> AXSelfTestReport {
     if let list=CGWindowListCopyWindowInfo([.optionOnScreenOnly,.excludeDesktopElements],kCGNullWindowID) as? [[String:Any]],
        let pid=report.pid {
         report.onScreenCorrelation=list.contains { d in
-            guard (d[kCGWindowLayer as String] as? NSNumber)?.intValue == 0,
+            guard let layer=(d[kCGWindowLayer as String] as? NSNumber)?.intValue,
+                  cgWindowIsApplicationLayer(layer),
                   (d[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid,
                   let bounds=d[kCGWindowBounds as String] as? [String:Any],
                   let cg=CGRect(dictionaryRepresentation:bounds as CFDictionary) else { return false }

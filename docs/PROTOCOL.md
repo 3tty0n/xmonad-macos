@@ -33,15 +33,17 @@ sent only while `focusFollowsMouse` is on. Policy decides what to do with it.
 Snapshot of the observed world:
 
 ```json
-{"type":"snapshot","generation":3,"epoch":1,"screens":[{"display":10,"usable":{"x":0,"y":24,"width":1600,"height":1000}}],"windows":[{"wid":1,"pid":123,"app":"Terminal","bundle":"com.apple.Terminal","titleText":"shell","onDisplay":10,"frame":{"x":0,"y":24,"width":800,"height":1000},"minimized":false,"ownedHidden":false}],"focused":1,"restore":null}
+{"type":"snapshot","generation":3,"epoch":1,"screens":[{"display":10,"usable":{"x":0,"y":24,"width":1600,"height":1000}}],"windows":[{"wid":1,"pid":123,"app":"Terminal","bundle":"com.apple.Terminal","titleText":"shell","onDisplay":10,"frame":{"x":0,"y":24,"width":800,"height":1000},"minimized":false,"ownedHidden":false,"subrole":"AXStandardWindow"}],"focused":1,"restore":null}
 ```
 
 - `wid` — the helper's per-session identifier.
 - `screens` — usable logical-point rectangles.
 - `focused` — `null` means no managed window is confirmed to hold focus.
 - `ownedHidden` — true for windows the WM hid, by parking them off-screen or,
-  where an app clamps that, by minimizing them; they stay listed so their
-  logical workspace is not lost.
+  where an app clamps that or (Finder) ignores the park, by minimizing them;
+  they stay listed so their logical workspace is not lost.
+- `subrole` — the AX subrole. Dialogs and floating panels are floated on
+  manage; a missing field is treated as `AXStandardWindow`.
 
 Key press, and the start of a mod+mouse drag:
 
@@ -64,7 +66,8 @@ A placement plan:
 
 - `frames` — windows to show and place, in stacking order, focused last.
 - `hide` — managed windows to hide for this layout or workspace, by parking
-  them past the edge of the displays. A window may never appear in both lists.
+  them past the edge of the displays, or by minimizing Finder. A window may
+  never appear in both lists.
 - `workspaces` — one entry per workspace in config order, with `tag`,
   `windows`, `current` and `visible`, for the menu bar and external bars.
 - `focus` — set only for explicit user-driven focus intent.

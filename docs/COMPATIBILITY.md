@@ -38,7 +38,7 @@ importing them compiles unchanged.
 | `XMonad.Actions.SwapWorkspaces` | `swapWithCurrent`, `swapWith`, `swapWorkspaces` |
 | `XMonad.Actions.DwmPromote` | `dwmpromote` |
 | `XMonad.Actions.PhysicalScreens` | `PhysicalScreen`, `getScreen`, `viewScreen`, `sendToScreen` |
-| `XMonad.Hooks.ManageHelpers` | `composeOne`, `-?>`, `doRectFloat`, `doCenterFloat`, `doFullFloat`, `doSink`; not the X11 property queries |
+| `XMonad.Hooks.ManageHelpers` | `composeOne`, `-?>`, `doRectFloat`, `doCenterFloat`, `doFullFloat`, `doSink`, `isDialog`; not the X11 property queries |
 | `XMonad.Util.EZConfig` | `additionalKeysP`, `removeKeysP`, key parser |
 | `XMonad.Layout.Spacing` | `spacing` |
 
@@ -59,10 +59,12 @@ focused one, so switching to it hides nothing at all.
 
 | API | Status |
 |---|---|
-| `manageHook` | `composeAll`, comparisons, `doFloat`, `doShift`, `doIgnore` |
+| `manageHook` | `composeAll`, comparisons, `doFloat`, `doShift`, `doIgnore`; dialogs float by default |
 | `className` | The app's macOS display name, not `WM_CLASS` |
 | `resource` / `appName` / `bundleId` | Bundle identifier, not an X11 resource name |
 | `title` | The `AXTitle` string |
+| `subrole` | The AX subrole string (`AXStandardWindow`, `AXDialog`, …) |
+| `isDialog` | AX dialog and floating-panel subroles, not `_NET_WM_WINDOW_TYPE` |
 | `startupHook` / `logHook` | Whatever the `X` monad offers; must not write to stdout |
 | `spawn` | Runs your shell command; logs to stderr and reaps children asynchronously |
 | `kill` | Presses the native Close button; never `kill(2)` |
@@ -87,7 +89,8 @@ focused one, so switching to it hides nothing at all.
 | State across a config reload | Workspace, layout, and float state survive inside one helper |
 | State across a helper restart | Not implemented; only the ownership journal persists |
 | Native tabs, tab grouping, Stage Manager, moving windows between Spaces | Not implemented |
-| `borderWidth`, `focusedBorderColor` | An overlay traced around the focused window; another app's window cannot be given a real border |
+| Dialogs and floating panels | Floated at their observed size when AX position is settable; sheets and popovers are not managed |
+| `borderWidth`, `focusedBorderColor` | A click-through overlay at the public overlay window level, raised on every scan; another app's window cannot be given a real border |
 | `normalBorderColor` | Not implemented; unfocused windows get no border |
 | `focusFollowsMouse` | Implemented; on by default, as upstream |
 

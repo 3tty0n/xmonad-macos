@@ -8,6 +8,8 @@ import XMonad.Core
 import XMonad.MacOS.Protocol
 import XMonad.MacOS.CLI (handleCommand)
 import XMonad.Operations (broadcastMessage, windows)
+import XMonad.ManageHook ((-->), doFloat)
+import XMonad.Hooks.ManageHelpers (isDialog)
 import qualified XMonad.StackSet as W
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
@@ -152,7 +154,9 @@ admitNewWindows c observed = forM_ (M.elems observed) $ \wi -> do
         here = W.currentTag ws
         target = maybe here (W.tag . W.workspace) (screenFor wi ws)
     put s {windowset=W.view here . W.insertUp w . W.view target $ ws}
-    Endo hook <- runQuery (manageHook c) w
+    -- Dialogs float by default. The user's manageHook runs afterwards, so
+    -- doIgnore still removes them and doSink can put one in the tiling.
+    Endo hook <- runQuery (manageHook c <> (isDialog --> doFloat)) w
     modify $ \st ->
       let managed = hook (windowset st)
       in st { windowset = managed
@@ -160,7 +164,9 @@ admitNewWindows c observed = forM_ (M.elems observed) $ \wi -> do
                                else S.insert w (ignoredWindows st) }
 
 -- Follow the focus the helper observed, unless a request of our own is still
--- outstanding. A window being hidden must not drag us back to its workspace.
+-- outstanding. A window being hidden must not drag us back to its workspace,
+-- and neither may one that is still painted while it belongs to a workspace
+-- that is not on a screen (Finder ignores a park and stays visible).
 followObservedFocus :: Snapshot -> M.Map Window WindowInfo -> X ()
 followObservedFocus snap observed = whenJust (snapFocused snap) $ \w -> do
   s <- get
@@ -168,7 +174,9 @@ followObservedFocus snap observed = whenJust (snapFocused snap) $ \w -> do
       visible = maybe False (\wi -> not (minimized wi) && not (ownedHidden wi))
         (M.lookup w observed)
       ours = not (focusRequested s) || W.peek (windowset s) == Just w
-  when (known && visible && ours) $ put s
+      mapped = map (W.tag . W.workspace) (W.screens $ windowset s)
+      here = maybe False (`elem` mapped) (W.findTag w (windowset s))
+  when (known && visible && ours && here) $ put s
     {windowset=W.focusWindow w (windowset s),focusRequested=False,focusAgeTicks=0}
 
 -- Layouts that track windows need to hear about the ones that closed.

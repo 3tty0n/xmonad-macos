@@ -70,7 +70,12 @@ in `LICENSE`.
 A `Window` is a monotonically increasing `Word64` handle, valid only while the
 helper runs. It is deliberately not a `CGWindowID` or an XID. `AXUIElement`
 values are re-identified with `CFEqual` inside a per-PID registry, and the
-app's launch date is tracked so PID reuse cannot alias two processes.
+app's process instance is tracked so PID reuse cannot alias two processes.
+That instance is `NSRunningApplication.launchDate` where macOS reports one.
+It reports none for the session's own launchd children - Finder is the one
+that matters - so the BSD process start time from `sysctl(KERN_PROC_PID)` is
+the fallback. Without an instance a hide cannot be journaled and is refused,
+which is why Finder was never hidden at all.
 
 The element is not the identity, though: waking a display makes macOS destroy
 every window's element and issue a fresh one. A record whose element has gone
@@ -81,21 +86,33 @@ one element is never guessed at; those windows are re-admitted as new.
 
 Using public APIs only, this implementation does not claim to correlate an AX
 window with its `CGWindow` perfectly. It matches PID and frame against the
-currently visible CG windows, and conservatively excludes candidates whenever
-same-PID, same-frame matches outnumber the visible windows. It never reads CG
+currently visible CG windows on application layers (normal, floating, modal
+panel, utility), and conservatively excludes candidates whenever same-PID,
+same-frame matches outnumber the visible windows. It never reads CG
 window names or screen images, so Screen Recording permission is not needed.
 If the OS or an app withholds the metadata, a window can still be missed.
+Google Chrome withholds that on-screen list entirely; those windows are
+admitted from AX, which already omits Chrome's windows on inactive Spaces.
+Chromium also leaves the system-wide focused-application lookup empty: focus
+falls back to `NSWorkspace.frontmostApplication` and that app's
+`AXFocusedWindow`. Geometry writes temporarily clear `AXEnhancedUserInterface`
+so a frame lands instead of animating away.
 
 Only `AXStandardWindow` windows whose position, size, and minimized state are
-settable are managed. Dialogs, sheets, popovers, native full-screen windows,
+settable are tiled. Dialogs and floating panels (`AXDialog`, `AXSystemDialog`,
+`AXFloatingWindow`, `AXSystemFloatingWindow`) are admitted when position is
+settable, reported with their AX subrole, and floated by policy so they keep
+the size the application chose. Sheets, popovers, native full-screen windows,
 user-minimized windows, and hidden apps are left alone. The admission rule is
-deliberately narrow.
+deliberately still narrow: a sheet is tied to its parent.
 
 ## State transitions and focus
 
 Each reconciliation removes windows that vanished from the snapshot, inserts
-new ones into the workspace of the display they appeared on, and applies
-`manageHook` once per window. Because a window that disappears loses its
+new ones into the workspace of the display they appeared on, floats dialogs
+and floating panels at their observed size, and applies `manageHook` once
+per window. `doIgnore` still removes a dialog; `doSink` can put one in the
+tiling. Because a window that disappears loses its
 workspace, the helper never reports one gone on a single observation: an
 application missing from `NSWorkspace.runningApplications` has to be missing
 twice and be confirmed dead with `kill(pid,0)`, and a scan with no
@@ -146,8 +163,16 @@ parking an 880-point window past a 3360-point display's right edge lands it at
 3320, not 3424. In the corner both limits apply at once and about 40x32 points
 remain, which the admission rule treats as hidden. An app that clamps harder
 would leave a visible strip over the workspace, so `hide` re-reads the frame
-and minimizes that window instead - the old mechanism, kept for the apps that
-need it. The `Full` layout hides nothing at all.
+and minimizes that window instead. Finder ignores a position-only park (the
+set succeeds, the frame does not change) and clamps a size-position-size park
+into a large visible corner panel, so it is minimized and never parked. For
+other apps, a later scan compares the journaled original against the on-screen
+CGWindow list and minimizes if it is still there. The window server still
+lists the pre-park frame for a moment, so that check is not done in the same
+call as the park. Observed focus is followed only onto a workspace that is on
+a screen, so a window that has not yet left the display cannot reverse a
+view. The token is kept if minimize is refused, so the engine does not adopt
+the window as new. The `Full` layout hides nothing at all.
 
 Native Spaces would be the natural home for workspaces, and are not usable.
 `SLSMoveWindowsToManagedSpace` silently ignores a window owned by another
@@ -177,7 +202,7 @@ until a scan sees the window back on a display. A short settling interval covers
 that arrive out of order.
 
 While the owning process lives, restoration works through the AX object.
-After a helper restart it requires PID + launch date + bundle + `AXIdentifier`,
+After a helper restart it requires PID + process instance + bundle + `AXIdentifier`,
 or, absent an identifier, a unique title-and-frame match. If nothing matches
 uniquely, the record is kept rather than risking the wrong window. This is not
 full crash recovery, and it never rolls back original geometry.

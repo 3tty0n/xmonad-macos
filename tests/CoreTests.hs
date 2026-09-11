@@ -17,6 +17,7 @@ import XMonad.Layout.Renamed
 import XMonad.Layout.Reflect
 import XMonad.Layout.TwoPane
 import XMonad.Layout.Accordion
+import XMonad.Hooks.ManageHelpers (isDialog)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.List (sort,nub)
@@ -32,7 +33,7 @@ displays :: [DisplayInfo]
 displays=[DisplayInfo 10 (Rectangle 0 24 1000 800),DisplayInfo 20 (Rectangle (-1000) 24 1000 800)]
 wi :: Window -> Int -> WindowInfo
 wi w d=WindowInfo w 123 "Terminal" "com.apple.Terminal" (show w) d
-  (Rectangle (if d==10 then 0 else -1000) 24 500 800) False False
+  (Rectangle (if d==10 then 0 else -1000) 24 500 800) False False "AXStandardWindow"
 snapshot :: Snapshot
 snapshot=Snapshot 1 1 displays [wi 1 10,wi 2 10,wi 3 20] (Just 1) Nothing
 initial :: XState
@@ -221,6 +222,11 @@ main = do
         ,snapWindows=[(wi 1 10){ownedHidden=True},(wi 2 10){ownedHidden=True},wi 3 20]}
   (_,noBounce) <- runX conf s3 (reconcile ownedAnimation)
   check "hide animation cannot change workspace" (W.currentTag (windowset noBounce)=="3")
+  let lingering=snapshot {snapGeneration=5,snapFocused=Just 1
+        ,snapWindows=[wi 1 10,wi 2 10,wi 3 20]}
+  (_,noPull) <- runX conf s3 (reconcile lingering)
+  check "visible window on a hidden workspace cannot change current tag"
+    (W.currentTag (windowset noPull)=="3")
   let saved=checkpoint s3
   case restoreCheckpoint cfg 1 displays (windowInfo s3) saved of
     Left e -> ioError $ userError e
@@ -237,6 +243,26 @@ main = do
   check "retained display keeps its workspace" (W.tag (W.workspace $ W.current unplugged)=="2")
   (_,ignored) <- runX (XConf (cfg {manageHook=className =? "Terminal" --> doIgnore})) initial (reconcile snapshot)
   check "doIgnore persistent" (null (W.allWindows $ windowset ignored) && S.size (ignoredWindows ignored)==3)
+  let dialog=(wi 4 10){subroleText="AXDialog",frame=Rectangle 120 80 320 180}
+      dialogSnap=snapshot {snapWindows=[wi 1 10,dialog],snapFocused=Just 4}
+  (dialogPlan,dialogSt) <- runX conf initial (reconcile dialogSnap >> makePlan)
+  check "dialog is floated" (M.member 4 (W.floating $ windowset dialogSt))
+  check "dialog keeps observed geometry"
+    (lookup 4 [(w,r) | Placement w r <- planFrames dialogPlan] == Just (Rectangle 120 80 320 180))
+  check "dialog can hold focus" (W.peek (windowset dialogSt)==Just 4)
+  check "standard window stays tiled" (M.notMember 1 (W.floating $ windowset dialogSt))
+  (_,ignoredDialog) <- runX (XConf (cfg {manageHook=isDialog --> doIgnore})) initial (reconcile dialogSnap)
+  check "doIgnore still wins for dialogs"
+    (not (W.member 4 (windowset ignoredDialog)) && S.member 4 (ignoredWindows ignoredDialog)
+     && W.member 1 (windowset ignoredDialog))
+  check "JSON window subrole parse" (case eitherDecode
+    "{\"type\":\"snapshot\",\"generation\":1,\"epoch\":1,\"screens\":[],\"windows\":[{\"wid\":1,\"pid\":1,\"app\":\"A\",\"bundle\":\"b\",\"titleText\":\"t\",\"onDisplay\":0,\"frame\":{\"x\":0,\"y\":0,\"width\":10,\"height\":10},\"minimized\":false,\"ownedHidden\":false,\"subrole\":\"AXDialog\"}],\"focused\":null}" :: Either String InputEvent of
+      Right (SnapshotEvent s) -> fmap subroleText (listToMaybe (snapWindows s))==Just "AXDialog"
+      _ -> False)
+  check "JSON window subrole default" (case eitherDecode
+    "{\"type\":\"snapshot\",\"generation\":1,\"epoch\":1,\"screens\":[],\"windows\":[{\"wid\":1,\"pid\":1,\"app\":\"A\",\"bundle\":\"b\",\"titleText\":\"t\",\"onDisplay\":0,\"frame\":{\"x\":0,\"y\":0,\"width\":10,\"height\":10},\"minimized\":false,\"ownedHidden\":false}],\"focused\":null}" :: Either String InputEvent of
+      Right (SnapshotEvent s) -> fmap subroleText (listToMaybe (snapWindows s))==Just "AXStandardWindow"
+      _ -> False)
   check "EZConfig modifiers" (parseKey 68 "M-S-<Return>"==Right (69,xK_Return))
   check "EZConfig rejects multistroke" (case parseKey 68 "M-x M-y" of Left _ -> True; _ -> False)
   check "recompile command protocol" (commandJSON Recompile == object ["type" .= ("command" :: String),"name" .= ("recompile" :: String)])

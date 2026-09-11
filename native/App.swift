@@ -35,7 +35,8 @@ func descriptors() -> [AppDescriptor] {
     NSWorkspace.shared.runningApplications.compactMap { app in
         guard app.activationPolicy == .regular,app.processIdentifier != getpid() else { return nil }
         return AppDescriptor(pid:app.processIdentifier,name:app.localizedName ?? "",
-          bundle:app.bundleIdentifier ?? "",launch:app.launchDate?.timeIntervalSince1970 ?? 0,
+          bundle:app.bundleIdentifier ?? "",
+          launch:app.launchDate?.timeIntervalSince1970 ?? processStartTime(app.processIdentifier),
           hidden:app.isHidden)
     }
 }
@@ -462,7 +463,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let window=result.windows.first(where:{ $0.wid == wid }),
               !window.minimized,!window.ownedHidden
         else { border.hide(); hoverWid=result.focused; return }
-        border.show(window.frame)
+        border.show(window.frame,wid:wid)
         // Keep the hover filter honest about what actually holds focus.
         hoverWid=wid
     }
@@ -686,13 +687,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.compiler=nil; recompiling=false
         stopEngine(); keyboard.stop(); pointer.stop()
         guard store != nil else { return .terminateNow }
-        axQueue.async { [weak self] in
-            self?.store.restoreAll()
-            DispatchQueue.main.async { NSApp.reply(toApplicationShouldTerminate:true) }
-        }
-        // AX is externally controlled; never make Quit permanently unresponsive.
-        DispatchQueue.main.asyncAfter(deadline:.now()+4) { NSApp.reply(toApplicationShouldTerminate:true) }
-        return .terminateLater
+        // terminateLater needs its reply from the main queue, and the nested
+        // event loop AppKit runs while waiting does not drain main-queue work,
+        // so both the reply and its timeout were stranded and Quit hung for
+        // good. AX is externally controlled, so bound the wait here instead.
+        let restored=DispatchSemaphore(value:0)
+        axQueue.async { [weak self] in self?.store.restoreAll(); restored.signal() }
+        _=restored.wait(timeout:.now()+4)
+        return .terminateNow
     }
     func applicationWillTerminate(_ notification: Notification) {
         if lockFD >= 0 {

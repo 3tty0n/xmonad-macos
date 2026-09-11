@@ -1,13 +1,13 @@
 -- Adapted from xmonad-contrib XMonad.Hooks.ManageHelpers (BSD-3-Clause),
--- Copyright (c) Ivan Tarasov and the Xmonad Community. The X11 property
--- queries (isDialog, isFullscreen, transience) have no macOS counterpart and
--- are not ported; only standard windows are managed in the first place.
+-- Copyright (c) Ivan Tarasov and the Xmonad Community. X11 property queries
+-- (isFullscreen, transience) have no macOS counterpart; isDialog matches AX
+-- dialog and floating-panel subroles instead of _NET_WM_WINDOW_TYPE.
 module XMonad.Hooks.ManageHelpers
   ( MaybeManageHook, composeOne, (-?>)
-  , doRectFloat, doCenterFloat, doFullFloat, doSink
+  , doRectFloat, doCenterFloat, doFullFloat, doSink, isDialog
   ) where
 import XMonad.Core
-import XMonad.ManageHook (doF)
+import XMonad.ManageHook (doF, subrole)
 import qualified XMonad.StackSet as W
 
 type MaybeManageHook = Query (Maybe (Endo WindowSet))
@@ -40,3 +40,11 @@ doFullFloat = doRectFloat (W.RationalRect 0 0 1 1)
 
 doSink :: ManageHook
 doSink = ask >>= doF . W.sink
+
+-- AX dialog and floating-panel subroles. Sheets and unknown subroles stay
+-- unmanaged, so this is the helper's popup set rather than a full X11
+-- _NET_WM_WINDOW_TYPE_DIALOG equivalent.
+isDialog :: Query Bool
+isDialog = (`elem` dialogSubroles) <$> subrole
+  where dialogSubroles =
+          ["AXDialog","AXSystemDialog","AXFloatingWindow","AXSystemFloatingWindow"]

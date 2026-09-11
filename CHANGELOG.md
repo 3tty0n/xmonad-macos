@@ -2,6 +2,49 @@
 
 ## Unreleased
 
+- Finder windows stay on the workspace that owns them. A hide is journaled
+  against the process instance that owns the window, so PID reuse cannot make
+  a later process look like its owner, and the instance came from
+  `NSRunningApplication.launchDate`. That is nil for the session's own
+  launchd children, Finder among them, so every Finder hide was refused
+  before it began and Finder stayed on every workspace. The instance now
+  falls back to the BSD process start time, which is public and available for
+  every process. The refusal names the window and the reason in the log.
+
+- Quit no longer hangs. It replied to `terminateLater` from the main queue,
+  which the nested event loop AppKit runs while waiting does not drain, so
+  neither the reply nor its four-second timeout ever arrived and the app had
+  to be killed. The wait for the final restore is bounded in place instead.
+
+- Finder is minimized rather than parked. A position-only park is a no-op for
+  it, and a size-position-size park clamps a large visible
+  panel into the corner that admission then treats as hidden. Finder is
+  therefore minimized, never parked. A still-visible window on a workspace
+  that is not on a screen cannot pull the current tag back. The desktop
+  scroll area is not counted as a same-PID peer. A hide that cannot park or
+  minimize keeps its ownership token. Other apps still park first; if AX
+  reports a parked frame while CG still shows the original on-display
+  rectangle, a later scan minimizes that window. That check is not done in
+  the parking call, or the window server's brief stale frame re-parks every
+  scan.
+
+- Chrome windows are tiled and traced. Chromium withholds on-screen CGWindow
+  metadata, leaves system-wide AX focus empty, and animates geometry writes
+  while `AXEnhancedUserInterface` is on; the helper now admits those AX
+  windows, falls back to the frontmost app's focused window, writes geometry
+  with that flag cleared, and re-raises the overlay on every scan.
+
+- The focus border overlay uses the public overlay window level and
+  `orderFrontRegardless`, so it stays visible on Electron apps whose content
+  windows sit above `floatingWindow` (Claude Desktop, Codex). It remains
+  click-through.
+
+- Dialogs and floating panels (`AXDialog`, `AXSystemDialog`,
+  `AXFloatingWindow`, `AXSystemFloatingWindow`) are managed as floats at the
+  size the application chose, so they can take focus. Sheets and popovers
+  remain unmanaged. `isDialog` matches those subroles; `doIgnore` still
+  removes them.
+
 - `borderWidth`, `focusedBorderColor` and `focusFollowsMouse` exist, with
   upstream's defaults. The border is a click-through overlay the helper draws
   around the focused window, since AX cannot give another application's window

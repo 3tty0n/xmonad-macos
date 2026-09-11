@@ -26,6 +26,61 @@ struct WindowInfo: Codable, Equatable {
     var app: String, bundle: String, titleText: String
     var onDisplay: Int, frame: Rect
     var minimized: Bool, ownedHidden: Bool
+    // AX subrole. Standard windows are AXStandardWindow; dialogs and
+    // floating panels use the popup subroles below. Missing in old tests.
+    var subrole: String = "AXStandardWindow"
+}
+// Dialogs and floating panels the helper will manage as windows. Sheets and
+// unknown subroles stay unmanaged: a sheet is tied to its parent.
+func isManagedPopupSubrole(_ subrole: String) -> Bool {
+    switch subrole {
+    case "AXDialog", "AXSystemDialog", "AXFloatingWindow", "AXSystemFloatingWindow":
+        return true
+    default:
+        return false
+    }
+}
+// Normal (0), floating (3), modal panel (8) and utility (19). Dock is 20
+// and the menu bar is 24; those are not application windows.
+func cgWindowIsApplicationLayer(_ layer: Int) -> Bool {
+    (0...19).contains(layer)
+}
+// Chrome withholds on-screen CGWindow metadata unless Screen Recording is
+// granted. PID+frame correlation would then drop every window. AX already
+// omits that app's windows on inactive Spaces, so trusting AX is safe here.
+func bundleOmitsOnScreenCGWindows(_ bundle: String) -> Bool {
+    bundle.hasPrefix("com.google.Chrome")
+}
+// AppKit keeps ~40 points of a parked window on screen. That sliver is a
+// successful hide; a window still at its original on-display frame is not.
+func parkedOffDisplay(_ rect: Rect, _ displays: [DisplayInfo]) -> Bool {
+    displays.map { $0.usable.intersectionArea(rect) }.reduce(0,+) <= 4096
+}
+func cgHasWindow(pid: Int32, near rect: Rect, in windows: [(Int32,Rect)], tolerance: Int = 8) -> Bool {
+    windows.contains { $0.0 == pid && $0.1.near(rect,tolerance:tolerance) }
+}
+func cgShowsOriginal(pid: Int32, original: Rect, windows: [(Int32,Rect)], displays: [DisplayInfo]) -> Bool {
+    !parkedOffDisplay(original,displays) && cgHasWindow(pid:pid,near:original,in:windows)
+}
+// Finder ignores a position-only park (the set succeeds, the frame does not
+// change) and size-position-size clamps a large visible panel into the
+// corner. Minimizing is the public hide that actually leaves the screen.
+func parksByMinimizing(_ bundle: String) -> Bool {
+    bundle == "com.apple.finder"
+}
+// A hide is journaled with the process instance it belongs to, so PID reuse
+// cannot make a later process look like the owner of a minimized window.
+// NSRunningApplication.launchDate is nil for the session's own launchd
+// children - Finder among them - and without an instance the hide was
+// refused, which is why Finder stayed on every workspace. The BSD start
+// time is public and identifies the instance just as well.
+func processStartTime(_ pid: Int32) -> Double {
+    var info=kinfo_proc()
+    var size=MemoryLayout<kinfo_proc>.stride
+    var mib: [Int32]=[CTL_KERN,KERN_PROC,KERN_PROC_PID,pid]
+    guard sysctl(&mib,u_int(mib.count),&info,&size,nil,0) == 0,size > 0 else { return 0 }
+    let started=info.kp_proc.p_starttime
+    return Double(started.tv_sec)+Double(started.tv_usec)/1_000_000
 }
 struct Snapshot: Encodable {
     let type = "snapshot"

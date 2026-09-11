@@ -44,6 +44,13 @@ A drag sets `StackSet.floating` and suspends tiling for that window until
 release. Dragged to another display, the window joins the workspace visible
 there.
 
+## Dialogs and popups
+
+Save panels, alerts and other `AXDialog` / `AXFloatingWindow` windows are
+floated at the size the app chose, so they can take focus with `M-j` / `M-k`
+and the mouse. `isDialog --> doIgnore` leaves one alone; `doSink` tiles it.
+Sheets and popovers are not managed.
+
 ## Focus border and the mouse
 
 `borderWidth` and `focusedBorderColor` trace the focused window; `borderWidth =
@@ -58,8 +65,11 @@ main = xmonad $ def
 ```
 
 The border is an overlay window of the helper's own, because AX cannot give
-another application's window a border. It is click-through, and follows the
-window as the helper observes it move, so it lags a fast drag slightly.
+another application's window a border. It is click-through, sits at the
+public overlay window level so Electron content windows (Claude Desktop,
+Codex) do not cover it, is raised on every scan so Chrome cannot bury it, and
+follows the window as the helper observes it move, so it lags a fast drag
+slightly.
 
 ## Several displays
 
@@ -74,7 +84,9 @@ display, because macOS has nothing else that says which screen is current.
 - A disconnected display's workspaces become hidden rather than losing
   windows.
 - A window hidden by a workspace switch parks past the right edge of the
-  whole arrangement, so it never lands on another display.
+  whole arrangement, so it never lands on another display. Finder cannot be
+  parked that way, so it is minimized instead of remaining painted, including
+  as a clamped strip in the corner.
 - Display affinity is not remembered permanently across reconnects.
 - macOS gives every display its own Mission Control Desktops. Those are still
   not workspaces, and switching them still resets assignments.

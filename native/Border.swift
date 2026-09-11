@@ -8,25 +8,32 @@ final class BorderOverlay {
     private var width=0
     private var color=NSColor.systemRed
     private var current: Rect?
+    private var currentWid: UInt64?
 
     func configure(width: Int, color hex: String) {
         self.width=max(0,min(width,16))
         self.color=BorderOverlay.parse(hex) ?? .systemRed
-        if self.width == 0 { hide() } else if let r=current { current=nil; show(r) }
+        if self.width == 0 { hide() }
+        else if let r=current,let id=currentWid { current=nil; show(r,wid:id) }
     }
     // Top-left global coordinates, as everything else in the bridge uses.
-    func show(_ rect: Rect) {
+    func show(_ rect: Rect, wid: UInt64) {
         guard width > 0 else { return }
-        guard rect != current else { return }
-        current=rect
-        let frame=BorderOverlay.appKitFrame(rect,inset:CGFloat(width))
         let p=panel ?? make()
-        p.setFrame(frame,display:false)
-        p.contentView?.needsDisplay=true
-        if !p.isVisible { p.orderFront(nil) }
+        if rect != current {
+            current=rect
+            p.setFrame(BorderOverlay.appKitFrame(rect,inset:CGFloat(width)),display:false)
+            p.contentView?.needsDisplay=true
+        }
+        // Raise on every observation. Full stacks every window at the same
+        // frame; Electron sits at pop-up level; Chrome reorders its content
+        // window above a same-level overlay on each keystroke.
+        currentWid=wid
+        p.orderFrontRegardless()
     }
     func hide() {
         current=nil
+        currentWid=nil
         panel?.orderOut(nil)
     }
     private func make() -> NSPanel {
@@ -36,8 +43,11 @@ final class BorderOverlay {
         p.backgroundColor = .clear
         p.hasShadow=false
         p.ignoresMouseEvents=true
+        p.hidesOnDeactivate=false
         p.isReleasedWhenClosed=false
-        p.level=NSWindow.Level(Int(CGWindowLevelForKey(.floatingWindow)))
+        // floatingWindow (3) sits under Electron's pop-up-level (101) content
+        // windows. overlayWindow (102) is the public level above those.
+        p.level=NSWindow.Level(Int(CGWindowLevelForKey(.overlayWindow)))
         p.collectionBehavior=[.canJoinAllSpaces,.stationary,.ignoresCycle,.fullScreenNone]
         let view=BorderView()
         view.owner=self

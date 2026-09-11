@@ -10,18 +10,18 @@ make check          # everything below
 
 | Suite | What it covers |
 |---|---|
-| `tests/WireTests.swift` | 156 checks: signed coordinate conversion, displays above/left/below the primary, no double Retina scaling, display selection, JSON fields, key mapping, plan validation |
-| `tests/static_checks.py` | 121 source and packaging checks |
+| `tests/WireTests.swift` | 174 checks: signed coordinate conversion, displays above/left/below the primary, no double Retina scaling, display selection, JSON fields, popup subroles, Chrome CGWindow omission, Finder hide verification, process instance identity, key mapping, plan validation |
+| `tests/static_checks.py` | 211 source and packaging checks |
 | `tests/ops_smoke.sh` | The installed recompile is atomic; a simulated build failure preserves the previous engine byte-for-byte |
-| `tests/CoreTests.hs` | StackSet focus/swap/shift/uniqueness, `Tall` geometry and area, `Full` stacking, `Choose` cycling, user vs. WM minimization, ignore, multiple displays, hotplug, checkpoints, key parsing, JSON |
-| `tests/integration.py` | Runs the shipped config as a real engine and drives focus, mouse-float, layout, shift, view, checkpoint, and ping over NDJSON |
+| `tests/CoreTests.hs` | StackSet focus/swap/shift/uniqueness, `Tall` geometry and area, `Full` stacking, `Choose` cycling, user vs. WM minimization, ignore, dialog floats, multiple displays, hotplug, checkpoints, observed focus on mapped workspaces, key parsing, JSON |
+| `tests/integration.py` | Runs the shipped config as a real engine and drives focus, mouse-float, dialog-float, layout, shift, view, checkpoint, and ping over NDJSON |
 
 `scripts/test.sh` stages the shipped config into `build/config`; it never tests or
 modifies your personal config.
 
 ## Verified on macOS
 
-Last recorded run: macOS 26.5.2, arm64, GHC 9.12.3, cabal-install 3.18.1.0,
+Last recorded run: macOS 26.6.2, arm64, GHC 9.12.3, cabal-install 3.18.1.0,
 Apple Swift 6.2.
 
 - `make check` passes end to end.
@@ -30,6 +30,10 @@ Apple Swift 6.2.
   (including `M-0`) were confirmed against the running app by injecting key
   events and reading `status.json`.
 - Config recompile and reload through `xmonad --recompile` / `--restart`.
+- The Finder row of the matrix, with Finder, Ghostty and Chrome on one
+  workspace: `M-2` journals all three and leaves `AXMinimized` true on
+  Finder; `M-1` clears the journal and returns Finder to its tiled frame.
+- `xmonadctl quit` exits within a second.
 
 ## Not yet verified
 
@@ -55,8 +59,10 @@ off, yabai/skhd stopped, and no unsaved work in the windows you test with.
 | Full layout | `M-Space` until Full | Focused window covers the screen; **nothing is minimized to the Dock** |
 | Mouse move | `M` + left drag | The window floats and does not snap back mid-drag |
 | Mouse resize | `M` + right drag | Resizes down to the 80x60 floor and keeps its geometry after release |
+| Dialog / popup | Open a Save panel or alert | It stays at its own size, can be focused, and is not tiled |
 | Cross-display drag | Drag a floating window to another display | Joins the workspace visible there; the next plan does not pull it back |
 | Owned hidden | `M-2` then `M-1` | Only WM-minimized windows are restored |
+| Finder | Open a Finder window, `M-2` then `M-1` | Finder minimizes on the switch and comes back tiled; it never stays painted, in the corner or anywhere else |
 | User minimized | `Cmd-M` yourself, then switch workspaces | Your minimized window is never restored automatically |
 | Hidden app | `Cmd-H`, then unhide | The hidden app is not forced; it returns to management on reappearance |
 | Async race | Switch workspaces rapidly; move focus in Full | No bounce back to the old workspace, no stranded minimization |

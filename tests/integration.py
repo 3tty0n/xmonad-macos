@@ -73,12 +73,22 @@ def run(engine: str) -> None:
         assert plan['screen'] == 10, plan
         plan = key(ord('e')); assert plan['screen'] == 20, plan
         plan = key(ord('w')); assert plan['screen'] == 10, plan
+        popup = dict(wid=3,pid=123,app='Terminal',bundle='com.apple.Terminal',
+                     titleText='Save',onDisplay=10,subrole='AXDialog',
+                     frame=dict(x=120,y=80,width=320,height=180),
+                     minimized=False,ownedHidden=False)
+        plan = send(dict(type='snapshot',generation=3,epoch=1,
+                         screens=two['screens'],
+                         windows=[win(1),win(2),popup],focused=3))
+        frames = {x['wid']: x['frame'] for x in plan['frames']}
+        assert frames.get(3) == popup['frame'], plan
+        assert 3 not in plan.get('hide', []), plan
         checkpoint = plan['checkpoint']
         assert checkpoint['savedVersion'] == 1
         assert send({'type':'ping'})['type'] == 'pong'
         p.stdin.write('{"type":"exit"}\n'); p.stdin.flush(); p.wait(timeout=5)
         assert p.returncode == 0
-        print('PASS: compiled xmonad.hs NDJSON integration (focus/mouse-float/layout/shift/view/checkpoint/ping)')
+        print('PASS: compiled xmonad.hs NDJSON integration (focus/mouse-float/dialog-float/layout/shift/view/checkpoint/ping)')
     finally:
         if p.poll() is None:
             p.kill(); p.wait()

@@ -67,8 +67,8 @@ xmonad --restart       # run the new one
 
 A compile failure never replaces the running engine.
 
-Match windows with `bundleId` (stable), `className` (localized app name), or
-`title`.
+Match windows with `bundleId` (stable), `className` (localized app name),
+`title`, or `subrole`. Dialogs and floating panels are floated automatically.
 
 > [!NOTE]
 > More layouts, hooks and ported contrib modules: [Compatibility](docs/COMPATIBILITY.md).

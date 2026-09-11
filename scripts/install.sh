@@ -30,7 +30,7 @@ requirement() { /usr/bin/codesign -d -r- "$1" 2>/dev/null | sed -n 's/^designate
 OLD_REQ="$(requirement "$APP")"
 if [ -d "$APP" ]; then
   rm -rf "$HOME/Applications/XMonadMac.previous.app"
-  mv "$APP" "$HOME/Applications/XMonadMac.previous.app"
+  #mv "$APP" "$HOME/Applications/XMonadMac.previous.app"
 fi
 /usr/bin/ditto "$ROOT/build/XMonadMac.app" "$APP"
 # A changed designated requirement leaves a stale Accessibility entry that

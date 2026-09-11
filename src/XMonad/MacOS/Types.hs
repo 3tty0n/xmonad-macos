@@ -36,9 +36,22 @@ data WindowInfo = WindowInfo
   { wid :: !Window, pid :: !Int, app :: !String, bundle :: !String
   , titleText :: !String, onDisplay :: !Int, frame :: !Rectangle
   , minimized :: !Bool, ownedHidden :: !Bool
+  -- AX subrole: AXStandardWindow, AXDialog, AXSystemDialog, AXFloatingWindow
+  -- or AXSystemFloatingWindow. Absent in older snapshots.
+  , subroleText :: !String
   } deriving (Show, Eq, Generic)
-instance FromJSON WindowInfo
-instance ToJSON WindowInfo
+instance ToJSON WindowInfo where
+  toJSON w = object
+    [ "wid" .= wid w, "pid" .= pid w, "app" .= app w, "bundle" .= bundle w
+    , "titleText" .= titleText w, "onDisplay" .= onDisplay w, "frame" .= frame w
+    , "minimized" .= minimized w, "ownedHidden" .= ownedHidden w
+    , "subrole" .= subroleText w ]
+instance FromJSON WindowInfo where
+  parseJSON = withObject "WindowInfo" $ \o -> WindowInfo
+    <$> o .: "wid" <*> o .: "pid" <*> o .: "app" <*> o .: "bundle"
+    <*> o .: "titleText" <*> o .: "onDisplay" <*> o .: "frame"
+    <*> o .: "minimized" <*> o .: "ownedHidden"
+    <*> o .:? "subrole" .!= "AXStandardWindow"
 
 -- Numerically compatible with the commonly used X modifier masks.
 shiftMask, lockMask, controlMask, mod1Mask, mod2Mask, mod3Mask, mod4Mask, mod5Mask :: KeyMask
