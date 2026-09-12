@@ -4,16 +4,15 @@
 
 ```sh
 make check          # everything below
-./scripts/test-portable.sh  # Swift unit tests, static checks, ops smoke test
+./scripts/test-portable.sh  # Swift unit tests and static packaging checks
 ./scripts/test.sh           # Haskell core tests + compiled-engine integration
 ```
 
 | Suite | What it covers |
 |---|---|
 | `tests/WireTests.swift` | 186 checks: signed coordinate conversion, displays above/left/below the primary, no double Retina scaling, display selection, JSON fields including action ids and mouse bindings, popup subroles, Chrome CGWindow omission, Finder hide verification, process instance identity, fingerprint remap, key mapping, plan validation, focus-border tracing during restore |
-| `tests/static_checks.py` | 223 source and packaging checks |
-| `tests/ops_smoke.sh` | The installed recompile is atomic; a simulated build failure preserves the previous engine byte-for-byte |
-| `tests/CoreTests.hs` | StackSet focus/swap/shift/uniqueness, `Tall` geometry and area, `Full` stacking, `Choose` cycling, user vs. WM minimization, ignore, dialog floats, multiple displays, hotplug, display affinity, checkpoints, action-id focus requests, observed focus on mapped workspaces, key parsing, JSON |
+| `tests/static_checks.py` | Source and packaging checks |
+| `tests/CoreTests.hs` | StackSet focus/swap/shift/uniqueness, `Tall` geometry and area, `Full` stacking, `Choose` cycling, user vs. WM minimization, ignore, dialog floats, multiple displays, hotplug, display affinity, checkpoints, action-id focus requests, observed focus on mapped workspaces, key parsing, JSON, atomic installed recompile (a failed cabal build leaves the previous engine) |
 | `tests/integration.py` | Runs the shipped config as a real engine and drives focus, mouse-float, dialog-float, layout, shift, view, checkpoint, and ping over NDJSON |
 
 `scripts/test.sh` stages the shipped config into `build/config`; it never tests or
@@ -33,7 +32,7 @@ Apple Swift 6.2.
 - The Finder row of the matrix, with Finder, Ghostty and Chrome on one
   workspace: `M-2` journals all three and leaves `AXMinimized` true on
   Finder; `M-1` clears the journal and returns Finder to its tiled frame.
-- `xmonadctl quit` exits within a second.
+- `xmonad quit` exits within a second.
 
 ## Not yet verified
 

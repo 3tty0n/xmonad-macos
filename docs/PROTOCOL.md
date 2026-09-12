@@ -119,8 +119,8 @@ If a layout type change makes it unreadable, the new config's layout is used.
 
 `ping` and `exit` go helper → engine; `pong` and `command` go engine → helper.
 
-- `recompile` — the helper runs the installed build kit in a separate process
-  and swaps the engine only after validation succeeds.
+- `recompile` — the helper runs the installed engine with `--recompile`
+  against the build kit and swaps the engine only after validation succeeds.
 - `reload` — restart the already-compiled engine, no build.
 - `close` — press the Close button of a known handle; unknown handles are
   ignored.

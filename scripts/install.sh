@@ -3,7 +3,7 @@ source "$(dirname "$0")/common.sh"
 mac_only
 [ -x "$ROOT/build/xmonad-engine" ] && [ -d "$ROOT/build/XMonadMac.app" ] || { echo "Run scripts/build.sh first." >&2; exit 1; }
 if pgrep -x XMonadMac >/dev/null 2>&1; then
-  echo "Quit XMonadMac from its menu before replacing the native app. Use reload.sh for config-only updates." >&2; exit 1
+  echo "Quit XMonadMac from its menu before replacing the native app. Use xmonad --recompile for config-only updates." >&2; exit 1
 fi
 umask 077
 mkdir -p "$HOME/Applications" "$SUPPORT" "$HOME/.config/xmonad-mac" "$HOME/.local/bin"
@@ -18,10 +18,7 @@ rm -rf "$KIT_NEW/build" "$KIT_NEW/dist-newstyle" "$KIT_NEW/tests/__pycache__"
 rm -rf "$SUPPORT/build-kit.previous"
 if [ -d "$SUPPORT/build-kit" ]; then mv "$SUPPORT/build-kit" "$SUPPORT/build-kit.previous"; fi
 mv "$KIT_NEW" "$SUPPORT/build-kit"
-cp "$ROOT/scripts/recompile-installed.sh" "$SUPPORT/recompile.sh"
-cp "$ROOT/scripts/autostart.sh" "$SUPPORT/autostart.sh"
-chmod 755 "$SUPPORT/recompile.sh" "$SUPPORT/autostart.sh"
-rm -f "$SUPPORT/xmonadctl"
+rm -f "$SUPPORT/recompile.sh" "$SUPPORT/autostart.sh" "$SUPPORT/xmonadctl"
 # The control commands live in the compiled config, as upstream's do, so both
 # names are the engine binary itself.
 ln -sfn "$SUPPORT/xmonad-engine" "$HOME/.local/bin/xmonadctl"
@@ -52,4 +49,4 @@ fi
 echo "Installed: $APP"
 echo "Config: $HOME/.config/xmonad-mac/xmonad.hs"
 echo "Control: $HOME/.local/bin/xmonad (and xmonadctl)"
-echo "Start a read-only preview: ./scripts/run.sh --dry-run"
+echo "Start a read-only preview: xmonad start --dry-run"

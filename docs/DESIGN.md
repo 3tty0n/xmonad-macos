@@ -248,18 +248,20 @@ arguments are handled before any engine starts, so `xmonad status` works
 without a running helper and `xmonad --recompile` works from the binary it is
 about to replace.
 
-`M-q`, the menu's Recompile, and `xmonad --recompile` all take this path.
-`Reload compiled xmonad.hs` and `xmonad --restart` skip the build and restart
-the existing engine. Reinstalling the app refreshes the build kit and never
-overwrites your config.
+`M-q`, the menu's Recompile, and `xmonad --recompile` all take this path:
+the helper (or you) run the installed engine binary with `--recompile`,
+which compiles against the build kit in a separate process. There is no
+copied shell recompiler. `Reload compiled xmonad.hs` and `xmonad --restart`
+skip the build and restart the existing engine. Reinstalling the app refreshes
+the build kit and never overwrites your config.
 
 Login startup is separate from installation: a LaunchAgent is created only
-when you run `xmonadctl autostart on`, and it launches the app bundle through
+when you run `xmonad autostart on`, and it launches the app bundle through
 LaunchServices so that no unsigned helper receives Accessibility rights.
 
 ## AX self-test
 
-`xmonadctl self-test` inspects the focused standard AX window: role and
+`xmonad self-test` inspects the focused standard AX window: role and
 subrole, whether position, size, and minimized are settable, whether the frame
 reads back, whether writing the *same* frame round-trips, and whether the
 public `CGWindowListCopyWindowInfo` entry correlates by PID and rectangle. It

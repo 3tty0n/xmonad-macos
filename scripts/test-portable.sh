@@ -9,4 +9,3 @@ swiftc -frontend -parse -swift-version 5 native/*.swift
 for script in scripts/*.sh; do bash -n "$script"; done
 python3 -m py_compile tests/integration.py
 python3 tests/static_checks.py
-tests/ops_smoke.sh

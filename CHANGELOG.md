@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Installed control paths (`recompile`, `autostart`, `doctor`, `recover`,
+  `start`, `reload`) live in the compiled `xmonad` binary. `scripts/` keeps
+  only source-tree build, test, signing and packaging helpers. Menu/M-q
+  recompile runs `xmonad-engine --recompile`; install no longer copies
+  shell helpers into Application Support.
+
 - Unfocused (`normalBorderColor`) overlays no longer stay on screen after a
   workspace switch. An empty rest list clears them, a pin that left the
   workspace is dropped, and retired panels are moved off-screen rather than

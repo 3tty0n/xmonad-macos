@@ -12,7 +12,6 @@ struct Paths {
     static let session=support.appendingPathComponent("session.json")
     static let status=support.appendingPathComponent("status.json")
     static let selfTest=support.appendingPathComponent("self-test.json")
-    static let recompile=support.appendingPathComponent("recompile.sh")
     // ~/.xmonad/xmonad.hs wins when present, matching upstream xmonad layouts;
     // computed on each use so creating it does not need an app restart.
     static var config: URL {
@@ -672,8 +671,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func recompileConfig() {
         guard !recompiling,!quitting else { return }
-        guard FileManager.default.isExecutableFile(atPath:Paths.recompile.path) else {
-            setStatus("Installed recompiler missing; rerun scripts/install.sh")
+        guard FileManager.default.isExecutableFile(atPath:Paths.engine.path) else {
+            setStatus("Installed engine missing; rerun make install")
             return
         }
         guard FileManager.default.fileExists(atPath:Paths.config.path) else {
@@ -684,8 +683,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let wasRunning=running
         setStatus("Compiling xmonad.hs")
         let p=Process()
-        p.executableURL=URL(fileURLWithPath:"/bin/bash")
-        p.arguments=[Paths.recompile.path,Paths.config.path]
+        p.executableURL=Paths.engine
+        p.arguments=["--recompile",Paths.config.path]
         p.standardOutput=FileHandle.standardError
         p.standardError=FileHandle.standardError
         var env=ProcessInfo.processInfo.environment
@@ -827,7 +826,6 @@ struct XMonadMacMain {
               "engineExecutable":FileManager.default.isExecutableFile(atPath:Paths.engine.path),
               "journalExists":FileManager.default.fileExists(atPath:Paths.recovery.path),
               "config":Paths.config.path,
-              "recompilerExecutable":FileManager.default.isExecutableFile(atPath:Paths.recompile.path),
               "log":Paths.log.path,"status":Paths.status.path]
             let data=try! JSONSerialization.data(withJSONObject:info,options:[.prettyPrinted,.sortedKeys])
             FileHandle.standardOutput.write(data); print(""); return

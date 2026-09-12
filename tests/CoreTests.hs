@@ -20,10 +20,19 @@ import XMonad.Layout.Accordion
 import XMonad.Hooks.ManageHelpers (isDialog)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import Data.List (sort,nub)
+import Data.List (isInfixOf,isPrefixOf,nub,sort)
 import Data.Maybe (fromMaybe,listToMaybe,isJust)
 import Data.Aeson
+import Control.Exception (finally)
 import Control.Monad (forM_,unless)
+import System.Directory
+  ( copyFile, createDirectoryIfMissing, getPermissions, getTemporaryDirectory
+  , removeFile, removePathForcibly, setOwnerExecutable, setPermissions )
+import System.Environment (getEnv, lookupEnv, setEnv, unsetEnv)
+import System.Exit (ExitCode(..))
+import System.FilePath (takeDirectory, (</>))
+import System.IO (hClose, openTempFile)
+import XMonad.MacOS.CLI (Paths(..), recompileInstalled)
 
 check :: String -> Bool -> IO ()
 check name ok = unless ok $ ioError $ userError $ "FAIL: " ++ name
@@ -290,4 +299,77 @@ main = do
   check "additionalMouseBindings overrides"
     (M.lookup (mod1Mask,button1) (mouseBindings (additionalMouseBindings cfg [((mod1Mask,button1),MouseRaise)]) cfg)
      == Just MouseRaise)
-  putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, key parser and protocol"
+  testAtomicRecompile
+  putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, key parser, protocol and atomic recompile"
+
+-- Fake ghc/cabal/helper on PATH: a successful swap, then a failed cabal build
+-- that must leave the previous engine byte-for-byte.
+testAtomicRecompile :: IO ()
+testAtomicRecompile = do
+  tmpRoot <- getTemporaryDirectory
+  (marker, h) <- openTempFile tmpRoot "xmonad-recompile"
+  hClose h
+  removeFile marker
+  let tmp = marker ++ ".d"
+  createDirectoryIfMissing True tmp
+  testAtomicRecompileAt tmp `finally` removePathForcibly tmp
+
+testAtomicRecompileAt :: FilePath -> IO ()
+testAtomicRecompileAt tmp = do
+  path0 <- getEnv "PATH"
+  fail0 <- lookupEnv "FAIL_BUILD"
+  let bin = tmp </> "bin"
+      kit = tmp </> "support" </> "build-kit"
+      helperBin = tmp </> "XMonadMac.app" </> "Contents" </> "MacOS" </> "XMonadMac"
+      engine = tmp </> "fake-engine"
+      dest = tmp </> "support" </> "xmonad-engine"
+      configHs = tmp </> "xmonad.hs"
+      p = Paths (tmp </> "support") (tmp </> "XMonadMac.app") helperBin (tmp </> "bridge.log")
+      restore = do
+        setEnv "PATH" path0
+        maybe (unsetEnv "FAIL_BUILD") (setEnv "FAIL_BUILD") fail0
+      exec path contents = do
+        writeFile path contents
+        perm <- getPermissions path
+        setPermissions path (setOwnerExecutable True perm)
+  (do
+    createDirectoryIfMissing True bin
+    createDirectoryIfMissing True (kit </> "src")
+    createDirectoryIfMissing True (takeDirectory helperBin)
+    writeFile (kit </> "xmonad-macos.cabal") "name: xmonad-macos\n"
+    writeFile configHs "main = putStrLn \"config\"\n"
+    writeFile dest "old\n"
+    exec engine $ unlines
+      ["#!/bin/bash"
+      ,"if [ \"${1:-}\" = --check-config ]; then echo '{\"type\":\"configure\",\"protocol\":1,\"keys\":[]}'; else exit 0; fi"]
+    exec (bin </> "ghc") "#!/bin/bash\nexit 0\n"
+    exec (bin </> "cabal") $ unlines
+      ["#!/bin/bash"
+      ,"if [ \"${1:-}\" = build ]; then [ \"${FAIL_BUILD:-0}\" = 0 ] || exit 33; exit 0; fi"
+      ,"if [ \"${1:-}\" = list-bin ]; then printf '%s\\n' '" ++ engine ++ "'; exit 0; fi"
+      ,"exit 2"]
+    exec helperBin $ unlines
+      ["#!/bin/bash"
+      ,"[ \"${1:-}\" = --validate-config ] || exit 7"
+      ,"exit 0"]
+    setEnv "PATH" (bin ++ ":" ++ path0)
+    unsetEnv "FAIL_BUILD"
+    ok <- recompileInstalled p configHs
+    check "installed recompile succeeds" (ok == ExitSuccess)
+    compiled <- readStrict dest
+    handshake <- readStrict (tmp </> "support" </> "configure.json")
+    check "recompile installs the built engine" ("#!/bin/bash" `isPrefixOf` compiled)
+    check "recompile writes a validated handshake" ("\"protocol\":1" `isInfixOf` handshake)
+    copyFile dest (tmp </> "before-fail")
+    setEnv "FAIL_BUILD" "1"
+    failed <- recompileInstalled p configHs
+    check "failed cabal build is not success" (failed == ExitFailure 33)
+    after <- readStrict dest
+    before <- readStrict (tmp </> "before-fail")
+    check "failed recompile leaves the previous engine" (after == before)
+    ) `finally` restore
+
+readStrict :: FilePath -> IO String
+readStrict path = do
+  contents <- readFile path
+  length contents `seq` pure contents

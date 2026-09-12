@@ -116,8 +116,9 @@ placed is minimized instead. Either way they return to where they were.
 |---|---|
 | `make bootstrap` | Toolchain, build, install |
 | `make build` / `make install` | Build / install |
-| `make run` / `make dry-run` | Launch / launch read-only |
+| `make run` / `make dry-run` | `xmonad start` / `xmonad start --dry-run` |
 | `make check` | Run the tests |
+| `xmonad start [--dry-run]` | Launch the installed app |
 | `xmonad --recompile` / `--restart` | Compile the config / run it |
 | `xmonad status` / `log` / `doctor` | What it is doing, and why not |
 | `xmonad pause` / `resume` / `recover` | Suspend / resume / unhide windows |
