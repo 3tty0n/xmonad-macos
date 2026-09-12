@@ -18,6 +18,7 @@ data InputEvent
   | KeyEvent KeyMask KeySym    -- a bound key was pressed
   | MouseFloatEvent Window     -- a mod-drag started on this window
   | PointerFocusEvent Window   -- the pointer moved onto this window
+  | AckEvent Int (Maybe Window) Bool  -- action id, observed focus, expired
   | PingEvent                  -- liveness check
   | ExitEvent                  -- shut down
   deriving (Show)
@@ -31,6 +32,7 @@ instance FromJSON InputEvent where
       "key" -> KeyEvent <$> o .: "mask" <*> o .: "sym"
       "mouseFloat" -> MouseFloatEvent <$> o .: "wid"
       "pointerFocus" -> PointerFocusEvent <$> o .: "wid"
+      "ack" -> AckEvent <$> o .: "action" <*> o .:? "focused" <*> o .:? "expired" .!= False
       "ping" -> pure PingEvent
       "exit" -> pure ExitEvent
       _ -> fail $ "Unknown input type: " ++ t
@@ -50,6 +52,7 @@ instance ToJSON Placement where
 data Plan = Plan
   { planGeneration :: Int, planEpoch :: Int
   , planFrames :: [Placement], planHide :: [Window], planFocus :: Maybe Window
+  , planAction :: Maybe Int, planFocusForMs :: Int
   , planWorkspace :: String, planLayout :: String, planCheckpoint :: Value
   -- The display the current screen sits on, so the helper can follow it.
   , planScreen :: Int
@@ -59,6 +62,7 @@ instance ToJSON Plan where
   toJSON p = object
     ["type" .= ("plan" :: String),"generation" .= planGeneration p,"epoch" .= planEpoch p
     ,"frames" .= planFrames p,"hide" .= planHide p,"focus" .= planFocus p
+    ,"action" .= planAction p,"focusForMs" .= planFocusForMs p
     ,"workspace" .= planWorkspace p,"layout" .= planLayout p,"checkpoint" .= planCheckpoint p
     ,"screen" .= planScreen p
     ,"workspaces" .= planWorkspaces p]

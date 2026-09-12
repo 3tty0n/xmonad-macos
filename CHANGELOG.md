@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Unfocused (`normalBorderColor`) overlays no longer stay on screen after a
+  workspace switch. An empty rest list clears them, a pin that left the
+  workspace is dropped, and retired panels are moved off-screen rather than
+  left at the old frame with alpha 0.
+
+- Focus requests now carry a monotonic action id and a 400ms deadline. The
+  helper retries until the requested window is observed, the user focuses
+  another shown window, or the deadline expires, then acks; a dropped plan
+  does not consume the id. A scan's AX work is budgeted at 0.45s, owned
+  windows are visited first, same-frame ambiguity is grouped by PID, and the
+  watchdog pauses if the AX queue has been busy for eight seconds.
+
+- `mouseBindings` is configurable (`MouseMove` / `MouseResize` / `MouseRaise`,
+  plus `additionalMouseBindings`). Unfocused windows are traced with
+  `normalBorderColor`. A replugged display reclaims the workspace it showed
+  last. Resize uses the window's AX minimum size when that attribute is
+  readable, otherwise 80×60. Workspace and float state survive a helper
+  restart by matching public fingerprints into `session.json`.
+
 - The focus border no longer lags a workspace switch, and no longer jumps back
   onto the window that just lost focus. Only an explicit focus request pins the
   overlay; ordinary placement plans leave it alone, and a restore still reports

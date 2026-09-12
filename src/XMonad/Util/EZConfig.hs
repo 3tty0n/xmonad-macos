@@ -2,7 +2,8 @@
 -- Single strokes only; an unsupported chord or key name is an error rather
 -- than a binding that silently never fires.
 module XMonad.Util.EZConfig
-  (additionalKeys, additionalKeysP, removeKeys, removeKeysP, parseKey) where
+  (additionalKeys, additionalKeysP, removeKeys, removeKeysP
+  , additionalMouseBindings, parseKey) where
 import XMonad.Core
 import qualified Data.Map.Strict as M
 import Data.Char (ord, toLower)
@@ -24,6 +25,11 @@ removeKeys c ks = c {keys = \base -> foldr M.delete (keys c base) ks}
 removeKeysP :: XConfig l -> [String] -> XConfig l
 removeKeysP c ks = c {keys = \base -> foldr M.delete (keys c base)
   (map (parseOrFail $ modMask base) ks)}
+
+-- Added mouse gestures win over the defaults they collide with.
+additionalMouseBindings :: XConfig l -> [((KeyMask, Button), MouseAction)] -> XConfig l
+additionalMouseBindings c ms =
+  c {mouseBindings = \base -> M.union (M.fromList ms) (mouseBindings c base)}
 
 parseOrFail :: KeyMask -> String -> (KeyMask,KeySym)
 parseOrFail m s =

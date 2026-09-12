@@ -37,12 +37,28 @@ character resolution and multi-stroke chords are not implemented.
 | `M-S-c` | Press the window's Close button; never force-quits |
 | `M-q` / `M-S-q` | Recompile and reload / quit |
 | `M-S-p` | Pause and restore hidden windows |
-| `M` + left / right drag | Float and move / float and resize |
+| `M` + left / right drag | Float and move / float and resize (`mouseBindings`) |
 | `Ctrl-Opt-Cmd-Esc` | Emergency stop and restore, bypassing Haskell |
 
 A drag sets `StackSet.floating` and suspends tiling for that window until
 release. Dragged to another display, the window joins the workspace visible
-there.
+there. Replace the gestures from `xmonad.hs`:
+
+```haskell
+import qualified Data.Map.Strict as M
+
+main = xmonad $ def
+  { mouseBindings = \c -> M.fromList
+      [ ((modMask c, button1), MouseMove)
+      , ((modMask c, button3), MouseResize)
+      , ((modMask c, button2), MouseRaise)
+      ]
+  }
+  `additionalMouseBindings` [ ((mod4Mask, button1), MouseMove) ]
+```
+
+`MouseRaise` reports the window under the pointer as `pointerFocus`; it does
+not start a drag. A binding whose modifier mask is 0 is rejected.
 
 ## Dialogs and popups
 
@@ -53,13 +69,15 @@ Sheets and popovers are not managed.
 
 ## Focus border and the mouse
 
-`borderWidth` and `focusedBorderColor` trace the focused window; `borderWidth =
-0` turns the border off. `focusFollowsMouse` is on by default, as upstream:
+`borderWidth`, `focusedBorderColor` and `normalBorderColor` trace the focused
+window and the other visible ones; `borderWidth = 0` turns both off.
+`focusFollowsMouse` is on by default, as upstream:
 
 ```haskell
 main = xmonad $ def
   { borderWidth = 2
   , focusedBorderColor = "#61afef"
+  , normalBorderColor = "#dddddd"
   , focusFollowsMouse = False
   }
 ```
@@ -80,14 +98,14 @@ Screen 0 is the display macOS calls primary; the rest follow in display-ID
 order. Focusing a screen moves the pointer there when it is on another
 display, because macOS has nothing else that says which screen is current.
 
-- A display that comes back with the same display ID reclaims its workspaces.
+- A display that comes back with the same display ID reclaims the workspace it
+  showed last, including across an unplug that lasted the whole session.
 - A disconnected display's workspaces become hidden rather than losing
   windows.
 - A window hidden by a workspace switch parks past the right edge of the
   whole arrangement, so it never lands on another display. Finder cannot be
   parked that way, so it is minimized instead of remaining painted, including
   as a clamped strip in the corner.
-- Display affinity is not remembered permanently across reconnects.
 - macOS gives every display its own Mission Control Desktops. Those are still
   not workspaces, and switching them still resets assignments.
 
@@ -129,6 +147,7 @@ xmonad status | jq -r '[.workspaces[] | select(.windows > 0 or .current)
 | `~/Library/Application Support/XMonadMac/xmonad-engine` | Compiled config |
 | `~/Library/Application Support/XMonadMac/build-kit` | Self-contained sources, so `xmonad --recompile` keeps working after the checkout moves |
 | `~/Library/Application Support/XMonadMac/recovery.json` | Windows currently hidden, for recovery after a crash |
+| `~/Library/Application Support/XMonadMac/session.json` | Last checkpoint plus window fingerprints, for a helper restart |
 | `~/Library/Logs/XMonadMac/bridge.log` | The log |
 
 ## Signing and the Accessibility grant

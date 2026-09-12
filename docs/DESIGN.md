@@ -122,20 +122,22 @@ treating them as destroyed would drop their logical workspace every time,
 which is why user-minimized and owned-hidden are distinguished.
 
 Observing focus in a snapshot never triggers a native activate or raise. Focus
-intent is included in a plan only when a key binding asked for it. Because
-minimization is asynchronous and stale plans are dropped, that intent is
-carried until it is observed or four reconciliation ticks pass. Ticks are not
-wall-clock seconds under load; explicit action sequences with monotonic
-deadlines are the intended replacement.
+intent is included in a plan only when a key binding asked for it, together
+with a monotonic action id and a `focusForMs` deadline. A dropped plan does
+not consume the id; the helper retries until the requested window is observed,
+the user focuses another shown window, or the deadline expires, then acks.
+The helper will not steal focus from a window the user already raised.
 
 A manual move of a floating window updates its relative rectangle only when
-the observed frame actually changed. The built-in mod+left / mod+right drag
-captures pointer events in the tap but performs hit-testing and the move or
-resize on the serial AX queue. Drag start sends `mouseFloat` so that policy
-sets `W.float` and focus intent; the drag target is excluded from plan moves
-and hides until release, which prevents snap-back races. A floating window
-dragged across displays is shifted to the logical workspace visible on the
-destination display, and its `RationalRect` is recomputed there.
+the observed frame actually changed. Configurable `mouseBindings` name the
+gesture (`move`, `resize`, `raise`); the helper captures matching pointer
+events in the tap and performs hit-testing and geometry on the serial AX
+queue. Drag start sends `mouseFloat` so that policy sets `W.float` and focus
+intent; the drag target is excluded from plan moves and hides until release,
+which prevents snap-back races. A floating window dragged across displays is
+shifted to the logical workspace visible on the destination display, and its
+`RationalRect` is recomputed there. Resize uses the window's AX minimum size
+when that attribute is readable, otherwise 80×60.
 
 ## Coordinates and displays
 
@@ -146,9 +148,10 @@ above or to the left are preserved, and Retina scale is never applied twice.
 
 Placement uses `NSScreen.visibleFrame`, avoiding the Dock and menu bar. It
 does not attempt to model every notch or app-specific constraint. A display
-that returns with the same display ID reclaims its workspaces; a disconnected
-display's workspaces become hidden rather than losing their windows.
-Remembering display affinity permanently across reconnects is not implemented.
+that returns with the same display ID reclaims the workspace it showed last,
+including after it was unplugged; a disconnected display's workspaces become
+hidden rather than losing their windows. The remembered assignment is part of
+the checkpoint, so it survives an engine reload and a helper restart.
 
 ## Workspaces
 
@@ -202,16 +205,23 @@ until a scan sees the window back on a display. A short settling interval covers
 that arrive out of order.
 
 While the owning process lives, restoration works through the AX object.
-After a helper restart it requires PID + process instance + bundle + `AXIdentifier`,
-or, absent an identifier, a unique title-and-frame match. If nothing matches
-uniquely, the record is kept rather than risking the wrong window. This is not
-full crash recovery, and it never rolls back original geometry.
+After a helper restart, workspace and float state are restored from
+`session.json` by matching public fingerprints (bundle + `AXIdentifier`, or a
+unique title-and-frame pair) and rewriting `savedEpoch` to the new session.
+Ownership recovery still requires PID + process instance + bundle +
+`AXIdentifier`, or, absent an identifier, a unique title-and-frame match. If
+nothing matches uniquely, the record is kept rather than risking the wrong
+window. This is not full crash recovery, and it never rolls back original
+geometry.
 
 Keyboard and pointer callbacks never call AX, and the emergency stop does not
 route through the Haskell process. Neither helps if the helper's own main loop
 fails or the tap is forbidden — the CLI recovery path and manual Dock restore
 exist for that. The engine's 8-second response watchdog covers a stalled
-child, but it does not measure total AX queue latency; that remains open work.
+child, and the same timer pauses if the AX queue has been busy for eight
+seconds. A scan's total AX work is budgeted at 0.45s; owned windows are
+visited first, and a sluggish app is given a short timeout rather than
+starving restoration. Same-frame ambiguity is grouped by PID.
 
 ## Operations and privileges
 

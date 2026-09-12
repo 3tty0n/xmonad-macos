@@ -36,6 +36,17 @@ func axFrame(_ e: AXUIElement) -> Rect? {
     return Rect(x:Int(point.x.rounded()),y:Int(point.y.rounded()),
                 width:Int(size.width.rounded()),height:Int(size.height.rounded()))
 }
+func axMinSize(_ e: AXUIElement) -> (Int,Int)? {
+    for name in ["AXMinSize","AXMinimumSize"] {
+        guard let raw=axCopy(e,name),CFGetTypeID(raw) == AXValueGetTypeID() else { continue }
+        var size=CGSize.zero
+        guard AXValueGetValue(unsafeBitCast(raw,to:AXValue.self),.cgSize,&size),
+              size.width.isFinite,size.height.isFinite,size.width>=1,size.height>=1,
+              size.width<100_000,size.height<100_000 else { continue }
+        return (Int(size.width.rounded()),Int(size.height.rounded()))
+    }
+    return nil
+}
 func windowEligible(_ e: AXUIElement, subrole: String) -> Bool {
     guard axString(e,kAXRoleAttribute) == kAXWindowRole, !axBool(e,"AXFullScreen"),
           axSettable(e,kAXPositionAttribute) else { return false }
@@ -138,6 +149,7 @@ final class AXRecord {
     var lastTarget: Rect?
     var lastActual: Rect?
     var lastAttempt=Date.distantPast
+    var minSize: (Int,Int)?
     init(_ wid: UInt64, _ e: AXUIElement, _ app: AppDescriptor, _ frame: Rect) {
         self.wid=wid; element=e; descriptor=app; self.frame=frame
         title=axString(e,kAXTitleAttribute); identifier=axString(e,kAXIdentifierAttribute)
@@ -206,6 +218,10 @@ final class AXStore {
     // The display the pointer was last sent to; -1 until the first plan, so
     // starting up never moves it.
     private var pointerScreen = -1
+    private var axFail: [pid_t:Int]=[:]
+    private var actionFirstSeen: [Int:Date]=[:]
+    private var actionFrom: [Int:UInt64]=[:]
+    private var pendingAck: (Int, UInt64?, Bool)?
     init(journal: RecoveryJournal,relay: NotificationRelay) {
         self.journal=journal; self.relay=relay
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(),0.2)
@@ -316,12 +332,30 @@ final class AXStore {
             }
         }
         var seen: Set<UInt64>=[], succeeded: Set<pid_t>=[], hiddenPIDs: Set<pid_t>=[]
-        for app in apps.sorted(by:{ $0.pid < $1.pid }) {
+        let budgetEnd=Date().addingTimeInterval(0.45)
+        let ownedPIDs=Set(records.values.compactMap { $0.token == nil ? nil : $0.descriptor.pid })
+        let ordered=apps.sorted { a,b in
+            let ao=ownedPIDs.contains(a.pid), bo=ownedPIDs.contains(b.pid)
+            if ao != bo { return ao && !bo }
+            let af=axFail[a.pid] ?? 0, bf=axFail[b.pid] ?? 0
+            if af != bf { return af < bf }
+            return a.pid < b.pid
+        }
+        for app in ordered {
             if app.hidden { hiddenPIDs.insert(app.pid) }
+            let remain=budgetEnd.timeIntervalSinceNow
+            if remain <= 0,!ownedPIDs.contains(app.pid) { continue }
+            let fails=axFail[app.pid] ?? 0
+            let timeout=Float(fails >= 2 ? 0.04 : min(0.15, max(0.03, remain > 0 ? remain : 0.04)))
             let root=AXUIElementCreateApplication(app.pid)
-            AXUIElementSetMessagingTimeout(root,0.15)
+            AXUIElementSetMessagingTimeout(root,timeout)
             observe(app,root)
-            guard let windows=axCopy(root,kAXWindowsAttribute) as? [AXUIElement] else { continue }
+            let started=Date()
+            guard let windows=axCopy(root,kAXWindowsAttribute) as? [AXUIElement] else {
+                axFail[app.pid]=fails+1; continue
+            }
+            if Date().timeIntervalSince(started) > Double(timeout)*0.8 { axFail[app.pid]=fails+1 }
+            else { axFail[app.pid]=0 }
             succeeded.insert(app.pid)
             // Display sleep/wake makes macOS destroy every AXUIElement and hand
             // out fresh ones for the same windows. A record whose element none
@@ -340,12 +374,14 @@ final class AXStore {
                     r=old
                     if let frame=axFrame(e) { r.frame=frame }
                     r.title=axString(e,kAXTitleAttribute)
+                    if let ms=axMinSize(e) { r.minSize=ms }
                 } else if let match=adoptStale(stale,adopted,e) {
                     r=match; adopted.insert(r.wid)
                     r.element=e
-                    AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
+                    AXUIElementSetMessagingTimeout(e,timeout); observeWindow(r)
                     if let frame=axFrame(e) { r.frame=frame }
                     r.title=axString(e,kAXTitleAttribute)
+                    if let ms=axMinSize(e) { r.minSize=ms }
                     r.absent=0; r.orphanedScans=0; r.orphanedAt=nil; r.awaitsReplacement=false
                     r.appAbsent=0; r.appHidden=0
                     logMessage("Window \(r.wid) re-identified after its element was recycled")
@@ -356,7 +392,8 @@ final class AXStore {
                     guard axString(e,kAXRoleAttribute) == kAXWindowRole,
                           let frame=axFrame(e) else { continue }
                     r=AXRecord(nextID,e,app,frame); nextID += 1; records[r.wid]=r
-                    AXUIElementSetMessagingTimeout(e,0.15); observeWindow(r)
+                    r.minSize=axMinSize(e)
+                    AXUIElementSetMessagingTimeout(e,timeout); observeWindow(r)
                 }
                 seen.insert(r.wid); r.absent=0; r.orphanedScans=0; r.orphanedAt=nil
                 r.awaitsReplacement=false
@@ -434,6 +471,13 @@ final class AXStore {
             }
         }
         let all=Array(records.values)
+        let onScreenEligible=all.filter { $0.eligible && $0.lastMinimized != true }
+        let byPid=Dictionary(grouping:onScreenEligible,by:{ $0.descriptor.pid })
+        var peerCount: [UInt64:Int]=[:]
+        for group in byPid.values {
+            for r in group { peerCount[r.wid]=group.filter { $0.frame.near(r.frame) }.count }
+        }
+        let cgByPid=Dictionary(grouping:cg,by:{ $0.0 })
         var result: [WindowInfo]=[], ambiguous=0
         for r in all.sorted(by:{ $0.wid < $1.wid }) {
             guard r.eligible else { continue }
@@ -457,9 +501,8 @@ final class AXStore {
             let own=r.token != nil
             // On-screen association uses public PID + bounds only. Ambiguous
             // same-PID/same-frame windows across native Spaces are NOT touched.
-            let peers=all.filter { $0.eligible && $0.descriptor.pid == r.descriptor.pid &&
-              $0.frame.near(r.frame) && $0.lastMinimized != true }.count
-            let visible=cg.filter { $0.0 == r.descriptor.pid && $0.1.near(r.frame) }.count
+            let peers=peerCount[r.wid] ?? 0
+            let visible=(cgByPid[r.descriptor.pid] ?? []).filter { $0.1.near(r.frame) }.count
             // visible==0 is normally another Space. Chrome withholds CGWindow
             // metadata instead, and AX already hides its other-Space windows.
             let onScreen=(visible > 0 && visible >= peers)
@@ -531,9 +574,10 @@ final class AXStore {
         return nil
     }
     func beginPointerDrag(at point: CGPoint,mode: PointerMode) -> UInt64? {
-        guard pointerDrag == nil,let r=windowAt(point),
+        guard mode != .raise,pointerDrag == nil,let r=windowAt(point),
               axBoolean(r.element,kAXMinimizedAttribute) != true,
               let frame=axFrame(r.element) else { return nil }
+        if let ms=axMinSize(r.element) { r.minSize=ms }
         pointerDrag=PointerDragSession(wid:r.wid,mode:mode,start:point,initial:frame)
         return r.wid
     }
@@ -546,8 +590,11 @@ final class AXStore {
             target=Rect(x:drag.initial.x+dx,y:drag.initial.y+dy,
                         width:drag.initial.width,height:drag.initial.height)
         case .resize:
+            let floor=resizeFloor(r.minSize)
             target=Rect(x:drag.initial.x,y:drag.initial.y,
-                        width:max(80,drag.initial.width+dx),height:max(60,drag.initial.height+dy))
+                        width:max(floor.0,drag.initial.width+dx),height:max(floor.1,drag.initial.height+dy))
+        case .raise:
+            return
         }
         move(r,target)
         if let observed=axFrame(r.element) { r.frame=observed }
@@ -558,6 +605,16 @@ final class AXStore {
         updatePointerDrag(to:point); pointerDrag=nil; relay.notify(); return drag.wid
     }
     func cancelPointerDrag() { pointerDrag=nil }
+    func fingerprints() -> [WindowPrint] {
+        records.values.map {
+            WindowPrint(wid:$0.wid,pid:$0.descriptor.pid,launch:$0.descriptor.launch,
+                        bundle:$0.descriptor.bundle,identifier:$0.identifier,title:$0.title,frame:$0.frame)
+        }
+    }
+    func observedFocus() -> UInt64? {
+        guard let window=focusedAXWindow() else { return nil }
+        return records.values.first { CFEqual($0.element,window) }?.wid
+    }
 
     // A window on another workspace is parked past the right edge of the
     // display arrangement, keeping its size. Unlike AXMinimized this involves
@@ -673,17 +730,55 @@ final class AXStore {
             guard let r=records[id] else { logMessage("Hide skipped for window \(id): no record"); continue }
             hide(r)
         }
-        if let id=p.focus,let r=records[id],axBoolean(r.element,kAXMinimizedAttribute) != true {
-            if let app=NSRunningApplication(processIdentifier:r.descriptor.pid) {
-                app.activate(options:[.activateIgnoringOtherApps]) // Deliberate hotkey focus only; never activateAllWindows.
+        pendingAck=nil
+        if let action=p.action {
+            let shown=Set(p.frames.map(\.wid))
+            let current=focusedAXWindow().flatMap { el in
+                records.values.first { CFEqual($0.element,el) }?.wid
             }
-            let app=AXUIElementCreateApplication(r.descriptor.pid)
-            AXUIElementSetAttributeValue(app,kAXFocusedWindowAttribute as CFString,r.element)
-            AXUIElementSetAttributeValue(r.element,kAXMainAttribute as CFString,kCFBooleanTrue)
-            AXUIElementPerformAction(r.element,kAXRaiseAction as CFString)
+            if actionFirstSeen[action] == nil {
+                actionFirstSeen[action]=Date()
+                if let current=current { actionFrom[action]=current }
+            }
+            let first=actionFirstSeen[action] ?? Date()
+            let limit=Double(max(1,p.focusForMs ?? 400))/1000
+            let expired=Date().timeIntervalSince(first) >= limit
+            let from=actionFrom[action]
+            if let id=p.focus,let r=records[id],axBoolean(r.element,kAXMinimizedAttribute) != true {
+                // M-j/k leaves the previous window on screen. AX still naming it
+                // is the request in flight, not the user taking over.
+                let userTook=current.map { w in
+                    w != id && shown.contains(w) && from.map { $0 != w } == true
+                } == true
+                if !expired && !userTook {
+                    if let app=NSRunningApplication(processIdentifier:r.descriptor.pid) {
+                        app.activate(options:[.activateIgnoringOtherApps]) // Deliberate hotkey focus only; never activateAllWindows.
+                    }
+                    let app=AXUIElementCreateApplication(r.descriptor.pid)
+                    AXUIElementSetAttributeValue(app,kAXFocusedWindowAttribute as CFString,r.element)
+                    AXUIElementSetAttributeValue(r.element,kAXMainAttribute as CFString,kCFBooleanTrue)
+                    AXUIElementPerformAction(r.element,kAXRaiseAction as CFString)
+                }
+                let observed=observedFocus() ?? current
+                if observed == id || userTook {
+                    pendingAck=(action,observed,false)
+                    actionFirstSeen.removeValue(forKey:action)
+                    actionFrom.removeValue(forKey:action)
+                }
+            } else if expired {
+                pendingAck=(action,current,true)
+                actionFirstSeen.removeValue(forKey:action)
+                actionFrom.removeValue(forKey:action)
+            }
+            actionFirstSeen=actionFirstSeen.filter { $0.key > action-16 }
+            actionFrom=actionFrom.filter { $0.key > action-16 }
         }
         if let screen=p.screen { followScreen(screen) }
         return true
+    }
+    func takeAck() -> (action:Int, focused:UInt64?, expired:Bool)? {
+        defer { pendingAck=nil }
+        return pendingAck.map { ($0.0,$0.1,$0.2) }
     }
     // The current screen is a policy idea with no macOS counterpart: with no
     // window to focus on the display it moved to, nothing would tell the system
@@ -743,7 +838,10 @@ final class AXStore {
                axBoolean(r.element,kAXMinimizedAttribute) == false { releaseOwnership(r) }
         }
     }
-    func invalidate(epoch: Int) { pointerDrag=nil; activeEpoch=epoch; latestGeneration = -1; active=[] }
+    func invalidate(epoch: Int) {
+        pointerDrag=nil; activeEpoch=epoch; latestGeneration = -1; active=[]
+        actionFirstSeen=[:]; actionFrom=[:]; pendingAck=nil
+    }
 
     // A new bridge has no valid old AX handles. Reattach only by an unambiguous
     // process-instance + AXIdentifier, or process-instance + title + frame match.

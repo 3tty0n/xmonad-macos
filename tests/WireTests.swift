@@ -27,13 +27,14 @@ import Foundation
         let json="""
         {"type":"plan","generation":7,"epoch":2,
          "frames":[{"wid":1,"frame":{"x":0,"y":24,"width":800,"height":900}}],
-         "hide":[2],"focus":1,"workspace":"日本語","layout":"Tall",
+         "hide":[2],"focus":1,"action":7,"focusForMs":400,"workspace":"日本語","layout":"Tall",
          "checkpoint":{"savedVersion":1,"value":[null,true,2.5,"x"]}}
         """
         let message=try JSONDecoder().decode(EngineMessage.self,from:Data(json.utf8))
         guard case .plan(var plan)=message else { fatalError("decode plan") }
         try PlanSafety.validate(plan,active:[1,2,3]); count += 1
         check(plan.workspace == "日本語","UTF-8 protocol")
+        check(plan.action == 7 && plan.focusForMs == 400,"action sequencing fields")
         var bad=plan; bad.hide=[1]; rejects(bad,"show/hide conflict")
         bad=plan; bad.frames.append(bad.frames[0]); rejects(bad,"duplicate frame")
         bad=plan; bad.hide=[2,2]; rejects(bad,"duplicate hidden ID")
@@ -56,15 +57,20 @@ import Foundation
         check(keyCodeForSym[106] == 38,"J physical key")
         check(keyCodeForSym[0xffd1] == 90,"F20 mapping")
         let config=Data(("{\"type\":\"configure\",\"protocol\":1,\"keys\":[{\"mask\":68,\"sym\":106}]"
-          + ",\"mouseMask\":68,\"borderWidth\":2,\"borderColor\":\"#00ff00\""
+          + ",\"mouseMask\":68,\"mouse\":[{\"mask\":68,\"button\":1,\"action\":\"move\"}"
+          + ",{\"mask\":68,\"button\":3,\"action\":\"resize\"},{\"mask\":68,\"button\":2,\"action\":\"raise\"}]"
+          + ",\"borderWidth\":2,\"borderColor\":\"#00ff00\",\"normalBorderColor\":\"#dddddd\""
           + ",\"focusFollowsMouse\":true}").utf8)
-        if case .configure(let v,let keys,let mouseMask,let look)=try JSONDecoder().decode(EngineMessage.self,from:config) {
-            check(v == 1 && keys.count == 1 && mouseMask == 68,"configure decoding")
-            check(look.borderWidth == 2 && look.focusFollowsMouse,"appearance decoding")
+        if case .configure(let v,let keys,let mouse,let look)=try JSONDecoder().decode(EngineMessage.self,from:config) {
+            check(v == 1 && keys.count == 1 && mouse.count == 3,"configure decoding")
+            check(look.borderWidth == 2 && look.focusFollowsMouse && look.normalBorderColor == "#dddddd","appearance decoding")
+            check(mouse[0].action == .move && mouse[1].button == 3 && mouse[2].action == .raise,"mouse bindings")
             check(BorderOverlay.parse(look.borderColor)?.greenComponent == 1,"border colour")
             check(BorderOverlay.parse("nope") == nil,"bad border colour rejected")
         } else { fatalError("configuration") }
-        try validatePointerMask(68); count += 1
+        try validateMouseBindings([MouseBind(mask:68,button:1,action:.move)]); count += 1
+        do { try validateMouseBindings([]); fatalError("empty mouse bindings accepted") }
+        catch { count += 1 }
         do { try validatePointerMask(128); fatalError("invalid pointer modifier accepted") }
         catch { count += 1 }
         do { try validatePointerMask(0); fatalError("unmodified pointer grab accepted") }
@@ -122,6 +128,21 @@ import Foundation
         check(started>0 && started<=Date().timeIntervalSince1970,"process start time is readable")
         check(processStartTime(getpid())==started,"process start time is stable")
         check(processStartTime(-1)==0,"no start time for a process that cannot exist")
+        check(resizeFloor(nil)==(80,60) && resizeFloor((24,24))==(24,24),"resize floor")
+        let oldp=WindowPrint(wid:1,pid:9,launch:1,bundle:"b",identifier:"id",title:"t",frame:primary)
+        let newp=WindowPrint(wid:99,pid:9,launch:1,bundle:"b",identifier:"id",title:"t",frame:primary)
+        check(matchWindowPrints(old:[oldp],new:[newp])[1]==99,"fingerprint remaps a unique identifier")
+        let titled=WindowPrint(wid:2,pid:8,launch:1,bundle:"b",identifier:"",title:"same",frame:primary)
+        let titledNew=WindowPrint(wid:50,pid:8,launch:1,bundle:"b",identifier:"",title:"same",frame:primary)
+        check(matchWindowPrints(old:[titled],new:[titledNew])[2]==50,"fingerprint remaps unique title and frame")
+        var ck=JSONValue.object(["savedVersion":.number(1),"savedEpoch":.number(7),
+          "savedWindows":.array([.number(1)]),"savedFocus":.number(1),
+          "savedFloats":.array([.array([.number(1),.number(0),.number(0),.number(0.5),.number(0.5)])])])
+        ck=remapCheckpoint(ck,map:[1:99],epoch:3)
+        if case .object(let o)=ck, case .number(let ep)=o["savedEpoch"],
+           case .array(let wins)=o["savedWindows"], case .number(let w)=wins.first {
+            check(ep==3 && w==99,"checkpoint wids and epoch rewrite")
+        } else { check(false,"checkpoint rewrite shape") }
         // Geometry stress: round trips hold for logical-coordinate rectangles.
         for x in stride(from:-6000,through:6000,by:1200) {
             for y in stride(from:-3000,through:3000,by:600) {

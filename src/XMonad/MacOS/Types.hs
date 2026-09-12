@@ -14,6 +14,11 @@ type WorkspaceId = String
 type ScreenId = Int
 type KeyMask = Int
 type KeySym = Int
+type Button = Int
+button1, button2, button3 :: Button
+button1=1; button2=2; button3=3
+-- Native drag/raise; the helper performs the geometry, policy only names it.
+data MouseAction = MouseMove | MouseResize | MouseRaise deriving (Eq, Show, Read)
 -- Signed coordinates, logical points, Quartz global top-left origin.
 type Position = Int
 type Dimension = Int

@@ -3,7 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 module XMonad.MacOS.Engine
   ( xmonad, initialState, reconcile, floatObservedWindow, makePlan, rescreen
-  , checkpoint, restoreCheckpoint ) where
+  , rescreenWith, checkpoint, restoreCheckpoint, handleEvent ) where
 import XMonad.Core
 import XMonad.MacOS.Protocol
 import XMonad.MacOS.CLI (handleCommand)
@@ -16,40 +16,59 @@ import qualified Data.Set as S
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Aeson
-import Data.List (find, nub, foldl', (\\))
+import Data.List (find, nub, (\\))
 import Data.Maybe (fromMaybe, mapMaybe)
 import Control.Applicative ((<|>))
-import Control.Monad (forM_, when, unless)
+import Control.Monad (forM_, when, unless, guard)
 import System.IO
 import System.Environment (getArgs)
 import GHC.Generics (Generic)
 
 initialState :: XConfig Layout -> [DisplayInfo] -> XState
 initialState c ds = XState
-  { windowset=W.new (layoutHook c) tags [SD (usable d) (display d) | d <- ds']
-  , windowInfo=M.empty, ignoredWindows=S.empty, generation=(-1), epoch=(-1)
-  , focusRequested=False, focusAgeTicks=0, commands=[] }
+  { windowset=ws, windowInfo=M.empty, ignoredWindows=S.empty, generation=(-1), epoch=(-1)
+  , pendingFocus=Nothing, nextActionId=0
+  , displayAffinity=M.fromList [(displayID (W.screenDetail sc), W.tag (W.workspace sc))
+                               | sc <- W.screens ws]
+  , commands=[] }
   where
     ds' = if null ds then [DisplayInfo 0 (Rectangle 0 0 1 1)] else ds
     configured = nub (filter (not . null) $ workspaces c)
     candidates = configured ++ ["_screen_" ++ show n | n <- [(1::Int)..]
                                 , ("_screen_" ++ show n) `notElem` configured]
     tags = take (max (length configured) (length ds')) candidates
+    ws=W.new (layoutHook c) tags [SD (usable d) (display d) | d <- ds']
 
 -- Stable physical display identity; preserve existing workspace assignments.
 -- A new display cannot steal a workspace from one retained later in the list.
+-- Affinity remembers a disconnected display's workspace so a replug restores it.
 rescreen :: [DisplayInfo] -> WindowSet -> WindowSet
-rescreen [] ws = ws
-rescreen ds ws = ws { W.current=cur, W.visible=filter ((/=W.screen cur) . W.screen) scrs
-                   , W.hidden=filter ((`notElem` selectedTags) . W.tag) allWS }
+rescreen ds ws = fst $ rescreenWith ds ws (affinityOf ws)
+
+affinityOf :: WindowSet -> [(Int,String)]
+affinityOf ws = [(displayID (W.screenDetail sc), W.tag (W.workspace sc)) | sc <- W.screens ws]
+
+rescreenWith :: [DisplayInfo] -> WindowSet -> [(Int,String)] -> (WindowSet, [(Int,String)])
+rescreenWith [] ws aff = (ws, aff)
+rescreenWith ds ws aff = (ws { W.current=cur, W.visible=filter ((/=W.screen cur) . W.screen) scrs
+                   , W.hidden=filter ((`notElem` selectedTags) . W.tag) allWS }, nextAff)
   where
     original = W.workspaces ws
     template = W.layout (W.workspace $ W.current ws)
     allWS = original ++ take (max 0 $ length ds-length original)
       [W.Workspace t template Nothing | n <- [(1::Int)..]
        , let t="_screen_" ++ show n, not (W.tagMember t ws)]
-    retained = [(display d, W.workspace old) | d <- ds
-      , Just old <- [find ((==display d) . displayID . W.screenDetail) (W.screens ws)]]
+    attached = S.fromList (map display ds)
+    stillShown = [W.tag (W.workspace sc) | sc <- W.screens ws
+                 , S.member (displayID $ W.screenDetail sc) attached]
+    retain d = case find ((==display d) . displayID . W.screenDetail) (W.screens ws) of
+      Just old -> Just (display d, W.workspace old)
+      Nothing -> do
+        t <- lookup (display d) aff
+        w <- find ((==t) . W.tag) allWS
+        guard (t `notElem` stillShown)
+        Just (display d, w)
+    retained = mapMaybe retain ds
     retainedTags = map (W.tag . snd) retained
     pool = filter ((`notElem` retainedTags) . W.tag) allWS
     assignments = fst $ foldl' assign ([],pool) ds
@@ -62,6 +81,8 @@ rescreen ds ws = ws { W.current=cur, W.visible=filter ((/=W.screen cur) . W.scre
     wanted = displayID (W.screenDetail $ W.current ws)
     cur = fromMaybe (head scrs) $ find ((==wanted) . displayID . W.screenDetail) scrs
     selectedTags = map (W.tag . W.workspace) scrs
+    nextAff = [(d,t) | (d,t) <- aff, d `notElem` map display ds]
+              ++ [(displayID (W.screenDetail sc), W.tag (W.workspace sc)) | sc <- scrs]
 
 rationalRect :: Rectangle -> Rectangle -> W.RationalRect
 rationalRect (Rectangle sx sy sw sh) (Rectangle x y w h) = W.RationalRect
@@ -103,17 +124,18 @@ adoptSnapshot snap c previous observed = put base
   , ignoredWindows = S.intersection live (ignoredWindows base)
   , generation = snapGeneration snap
   , epoch = snapEpoch snap
-  -- A focus request survives a few ticks so a dropped plan does not lose it,
-  -- but never forever: an app that refuses focus must not lock policy.
-  , focusRequested = focusRequested base && focusAgeTicks base < 4
-  , focusAgeTicks = if focusRequested base then focusAgeTicks base+1 else 0
+  , pendingFocus = case pendingFocus base of
+      Just (aid,w) | snapEpoch snap == epoch previous, S.member w live -> Just (aid,w)
+      _ -> Nothing
+  , displayAffinity = M.fromList affinity
   , commands = []
   }
   where
     base | snapEpoch snap /= epoch previous = initialState c (snapDisplays snap)
          | otherwise = previous
     live = M.keysSet observed
-    rescreened = rescreen (snapDisplays snap) (windowset base)
+    (rescreened, affinity) = rescreenWith (snapDisplays snap) (windowset base)
+      (M.toList $ displayAffinity base)
     surviving = foldr W.delete rescreened
       [w | w <- W.allWindows rescreened, S.notMember w live]
 
@@ -123,7 +145,10 @@ restoreSaved snap c observed = whenJust (snapRestore snap) $ \saved -> do
   s <- get
   case restoreCheckpoint c (snapEpoch snap) (snapDisplays snap) observed saved of
     Left problem -> trace $ "Checkpoint ignored: " ++ problem
-    Right restored -> put s {windowset=restored}
+    Right restored -> put s {windowset=restored
+                            ,displayAffinity=case fromJSON saved :: Result Saved of
+                               Success sv -> M.fromList (savedDisplays sv)
+                               _ -> displayAffinity s}
 
 -- A floating window the user dragged keeps its new geometry, and joins the
 -- workspace of the display it landed on. Only an actually changed frame
@@ -164,20 +189,19 @@ admitNewWindows c observed = forM_ (M.elems observed) $ \wi -> do
                                else S.insert w (ignoredWindows st) }
 
 -- Follow the focus the helper observed, unless a request of our own is still
--- outstanding. A window being hidden must not drag us back to its workspace,
--- and neither may one that is still painted while it belongs to a workspace
--- that is not on a screen (Finder ignores a park and stays visible).
+-- outstanding for a different window. A window being hidden must not drag us
+-- back to its workspace.
 followObservedFocus :: Snapshot -> M.Map Window WindowInfo -> X ()
 followObservedFocus snap observed = whenJust (snapFocused snap) $ \w -> do
   s <- get
   let known = W.member w (windowset s)
       visible = maybe False (\wi -> not (minimized wi) && not (ownedHidden wi))
         (M.lookup w observed)
-      ours = not (focusRequested s) || W.peek (windowset s) == Just w
+      ours = maybe True ((==w) . snd) (pendingFocus s)
       mapped = map (W.tag . W.workspace) (W.screens $ windowset s)
       here = maybe False (`elem` mapped) (W.findTag w (windowset s))
   when (known && visible && ours && here) $ put s
-    {windowset=W.focusWindow w (windowset s),focusRequested=False,focusAgeTicks=0}
+    {windowset=W.focusWindow w (windowset s),pendingFocus=Nothing}
 
 -- Layouts that track windows need to hear about the ones that closed.
 announceRemovals :: XState -> S.Set Window -> X ()
@@ -203,7 +227,7 @@ floatObservedWindow w = do
                 (W.screens $ windowset s)) $ \sc ->
         put s {windowset=W.focusWindow w $ W.float w
                   (rationalRect (screenRect $ W.screenDetail sc) (frame wi)) (windowset s)
-              ,focusRequested=True,focusAgeTicks=0}
+              ,pendingFocus=Just (nextActionId s+1,w),nextActionId=nextActionId s+1}
     _ -> pure ()
 
 -- Turn the current policy state into instructions for the helper: where the
@@ -224,6 +248,10 @@ makePlan = do
     , planFrames = placements
     , planHide = W.allWindows ws \\ shown
     , planFocus = requestedFocus s shown
+    , planAction = case requestedFocus s shown of
+        Just _ -> fst <$> pendingFocus s
+        Nothing -> Nothing
+    , planFocusForMs = 400
     , planWorkspace = W.currentTag ws
     , planScreen = displayID . W.screenDetail . W.current $ ws
     , planLayout = description . W.layout . W.workspace $ W.current ws
@@ -249,8 +277,8 @@ placeScreen sc = do
 -- Focus is only ever requested for a window a key binding asked for, and only
 -- while that window is actually being shown.
 requestedFocus :: XState -> [Window] -> Maybe Window
-requestedFocus s shown = case (focusRequested s,W.peek (windowset s)) of
-  (True,Just w) | w `elem` shown -> Just w
+requestedFocus s shown = case pendingFocus s of
+  Just (_,w) | w `elem` shown -> Just w
   _ -> Nothing
 
 -- One entry per workspace for the status bar, in config order, with any
@@ -286,7 +314,8 @@ checkpoint :: XState -> Value
 checkpoint s = toJSON $ Saved 1 (epoch s) (W.currentTag ws)
   [SavedWorkspace (W.tag w) (show $ W.layout w) (W.integrate' $ W.stack w)
                   (W.focus <$> W.stack w) | w <- W.workspaces ws]
-  [(displayID $ W.screenDetail sc,W.tag $ W.workspace sc) | sc <- W.screens ws]
+  (nub (M.toList (displayAffinity s)
+        ++ [(displayID $ W.screenDetail sc,W.tag $ W.workspace sc) | sc <- W.screens ws]))
   [SavedFloat w (fromRational x) (fromRational y) (fromRational rw) (fromRational rh)
     | (w,W.RationalRect x y rw rh) <- M.toList (W.floating ws)]
   where ws=windowset s
@@ -403,8 +432,16 @@ handshake c keymap = object
   ["type" .= ("configure" :: String),"protocol" .= (1::Int)
   ,"keys" .= [object ["mask" .= m,"sym" .= k] | (m,k) <- M.keys keymap]
   ,"mouseMask" .= modMask c
+  ,"mouse" .= [object ["mask" .= m,"button" .= b,"action" .= mouseActionName a]
+              | ((m,b),a) <- M.toList (mouseBindings c c)]
   ,"borderWidth" .= borderWidth c,"borderColor" .= focusedBorderColor c
+  ,"normalBorderColor" .= normalBorderColor c
   ,"focusFollowsMouse" .= focusFollowsMouse c]
+
+mouseActionName :: MouseAction -> String
+mouseActionName MouseMove = "move"
+mouseActionName MouseResize = "resize"
+mouseActionName MouseRaise = "raise"
 
 -- One line in, one plan out. A protocol error is reported and skipped rather
 -- than fatal, so a single bad line cannot take the session down.
@@ -442,6 +479,17 @@ handleEvent keymap event = case event of
     when known $ windows (W.focusWindow w)
   -- A bound key is the one thing that may ask the helper to change focus.
   KeyEvent m k -> whenJust (M.lookup (m,k) keymap) $ \action -> do
-    modify $ \st -> st {focusRequested=True,focusAgeTicks=0,commands=[]}
     action
+  AckEvent aid focused expired -> do
+    s <- get
+    case pendingFocus s of
+      Just (n, wanted) | n == aid -> do
+        put s {pendingFocus=Nothing}
+        -- A stale AX observation of the window we just left is not a takeover.
+        -- Only a different, non-expired focused window is the user clicking away.
+        case (expired, focused) of
+          (False, Just w) | w /= wanted, W.member w (windowset s) ->
+            modify $ \st -> st {windowset=W.focusWindow w (windowset st)}
+          _ -> pure ()
+      _ -> pure ()
   _ -> pure ()

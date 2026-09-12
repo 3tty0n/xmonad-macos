@@ -40,9 +40,20 @@ check('tracesFocusBorder' in wire and 'tracesFocusBorder' in app,
       'Focus border visibility is decided by a portable helper')
 check('borderPin' in app and 'plan.focus' in app,
       'Focus border pins only to an explicit focus request, not every plan')
+check('borderRest' not in app and 'rest.isEmpty ?' not in app,
+      'Empty overlay rest must clear unfocused borders instead of reusing the last workspace')
 check('_AXUIElementGetWindow' not in ax and not re.search(r'\b_?(?:CGS|SLS)[A-Z]\w*\s*\(', ax),'Private API introduced')
 engine=(root/'src/XMonad/MacOS/Engine.hs').read_text()
-check('focusAgeTicks base < 4' in engine,'Bound focus retry lifetime')
+check('pendingFocus' in engine and 'AckEvent' in engine,'Focus requests use action ids and native acks')
+check('rescreenWith' in engine,'Display affinity survives reconnects')
+check('normalBorderColor' in (root/'src/XMonad/Config.hs').read_text(),'Unfocused border colour missing')
+check('mouseBindings' in (root/'src/XMonad/Config.hs').read_text(),'mouseBindings missing from the default config')
+check('0.45' in ax,'Scan total latency budget missing')
+check('resizeFloor' in ax and 'AXMinSize' in ax,'Resize floor must read AX minimum size')
+check('takeAck' in ax and 'actionFirstSeen' in ax,'Native action acknowledgement missing')
+check('session.json' in app or 'Paths.session' in app,'Helper-restart session persistence missing')
+check('additionalMouseBindings' in (root/'src/XMonad/Util/EZConfig.hs').read_text(),
+      'additionalMouseBindings missing')
 check('not (ownedHidden wi)' in engine,'Do not follow WM-owned hide animations')
 check('W.findTag w (windowset s)' in engine and '`elem` mapped' in engine,
       'Observed focus must not switch to a hidden workspace')

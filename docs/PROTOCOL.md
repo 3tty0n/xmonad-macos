@@ -14,21 +14,27 @@ peer is the helper's own child.
 The engine emits `configure` first:
 
 ```json
-{"type":"configure","protocol":1,"keys":[{"mask":8,"sym":106}],"mouseMask":8,"borderWidth":1,"borderColor":"#ff0000","focusFollowsMouse":true}
+{"type":"configure","protocol":1,"keys":[{"mask":8,"sym":106}],"mouseMask":8,"mouse":[{"mask":8,"button":1,"action":"move"},{"mask":8,"button":3,"action":"resize"}],"borderWidth":1,"borderColor":"#ff0000","normalBorderColor":"#dddddd","focusFollowsMouse":true}
 ```
 
 `mask` is the OR of Shift=1, Control=4, Option=8, Command=64. `sym` is a
 restricted set of X keysym numbers that the helper maps to physical key
-positions. `mouseMask` is the modifier for the built-in move/resize drag —
-currently `modMask` verbatim. A `mouseMask` of 0 is rejected for safety.
-`borderWidth` and `borderColor` describe the overlay traced around the focused
-window; a width of 0 turns it off. `focusFollowsMouse` decides whether the
-helper reports the window under the pointer at all.
+positions. `mouse` lists modifier+button gestures: `move`, `resize`, or
+`raise`. `mouseMask` is still sent as `modMask` for older helpers. A binding
+with mask 0 is rejected. `borderWidth`, `borderColor` and `normalBorderColor`
+describe the overlays traced around focused and other visible windows; a width
+of 0 turns them off. `focusFollowsMouse` decides whether the helper reports
+the window under the pointer at all.
 
 ## Helper → engine
 
 `{"type":"pointerFocus","wid":N}` says the pointer moved onto a window, and is
-sent only while `focusFollowsMouse` is on. Policy decides what to do with it.
+sent only while `focusFollowsMouse` is on, or when a `raise` mouse binding
+fires. Policy decides what to do with it.
+
+`{"type":"ack","action":7,"focused":1,"expired":false}` acknowledges a plan's
+focus request. `expired` is true when `focusForMs` elapsed without the
+requested window taking AX focus; a dropped plan never consumes the id.
 
 Snapshot of the observed world:
 
@@ -61,7 +67,7 @@ and the next snapshot synchronizes the relative float rectangle.
 A placement plan:
 
 ```json
-{"type":"plan","generation":3,"epoch":1,"frames":[{"wid":1,"frame":{"x":4,"y":28,"width":1592,"height":992}}],"hide":[],"focus":null,"workspace":"1","layout":"Tall","screen":10,"checkpoint":{}}
+{"type":"plan","generation":3,"epoch":1,"frames":[{"wid":1,"frame":{"x":4,"y":28,"width":1592,"height":992}}],"hide":[],"focus":1,"action":7,"focusForMs":400,"workspace":"1","layout":"Tall","screen":10,"checkpoint":{}}
 ```
 
 - `frames` — windows to show and place, in stacking order, focused last.
@@ -71,6 +77,14 @@ A placement plan:
 - `workspaces` — one entry per workspace in config order, with `tag`,
   `windows`, `current` and `visible`, for the menu bar and external bars.
 - `focus` — set only for explicit user-driven focus intent.
+- `action` — monotonic id for that intent. The helper acknowledges with
+  `{"type":"ack","action":N,"focused":1}` (or `"expired":true` if the
+  `focusForMs` deadline passed without observing the requested window). A
+  dropped plan does not consume the id; the next matching plan resends it.
+  AX still naming the window that had focus when the action started is not a
+  takeover. A later ack with a different `focused` window is the user taking
+  over, and the engine stops requesting the old one. An expired ack does not
+  move policy focus back to a stale observation.
 - `screen` — the display the current screen sits on. The helper moves the
   pointer there when it is on another display, so a screen change is visible
   even when the workspace there holds no window.
@@ -79,15 +93,16 @@ A placement plan:
 `generation` is the observation generation; `epoch` is the policy generation,
 bumped by native Space switches. A plan is applied only when both match, and
 the native store re-checks after queueing so a plan that went stale in the
-queue is dropped. There is no per-key action sequence yet; Haskell carries
-focus intent for a few ticks to compensate.
+queue is dropped.
 
 `checkpoint` is produced by Haskell and stored by the helper as opaque JSON,
 then handed back in the `restore` field of the first snapshot after an engine
-reload. It holds `savedVersion`, `savedEpoch`, each workspace's layout `show`
-representation, window order, focus, display assignment, and float rectangles.
+reload. Across a helper restart the helper rewrites window ids by matching
+public fingerprints (bundle + AXIdentifier, or title and frame) and sets
+`savedEpoch` to the new session. It holds `savedVersion`, `savedEpoch`, each
+workspace's layout `show` representation, window order, focus, display
+affinity (including currently disconnected displays), and float rectangles.
 If a layout type change makes it unreadable, the new config's layout is used.
-AX handles are never reused across a helper restart.
 
 ## Control messages
 

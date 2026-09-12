@@ -10,10 +10,10 @@ make check          # everything below
 
 | Suite | What it covers |
 |---|---|
-| `tests/WireTests.swift` | 179 checks: signed coordinate conversion, displays above/left/below the primary, no double Retina scaling, display selection, JSON fields, popup subroles, Chrome CGWindow omission, Finder hide verification, process instance identity, key mapping, plan validation, focus-border tracing during restore |
-| `tests/static_checks.py` | 214 source and packaging checks |
+| `tests/WireTests.swift` | 186 checks: signed coordinate conversion, displays above/left/below the primary, no double Retina scaling, display selection, JSON fields including action ids and mouse bindings, popup subroles, Chrome CGWindow omission, Finder hide verification, process instance identity, fingerprint remap, key mapping, plan validation, focus-border tracing during restore |
+| `tests/static_checks.py` | 223 source and packaging checks |
 | `tests/ops_smoke.sh` | The installed recompile is atomic; a simulated build failure preserves the previous engine byte-for-byte |
-| `tests/CoreTests.hs` | StackSet focus/swap/shift/uniqueness, `Tall` geometry and area, `Full` stacking, `Choose` cycling, user vs. WM minimization, ignore, dialog floats, multiple displays, hotplug, checkpoints, observed focus on mapped workspaces, key parsing, JSON |
+| `tests/CoreTests.hs` | StackSet focus/swap/shift/uniqueness, `Tall` geometry and area, `Full` stacking, `Choose` cycling, user vs. WM minimization, ignore, dialog floats, multiple displays, hotplug, display affinity, checkpoints, action-id focus requests, observed focus on mapped workspaces, key parsing, JSON |
 | `tests/integration.py` | Runs the shipped config as a real engine and drives focus, mouse-float, dialog-float, layout, shift, view, checkpoint, and ping over NDJSON |
 
 `scripts/test.sh` stages the shipped config into `build/config`; it never tests or
@@ -58,7 +58,7 @@ off, yabai/skhd stopped, and no unsaved work in the windows you test with.
 | Swap / layout | `M-S-j`, `M-h`, `M-Space` | Order, ratio, and Tall/Mirror/Full all apply |
 | Full layout | `M-Space` until Full | Focused window covers the screen; **nothing is minimized to the Dock** |
 | Mouse move | `M` + left drag | The window floats and does not snap back mid-drag |
-| Mouse resize | `M` + right drag | Resizes down to the 80x60 floor and keeps its geometry after release |
+| Mouse resize | `M` + right drag | Resizes down to the window's AX minimum size, or 80×60 if that attribute is missing, and keeps its geometry after release |
 | Dialog / popup | Open a Save panel or alert | It stays at its own size, can be focused, and is not tiled |
 | Cross-display drag | Drag a floating window to another display | Joins the workspace visible there; the next plan does not pull it back |
 | Owned hidden | `M-2` then `M-1` | Only WM-minimized windows are restored |
@@ -70,7 +70,7 @@ off, yabai/skhd stopped, and no unsaved work in the windows you test with.
 | Reload | `xmonad reload` | Restarts the compiled engine and keeps the checkpoint |
 | Compile failure | Introduce a syntax error, then `M-q` | The running engine keeps going; the failure appears in status and log |
 | Autostart | `xmonad autostart on`, log out and in | The bundle starts once; `off` stops it |
-| Helper crash | Kill the helper, then `xmonad recover` | Uniquely identifiable windows are restored; ambiguous ones keep their record |
+| Helper crash | Kill the helper, then relaunch | Workspace, layout and float state return for uniquely fingerprinted windows; `xmonad recover` restores owned hidden windows |
 | Engine crash | Kill only the engine | The helper pauses and restores owned minimizations |
 | Engine hang | `SIGSTOP` the engine | The watchdog pauses and restores; kill the stopped process afterwards |
 | Emergency | `Ctrl-Opt-Cmd-Esc` | Pause and restore without going through Haskell |

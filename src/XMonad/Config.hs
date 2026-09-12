@@ -1,6 +1,6 @@
 -- The default config, and the key bindings it installs. Everything here can
 -- be replaced field by field from your own xmonad.hs.
-module XMonad.Config (def, defaultConfig, defaultKeys) where
+module XMonad.Config (def, defaultConfig, defaultKeys, defaultMouse) where
 import XMonad.Core
 import XMonad.Layout
 import XMonad.MacOS (quit, recompile)
@@ -22,8 +22,16 @@ defaultConfig = XConfig
   , logHook = pure ()
   , borderWidth = 1
   , focusedBorderColor = "#ff0000"
+  , normalBorderColor = "#dddddd"
   , focusFollowsMouse = True
+  , mouseBindings = defaultMouse
   }
+
+defaultMouse :: XConfig Layout -> M.Map (KeyMask, Button) MouseAction
+defaultMouse c = M.fromList
+  [ ((modMask c, button1), MouseMove)
+  , ((modMask c, button3), MouseResize)
+  ]
 
 -- Upstream's bindings, with the same keys doing the same things: mod-Return
 -- makes the focused window the master, mod-shift-Return launches a terminal.

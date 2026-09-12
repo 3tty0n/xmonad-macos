@@ -4,7 +4,7 @@ import XMonad
 import qualified XMonad.StackSet as W
 import XMonad.MacOS.Engine
 import XMonad.MacOS.Protocol
-import XMonad.Util.EZConfig (parseKey)
+import XMonad.Util.EZConfig (parseKey, additionalMouseBindings)
 import XMonad.Layout.Grid
 import XMonad.Layout.Simplest
 import XMonad.Layout.ResizableTile
@@ -21,7 +21,7 @@ import XMonad.Hooks.ManageHelpers (isDialog)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.List (sort,nub)
-import Data.Maybe (fromMaybe,listToMaybe)
+import Data.Maybe (fromMaybe,listToMaybe,isJust)
 import Data.Aeson
 import Control.Monad (forM_,unless)
 
@@ -208,16 +208,24 @@ main = do
     (length [w | Close w <- commands killed]==2)
   check "Choose cycles and wraps" (description (W.layout (W.workspace $ W.current $ windowset cycleState))=="Tall")
   -- A dropped/stale plan must not lose the user's focus intent. Conversely,
-  -- the retry is bounded and a WM-hide animation cannot reverse a view.
-  (_,pending) <- runX conf s2 (windows W.focusDown)
+  -- an ack or an observation of the requested window clears it, and a WM-hide
+  -- animation cannot reverse a view.
+  (focusPlan,pending) <- runX conf s2 (windows W.focusDown >> makePlan)
   let oldFocus=snapshot {snapGeneration=2}
+      previous=W.peek (windowset s2)
       desired=W.peek (windowset pending)
+      aid=maybe 0 fst (pendingFocus pending)
+  check "plan carries a native action id"
+    (isJust (planAction focusPlan) && planFocus focusPlan==desired && planFocusForMs focusPlan==400)
   (_,retried) <- runX conf pending (reconcile oldFocus)
   check "pending focus survives stale observation" (W.peek (windowset retried)==desired && focusRequested retried)
   (_,acked) <- runX conf retried (reconcile $ oldFocus {snapFocused=desired,snapGeneration=3})
   check "focus acknowledgement clears request" (not $ focusRequested acked)
-  (_,expired) <- runX conf pending (mapM_ reconcile (replicate 5 oldFocus))
-  check "focus retry has bounded lifetime" (not $ focusRequested expired)
+  (_,expired) <- runX conf pending (handleEvent M.empty (AckEvent aid previous True))
+  check "expired ack clears request" (not $ focusRequested expired)
+  check "expired ack does not revert focus" (W.peek (windowset expired)==desired)
+  (_,took) <- runX conf pending (handleEvent M.empty (AckEvent aid (Just 3) False))
+  check "takeover ack follows a different shown window" (W.peek (windowset took)==Just 3 && not (focusRequested took))
   let ownedAnimation=snapshot {snapGeneration=4,snapFocused=Just 1
         ,snapWindows=[(wi 1 10){ownedHidden=True},(wi 2 10){ownedHidden=True},wi 3 20]}
   (_,noBounce) <- runX conf s3 (reconcile ownedAnimation)
@@ -241,6 +249,12 @@ main = do
   check "hotplug loses no windows" (sort (W.allWindows plugged)==[1,2,3])
   check "hotplug screens unique" (length (nub $ map (W.tag . W.workspace) $ W.screens plugged)==3)
   check "retained display keeps its workspace" (W.tag (W.workspace $ W.current unplugged)=="2")
+  let aff=[(displayID (W.screenDetail sc), W.tag (W.workspace sc)) | sc <- W.screens (windowset s2)]
+      (unpluggedRemembered,aff1)=rescreenWith [displays !! 1] (windowset s2) aff
+      (replugged,_)=rescreenWith displays unpluggedRemembered aff1
+  check "replug restores the remembered workspace"
+    (lookup 10 [(displayID (W.screenDetail sc), W.tag (W.workspace sc)) | sc <- W.screens replugged]
+     == Just "1")
   (_,ignored) <- runX (XConf (cfg {manageHook=className =? "Terminal" --> doIgnore})) initial (reconcile snapshot)
   check "doIgnore persistent" (null (W.allWindows $ windowset ignored) && S.size (ignoredWindows ignored)==3)
   let dialog=(wi 4 10){subroleText="AXDialog",frame=Rectangle 120 80 320 180}
@@ -270,6 +284,10 @@ main = do
   check "JSON snapshot parse" (case eitherDecode
     "{\"type\":\"snapshot\",\"generation\":1,\"epoch\":1,\"screens\":[],\"windows\":[],\"focused\":null}" :: Either String InputEvent of
       Right (SnapshotEvent _) -> True; _ -> False)
-  check "mouse float protocol parse" (case eitherDecode "{\"type\":\"mouseFloat\",\"wid\":2}" :: Either String InputEvent of
-      Right (MouseFloatEvent 2) -> True; _ -> False)
+  check "JSON ack parse" (case eitherDecode
+    "{\"type\":\"ack\",\"action\":7,\"focused\":2,\"expired\":true}" :: Either String InputEvent of
+      Right (AckEvent 7 (Just 2) True) -> True; _ -> False)
+  check "additionalMouseBindings overrides"
+    (M.lookup (mod1Mask,button1) (mouseBindings (additionalMouseBindings cfg [((mod1Mask,button1),MouseRaise)]) cfg)
+     == Just MouseRaise)
   putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, key parser and protocol"

@@ -9,6 +9,7 @@ struct Paths {
       .appendingPathComponent("Library/Application Support/XMonadMac",isDirectory:true)
     static let engine=support.appendingPathComponent("xmonad-engine")
     static let recovery=support.appendingPathComponent("recovery.json")
+    static let session=support.appendingPathComponent("session.json")
     static let status=support.appendingPathComponent("status.json")
     static let selfTest=support.appendingPathComponent("self-test.json")
     static let recompile=support.appendingPathComponent("recompile.sh")
@@ -121,10 +122,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // placed yet. Acting on that is what loses the workspace assignments.
     private var settledAt=Date.distantPast
     private var lastSnapshot: Snapshot?
+    private var dumpNext=false
     private var label="Paused"
     private var suppressShortcuts=UserDefaults.standard.bool(forKey:suppressDefaultsKey)
     private var logKeys=UserDefaults.standard.bool(forKey:logKeysDefaultsKey)
-    private var dumpNext=false
+    private var axBusySince: Date?
     private let dryRun=CommandLine.arguments.contains("--dry-run")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -183,6 +185,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !AXIsProcessTrusted() { self.pause(reason:"Accessibility permission revoked"); return }
             if Date().timeIntervalSince(self.lastResponse)>8 {
                 self.pause(reason:"Haskell engine did not respond; restoring owned windows"); return
+            }
+            if let t=self.axBusySince,Date().timeIntervalSince(t)>8 {
+                self.pause(reason:"Accessibility queue did not finish; restoring owned windows"); return
             }
             self.sendObject(["type":"ping"]); self.scheduleScan()
         }
@@ -382,11 +387,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard running else { return }
         lastResponse=Date()
         switch message {
-        case .configure(let version,let keys,let mouseMask,let look):
+        case .configure(let version,let keys,let mouse,let look):
             guard version == 1 else { pause(reason:"Protocol version mismatch"); return }
-            do { try keyboard.configure(keys); try pointer.configure(modifierMask:mouseMask) }
+            do { try keyboard.configure(keys); try pointer.configure(bindings:mouse) }
             catch { pause(reason:"Invalid input configuration: \(error)"); return }
-            border.configure(width:look.borderWidth,color:look.borderColor)
+            border.configure(width:look.borderWidth,color:look.borderColor,normal:look.normalBorderColor)
             pointer.setHover(look.focusFollowsMouse)
             configured=true; updateKeyState(); scheduleScan()
         case .plan(let plan):
@@ -406,13 +411,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             workspaces=plan.workspaces ?? []
             let row=workspaces.isEmpty ? plan.workspace : workspaceRow(workspaces)
             setStatus("\(row) · \(plan.layout)")
+            axBusySince=axBusySince ?? Date()
             axQueue.async { [weak self] in
                 guard let self=self else { return }
                 do {
                     let applied=try self.store.apply(plan)
+                    let ack=applied ? self.store.takeAck() : nil
+                    let prints=self.store.fingerprints()
                     DispatchQueue.main.async {
+                        if self.axBusySince != nil,!self.scanInFlight { self.axBusySince=nil }
                         guard applied,self.running,self.configured else { return }
                         self.tracePlan(plan)
+                        if let ack=ack {
+                            var obj: [String:Any]=["type":"ack","action":ack.action,"expired":ack.expired]
+                            if let focused=ack.focused { obj["focused"]=focused }
+                            self.sendObject(obj)
+                        }
+                        self.persistSession(plan.checkpoint,prints:prints)
                     }
                 }
                 catch {
@@ -465,47 +480,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-    // Draw the focused window's border where the scan just saw it.
+    // Draw borders where this observation says they belong. An empty rest
+    // clears unfocused overlays; it must not reuse the previous workspace.
+    private func paintBorders(focused: (UInt64,Rect)?, rest: [(UInt64,Rect)]) {
+        border.paint(focused:focused,rest:rest)
+    }
     private func traceFocus(_ result: ScanResult, displays: [DisplayInfo]) {
         guard running,configured,!fullScreen else { borderPin=nil; border.hide(); return }
+        let visible=result.windows.filter { tracesFocusBorder($0,displays:displays) }
+        let rest=visible.map { ($0.wid,$0.frame) }
         if let pin=borderPin {
-            if let wid=result.focused,wid != pin,
-               let window=result.windows.first(where:{ $0.wid == wid }),
-               tracesFocusBorder(window,displays:displays) {
-                borderPin=nil
-            } else if let window=result.windows.first(where:{ $0.wid == pin }),
-                      tracesFocusBorder(window,displays:displays,pinned:true) {
-                border.show(window.frame,wid:pin)
+            if let window=result.windows.first(where:{ $0.wid == pin }),
+               tracesFocusBorder(window,displays:displays,pinned:true) {
+                paintBorders(focused:(pin,window.frame),rest:rest)
                 hoverWid=pin
                 if !window.ownedHidden,result.focused == pin { borderPin=nil }
                 return
-            } else { return }
+            }
+            borderPin=nil
         }
         if let wid=result.focused,
            let window=result.windows.first(where:{ $0.wid == wid }),
            tracesFocusBorder(window,displays:displays) {
-            border.show(window.frame,wid:wid)
+            paintBorders(focused:(wid,window.frame),rest:rest)
             hoverWid=wid
             return
         }
-        // Keep the hover filter honest about what actually holds focus.
         hoverWid=result.focused
-        border.hide()
+        paintBorders(focused:nil,rest:rest)
     }
-    // An explicit focus request has already placed that window. Trace it now
-    // and keep it until a scan sees the same window, so a stale observation of
-    // the outgoing workspace cannot put the overlay back.
     private func tracePlan(_ plan: Plan) {
         guard running,configured,!fullScreen else { return }
+        let rest=plan.frames.map { ($0.wid,$0.frame) }
         if let id=plan.focus,let chosen=plan.frames.first(where:{ $0.wid == id }) {
             borderPin=id
-            border.show(chosen.frame,wid:id)
+            paintBorders(focused:(id,chosen.frame),rest:rest)
             hoverWid=id
             return
         }
         if let id=borderPin ?? hoverWid,plan.hide.contains(id) {
-            borderPin=nil; border.hide(); hoverWid=nil
+            borderPin=nil; hoverWid=nil
         }
+        let focus=(borderPin ?? hoverWid).flatMap { id in rest.first { $0.0 == id } }
+        paintBorders(focused:focus,rest:rest)
     }
     // Focus follows the mouse: the helper only reports it when the config asked
     // for it, and policy decides whether the window may take focus.
@@ -525,6 +542,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard running,configured,!dryRun,!fullScreen else { return }
         switch phase {
         case .begin:
+            if mode == .raise {
+                axQueue.async { [weak self] in
+                    let wid=self?.store.window(at:point)
+                    DispatchQueue.main.async {
+                        guard let self=self,self.running,let wid=wid else { return }
+                        self.sendObject(["type":"pointerFocus","wid":wid])
+                    }
+                }
+                return
+            }
             resetPointerCoalescer()
             axQueue.async { [weak self] in
                 guard let self=self else { return }
@@ -564,12 +591,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let apps=descriptors()
         guard !apps.isEmpty else { scheduleScan(); return }
         scanInFlight=true; scanAgain=false; sequence += 1
+        axBusySince=axBusySince ?? Date()
         let seq=sequence, ep=currentEpoch, token=runToken
         axQueue.async { [weak self] in
             guard let self=self else { return }
             let result=self.store.scan(apps:apps,displays:displays,generation:seq,epoch:ep)
+            let prints=self.store.fingerprints()
             DispatchQueue.main.async {
                 self.scanInFlight=false
+                if self.axBusySince != nil { self.axBusySince=nil }
                 guard self.running,self.configured,self.runToken == token,self.currentEpoch == ep else {
                     if self.running { self.scheduleScan() }; return
                 }
@@ -579,9 +609,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if self.fullScreen {
                     self.setStatus("Native full-screen; tiling suspended")
                 } else {
+                    var restore=self.sendCheckpoint ? self.checkpoint : nil
+                    if self.sendCheckpoint,restore==nil {
+                        restore=self.loadSession(prints:prints,epoch:ep)
+                    }
                     let snapshot=Snapshot(generation:seq,epoch:ep,screens:displays,
-                      windows:result.windows,focused:result.focused,
-                      restore:self.sendCheckpoint ? self.checkpoint : nil)
+                      windows:result.windows,focused:result.focused,restore:restore)
                     self.sendCheckpoint=false; self.latestSent=seq; self.lastSnapshot=snapshot
                     self.send(snapshot); self.updateKeyState()
                     if self.dumpNext { self.dumpNext=false; self.writeSnapshot(snapshot) }
@@ -737,6 +770,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _=restored.wait(timeout:.now()+4)
         return .terminateNow
     }
+    private func persistSession(_ checkpoint: JSONValue, prints: [WindowPrint]) {
+        let file=SessionFile(checkpoint:checkpoint,prints:prints)
+        do {
+            let data=try JSONEncoder().encode(file)
+            try data.write(to:Paths.session,options:.atomic)
+            try FileManager.default.setAttributes([.posixPermissions:0o600],ofItemAtPath:Paths.session.path)
+        } catch { logMessage("Session write failed: \(error)") }
+    }
+    private func loadSession(prints: [WindowPrint], epoch: Int) -> JSONValue? {
+        guard let data=try? Data(contentsOf:Paths.session),
+              let file=try? JSONDecoder().decode(SessionFile.self,from:data) else { return nil }
+        let map=matchWindowPrints(old:file.prints,new:prints)
+        guard !map.isEmpty else { return nil }
+        return remapCheckpoint(file.checkpoint,map:map,epoch:epoch)
+    }
     func applicationWillTerminate(_ notification: Notification) {
         if lockFD >= 0 {
             try? FileManager.default.removeItem(at:Paths.status)
@@ -754,10 +802,10 @@ struct XMonadMacMain {
         if let i=args.firstIndex(of:"--validate-config"),i+1<args.count {
             do {
                 let data=try Data(contentsOf:URL(fileURLWithPath:args[i+1]))
-                guard case .configure(let version,let keys,let mouseMask,_)=try JSONDecoder().decode(EngineMessage.self,from:data), version == 1 else {
+                guard case .configure(let version,let keys,let mouse,_)=try JSONDecoder().decode(EngineMessage.self,from:data), version == 1 else {
                     throw WireError.invalid("Expected protocol-1 configure object")
                 }
-                for key in keys { try validateBinding(key) }; try validatePointerMask(mouseMask)
+                for key in keys { try validateBinding(key) }; try validateMouseBindings(mouse)
                 guard Set(keys).count == keys.count else { throw WireError.invalid("Duplicate key bindings") }
                 print("Validated \(keys.count) native key bindings")
                 return

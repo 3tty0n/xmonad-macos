@@ -14,6 +14,7 @@ main = xmonad $ def
   -- spacing 4 means a four-point inset on each window edge (eight between tiles).
   , borderWidth = 1                -- 0 disables this
   , focusedBorderColor = "#ff0000" -- "#61afef"
+  , normalBorderColor = "#dddddd"
   , focusFollowsMouse = False      -- Default: True
   , layoutHook = spacing 5 $
       Tall 1 (3/100) (1/2)
@@ -32,3 +33,5 @@ main = xmonad $ def
     , ("M-S-p", pause)
     , ("M-S-m", windows W.shiftMaster)
     ]
+  `additionalMouseBindings`
+    [ ((mod1Mask, button2), MouseRaise) ]

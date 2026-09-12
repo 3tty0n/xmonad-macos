@@ -15,8 +15,10 @@ import System.Process
 -- Any deliberate change to the window set is also a focus request: the user
 -- asked for it, so the helper may raise and activate the result.
 windows :: (WindowSet -> WindowSet) -> X ()
-windows f = modify $ \s -> s
-  {windowset=f (windowset s), focusRequested=True, focusAgeTicks=0}
+windows f = modify $ \s ->
+  let ws'=f (windowset s)
+      n=nextActionId s+1
+  in s {windowset=ws', nextActionId=n, pendingFocus=(,) n <$> W.peek ws'}
 
 withWindowSet :: (WindowSet -> X a) -> X a
 withWindowSet f = gets windowset >>= f

@@ -105,6 +105,8 @@ struct Plan: Decodable {
     var focus: UInt64?, workspace: String, layout: String, checkpoint: JSONValue
     var workspaces: [WorkspaceInfo]?
     var screen: Int?
+    var action: Int?
+    var focusForMs: Int?
 }
 // xmobar-style row: every workspace that holds windows, plus the current one.
 // "[2]" is current, a bare tag has windows, so an empty desktop stays quiet.
@@ -146,32 +148,48 @@ enum WireError: Error, CustomStringConvertible {
 struct Appearance {
     var borderWidth=0
     var borderColor="#ff0000"
+    var normalBorderColor="#dddddd"
     var focusFollowsMouse=false
+    var mouse: [MouseBind]=[]
+}
+enum PointerMode: String, Codable { case move, resize, raise }
+struct MouseBind: Codable, Equatable {
+    var mask: Int, button: Int, action: PointerMode
 }
 enum EngineMessage: Decodable {
-    case configure(Int, [KeyBinding], Int, Appearance), plan(Plan)
+    case configure(Int, [KeyBinding], [MouseBind], Appearance), plan(Plan)
     case command(String, UInt64?), pong
     private enum CodingKeys: String, CodingKey {
-        case type, `protocol`, keys, mouseMask, name, wid
-        case borderWidth, borderColor, focusFollowsMouse
+        case type, `protocol`, keys, mouseMask, mouse, name, wid
+        case borderWidth, borderColor, normalBorderColor, focusFollowsMouse
+        case mask, button, action
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         switch try c.decode(String.self, forKey: .type) {
         case "configure":
+            let mouse=try EngineMessage.decodeMouse(c)
             let look=Appearance(
               borderWidth: try c.decodeIfPresent(Int.self,forKey:.borderWidth) ?? 0,
               borderColor: try c.decodeIfPresent(String.self,forKey:.borderColor) ?? "#ff0000",
-              focusFollowsMouse: try c.decodeIfPresent(Bool.self,forKey:.focusFollowsMouse) ?? false)
+              normalBorderColor: try c.decodeIfPresent(String.self,forKey:.normalBorderColor) ?? "#dddddd",
+              focusFollowsMouse: try c.decodeIfPresent(Bool.self,forKey:.focusFollowsMouse) ?? false,
+              mouse:mouse)
             self = .configure(try c.decode(Int.self,forKey:.protocol),
                               try c.decode([KeyBinding].self,forKey:.keys),
-                              try c.decodeIfPresent(Int.self,forKey:.mouseMask) ?? 0,look)
+                              mouse,look)
         case "plan": self = .plan(try Plan(from: decoder))
         case "command": self = .command(try c.decode(String.self,forKey:.name),
                                          try c.decodeIfPresent(UInt64.self,forKey:.wid))
         case "pong": self = .pong
         default: throw WireError.invalid("Unknown engine message")
         }
+    }
+    private static func decodeMouse(_ c: KeyedDecodingContainer<CodingKeys>) throws -> [MouseBind] {
+        if let mouse=try c.decodeIfPresent([MouseBind].self,forKey:.mouse),!mouse.isEmpty { return mouse }
+        let mask=try c.decodeIfPresent(Int.self,forKey:.mouseMask) ?? 0
+        return [MouseBind(mask:mask,button:1,action:.move),
+                MouseBind(mask:mask,button:3,action:.resize)]
     }
 }
 struct PlanSafety {
@@ -240,6 +258,16 @@ func validatePointerMask(_ mask: Int) throws {
     try validateModifierMask(mask)
     guard mask != 0 else { throw WireError.invalid("Pointer modifier mask must not be zero") }
 }
+func validateMouseBindings(_ binds: [MouseBind]) throws {
+    guard !binds.isEmpty else { throw WireError.invalid("No mouse bindings") }
+    var seen=Set<String>()
+    for b in binds {
+        try validatePointerMask(b.mask)
+        guard (1...32).contains(b.button) else { throw WireError.invalid("Unsupported mouse button \(b.button)") }
+        let key="\(b.mask):\(b.button)"
+        guard seen.insert(key).inserted else { throw WireError.invalid("Duplicate mouse binding \(key)") }
+    }
+}
 func validateBinding(_ key: KeyBinding) throws {
     try validateModifierMask(key.mask)
     guard keyCodeForSym[key.sym] != nil else {
@@ -248,4 +276,61 @@ func validateBinding(_ key: KeyBinding) throws {
     guard key.mask != 0 || key.sym >= 0xff00 else {
         throw WireError.invalid("Unmodified printable global shortcuts are disabled")
     }
+}
+struct WindowPrint: Codable, Equatable {
+    var wid: UInt64, pid: Int32, launch: Double, bundle: String
+    var identifier: String, title: String, frame: Rect
+}
+func matchWindowPrints(old: [WindowPrint], new: [WindowPrint]) -> [UInt64:UInt64] {
+    var map: [UInt64:UInt64]=[:], taken=Set<UInt64>()
+    func unique(_ pred: (WindowPrint,WindowPrint) -> Bool) {
+        for o in old where map[o.wid] == nil {
+            let hits=new.filter { pred(o,$0) && !taken.contains($0.wid) }
+            if hits.count == 1,let n=hits.first { map[o.wid]=n.wid; taken.insert(n.wid) }
+        }
+    }
+    unique { !$0.identifier.isEmpty && $0.bundle==$1.bundle && $0.identifier==$1.identifier }
+    unique { $0.bundle==$1.bundle && $0.title==$1.title && $0.frame.near($1.frame,tolerance:8) }
+    return map
+}
+func remapCheckpoint(_ value: JSONValue, map: [UInt64:UInt64], epoch: Int) -> JSONValue {
+    func mapId(_ v: JSONValue) -> JSONValue {
+        if case .number(let n)=v,let w=map[UInt64(n)] { return .number(Double(w)) }
+        return .null
+    }
+    func mapIds(_ v: JSONValue) -> JSONValue {
+        guard case .array(let a)=v else { return v }
+        return .array(a.compactMap {
+            if case .number(let n)=$0,let w=map[UInt64(n)] { return JSONValue.number(Double(w)) }
+            return nil
+        })
+    }
+    func walk(_ v: JSONValue) -> JSONValue {
+        switch v {
+        case .object(let o):
+            var n=o
+            if let w=o["savedWindows"] { n["savedWindows"]=mapIds(w) }
+            if o["savedFocus"] != nil { n["savedFocus"]=mapId(o["savedFocus"]!) }
+            if let fl=o["savedFloats"],case .array(let rows)=fl {
+                n["savedFloats"] = .array(rows.compactMap { row -> JSONValue? in
+                    guard case .array(let cols)=row,let first=cols.first,
+                          case .number(let n0)=first,let w=map[UInt64(n0)] else { return nil }
+                    var c=cols; c[0] = .number(Double(w)); return .array(c)
+                })
+            }
+            if o["savedEpoch"] != nil { n["savedEpoch"] = .number(Double(epoch)) }
+            if let ws=o["savedWorkspaces"] { n["savedWorkspaces"]=walk(ws) }
+            return .object(n)
+        case .array(let a): return .array(a.map(walk))
+        default: return v
+        }
+    }
+    return walk(value)
+}
+struct SessionFile: Codable {
+    var checkpoint: JSONValue
+    var prints: [WindowPrint]
+}
+func resizeFloor(_ minSize: (Int,Int)?) -> (Int,Int) {
+    (max(1,minSize?.0 ?? 80), max(1,minSize?.1 ?? 60))
 }

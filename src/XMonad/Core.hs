@@ -20,6 +20,7 @@ import Data.Typeable
 import Data.Monoid (Endo(..), All(..))
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
+import Data.Maybe (isJust)
 import System.IO (hPutStrLn, stderr)
 
 type WindowSet = W.StackSet WorkspaceId (Layout Window) Window ScreenId ScreenDetail
@@ -51,7 +52,9 @@ data XConfig l = XConfig
   -- given one, so it is an overlay following the focused window. Zero is off.
   , borderWidth :: Int
   , focusedBorderColor :: String
+  , normalBorderColor :: String
   , focusFollowsMouse :: Bool
+  , mouseBindings :: XConfig Layout -> M.Map (KeyMask, Button) MouseAction
   }
 data XConf = XConf { config :: XConfig Layout }
 
@@ -65,10 +68,16 @@ data XState = XState
   , ignoredWindows :: S.Set Window
   , generation :: Int
   , epoch :: Int
-  , focusRequested :: Bool
-  , focusAgeTicks :: Int
+  -- (action id, window) for an explicit focus request; Nothing once acked,
+  -- expired, or superseded by a later user focus.
+  , pendingFocus :: Maybe (Int, Window)
+  , nextActionId :: Int
+  -- Display ID -> workspace tag, including displays that are currently gone.
+  , displayAffinity :: M.Map Int WorkspaceId
   , commands :: [NativeCommand]
   }
+focusRequested :: XState -> Bool
+focusRequested = isJust . pendingFocus
 runX :: XConf -> XState -> X a -> IO (a, XState)
 runX c s (X a) = runStateT (runReaderT a c) s
 

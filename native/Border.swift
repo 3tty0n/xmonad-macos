@@ -2,41 +2,58 @@
 import AppKit
 
 // A window belonging to another application cannot be given a border, so the
-// focused one is traced by a click-through overlay of our own that follows it.
+// helper traces them with click-through overlays of its own.
 final class BorderOverlay {
-    private var panel: NSPanel?
     private var width=0
-    private var color=NSColor.systemRed
-    private var current: Rect?
-    private var currentWid: UInt64?
+    private var focusedColor=NSColor.systemRed
+    private var normalColor=NSColor(white:0.85,alpha:1)
+    private var focused: NSPanel?
+    private var others: [UInt64:NSPanel]=[:]
+    private var spare: [NSPanel]=[]
 
-    func configure(width: Int, color hex: String) {
+    func configure(width: Int, color hex: String, normal: String = "#dddddd") {
         self.width=max(0,min(width,16))
-        self.color=BorderOverlay.parse(hex) ?? .systemRed
+        self.focusedColor=BorderOverlay.parse(hex) ?? .systemRed
+        self.normalColor=BorderOverlay.parse(normal) ?? NSColor(white:0.85,alpha:1)
         if self.width == 0 { hide() }
-        else if let r=current,let id=currentWid { current=nil; show(r,wid:id) }
     }
-    // Top-left global coordinates, as everything else in the bridge uses.
-    func show(_ rect: Rect, wid: UInt64) {
-        guard width > 0 else { return }
-        let p=panel ?? make()
-        if rect != current {
-            current=rect
-            p.setFrame(BorderOverlay.appKitFrame(rect,inset:CGFloat(width)),display:true)
+    func show(_ rect: Rect, wid: UInt64) { paint(focused:(wid,rect),rest:[]) }
+    func paint(focused: (UInt64,Rect)?, rest: [(UInt64,Rect)]) {
+        guard width > 0 else { hide(); return }
+        if let (id,rect)=focused { self.focused=place(self.focused,rect:rect,color:focusedColor,wid:id) }
+        else { retire(&self.focused) }
+        let skip=focused?.0
+        var next: [UInt64:NSPanel]=[:]
+        for (id,rect) in rest where id != skip {
+            next[id]=place(others.removeValue(forKey:id),rect:rect,color:normalColor,wid:id)
         }
-        // Raise on every observation. Full stacks every window at the same
-        // frame; Electron sits at pop-up level; Chrome reorders its content
-        // window above a same-level overlay on each keystroke. alphaValue, not
-        // orderOut: re-inserting the panel after a workspace switch is what
-        // made the border lag the windows that were already back.
-        currentWid=wid
-        p.alphaValue=1
-        p.orderFrontRegardless()
+        for p in others.values { retire(p); spare.append(p) }
+        others=next
     }
     func hide() {
-        current=nil
-        currentWid=nil
-        panel?.alphaValue=0
+        retire(&focused)
+        for p in others.values { retire(p); spare.append(p) }
+        others=[:]
+        spare.forEach(retire)
+    }
+    private func place(_ existing: NSPanel?, rect: Rect, color: NSColor, wid: UInt64) -> NSPanel {
+        _=wid
+        let p=existing ?? spare.popLast() ?? make()
+        p.setFrame(BorderOverlay.appKitFrame(rect,inset:CGFloat(width)),display:true)
+        (p.contentView as? BorderView)?.color=color
+        (p.contentView as? BorderView)?.lineWidth=CGFloat(width)
+        p.contentView?.needsDisplay=true
+        p.alphaValue=1
+        p.orderFrontRegardless()
+        return p
+    }
+    private func retire(_ panel: inout NSPanel?) {
+        if let p=panel { retire(p); spare.append(p) }
+        panel=nil
+    }
+    private func retire(_ p: NSPanel) {
+        p.alphaValue=0
+        p.setFrame(.zero,display:false)
     }
     private func make() -> NSPanel {
         let p=NSPanel(contentRect:.zero,styleMask:[.borderless,.nonactivatingPanel],
@@ -49,20 +66,12 @@ final class BorderOverlay {
         p.isReleasedWhenClosed=false
         p.animationBehavior = .none
         p.alphaValue=0
-        // floatingWindow (3) sits under Electron's pop-up-level (101) content
-        // windows. overlayWindow (102) is the public level above those.
         p.level=NSWindow.Level(Int(CGWindowLevelForKey(.overlayWindow)))
         p.collectionBehavior=[.canJoinAllSpaces,.stationary,.ignoresCycle,.fullScreenNone]
-        let view=BorderView()
-        view.owner=self
-        p.contentView=view
-        panel=p
+        p.contentView=BorderView()
         return p
     }
-    fileprivate var stroke: (NSColor,CGFloat) { (color,CGFloat(width)) }
 
-    // AppKit measures from the bottom-left of the primary display; the bridge
-    // measures from its top-left. The overlay sits just outside the window.
     static func appKitFrame(_ r: Rect,inset: CGFloat) -> NSRect {
         let top=(NSScreen.screens.first { $0.frame.origin == .zero } ?? NSScreen.screens.first)?
           .frame.maxY ?? 0
@@ -80,13 +89,13 @@ final class BorderOverlay {
 }
 
 private final class BorderView: NSView {
-    weak var owner: BorderOverlay?
+    var color=NSColor.systemRed
+    var lineWidth: CGFloat=1
     override func draw(_ dirty: NSRect) {
-        guard let (color,width)=owner?.stroke,width > 0 else { return }
-        // macOS windows are rounded, so a square trace would show at the corners.
-        let path=NSBezierPath(roundedRect:bounds.insetBy(dx:width/2,dy:width/2),
+        guard lineWidth > 0 else { return }
+        let path=NSBezierPath(roundedRect:bounds.insetBy(dx:lineWidth/2,dy:lineWidth/2),
                               xRadius:10,yRadius:10)
-        path.lineWidth=width
+        path.lineWidth=lineWidth
         color.setStroke()
         path.stroke()
     }

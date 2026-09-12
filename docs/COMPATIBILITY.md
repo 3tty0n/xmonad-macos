@@ -77,8 +77,8 @@ focused one, so switching to it hides nothing at all.
 | `keys` / `additionalKeys(P)` / `removeKeys(P)` | Single stroke only; unsupported keys are a hard error |
 | `mod1Mask` / `mod4Mask` | Option / Command; Control and Shift also work |
 | Other X modifier masks | The constants exist, but key validation rejects them |
-| Built-in mouse drag | `modMask` + left to move, right to resize; feeds `W.float` |
-| Configurable `mouseBindings` | Not implemented — the two built-in gestures are fixed |
+| Built-in mouse drag | Default `mouseBindings`: `modMask` + left to move, right to resize; feeds `W.float` |
+| Configurable `mouseBindings` | Implemented: `move`, `resize`, `raise`; compose with `additionalMouseBindings` |
 | Keyboard-layout character resolution, chords | Not implemented; bindings are physical key positions |
 
 ## Windows and displays
@@ -87,11 +87,11 @@ focused one, so switching to it hides nothing at all.
 |---|---|
 | Workspaces across displays | Uses `W.view` / `greedyView` with stable display IDs |
 | State across a config reload | Workspace, layout, and float state survive inside one helper |
-| State across a helper restart | Not implemented; only the ownership journal persists |
+| State across a helper restart | Restored by matching public fingerprints (bundle + `AXIdentifier`, or unique title and frame); ambiguous windows are left unmatched |
 | Native tabs, tab grouping, Stage Manager, moving windows between Spaces | Not implemented |
 | Dialogs and floating panels | Floated at their observed size when AX position is settable; sheets and popovers are not managed |
 | `borderWidth`, `focusedBorderColor` | A click-through overlay at the public overlay window level, raised on every scan; another app's window cannot be given a real border |
-| `normalBorderColor` | Not implemented; unfocused windows get no border |
+| `normalBorderColor` | Unfocused managed windows get the same overlay in this colour |
 | `focusFollowsMouse` | Implemented; on by default, as upstream |
 
 ## Displays
@@ -100,7 +100,7 @@ focused one, so switching to it hides nothing at all.
 |---|---|
 | Multiple screens | Supported: one workspace per display, per-display layout |
 | `screenWorkspace`, `M-w`/`M-e`/`M-r` | Work as upstream |
-| Hotplug | Workspaces survive unplug and return on replug by display ID |
+| Hotplug | Workspaces survive unplug and return on replug by display ID, including a remembered assignment while the display is gone |
 | Xinerama-specific config | Not applicable; screens come from `NSScreen` |
 
 ## Not supported, deliberately

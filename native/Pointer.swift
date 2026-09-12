@@ -2,14 +2,14 @@
 import Foundation
 import CoreGraphics
 
-enum PointerMode: String { case move, resize }
 enum PointerPhase { case begin, drag, end }
 
 final class PointerTap {
     private let lock = NSLock()
-    private var modifierMask = 0
+    private var bindings: [MouseBind]=[]
     private var enabled = false
     private var activeMode: PointerMode?
+    private var activeButton=0
     private var port: CFMachPort?
     private var runLoop: CFRunLoop?
     private var thread: Thread?
@@ -21,16 +21,16 @@ final class PointerTap {
     var onReady: (() -> Void)?
     var onFailure: ((String) -> Void)?
 
-    func configure(modifierMask: Int) throws {
-        try validatePointerMask(modifierMask)
-        lock.lock(); self.modifierMask = modifierMask; lock.unlock()
+    func configure(bindings: [MouseBind]) throws {
+        try validateMouseBindings(bindings)
+        lock.lock(); self.bindings = bindings; lock.unlock()
     }
     func setEnabled(_ value: Bool) {
         lock.lock(); enabled=value
-        if !value { activeMode=nil }
+        if !value { activeMode=nil; activeButton=0 }
         lock.unlock()
     }
-    func cancelGesture() { lock.lock(); activeMode=nil; lock.unlock() }
+    func cancelGesture() { lock.lock(); activeMode=nil; activeButton=0; lock.unlock() }
     func setHover(_ value: Bool) { lock.lock(); hoverEnabled=value; lock.unlock() }
     func start() {
         guard thread == nil else { return }
@@ -38,6 +38,7 @@ final class PointerTap {
             guard let self=self else { return }
             let types: [CGEventType] = [.leftMouseDown,.leftMouseDragged,.leftMouseUp,
                                         .rightMouseDown,.rightMouseDragged,.rightMouseUp,
+                                        .otherMouseDown,.otherMouseDragged,.otherMouseUp,
                                         .mouseMoved]
             let mask=types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
             let context=Unmanaged.passUnretained(self).toOpaque()
@@ -88,31 +89,28 @@ final class PointerTap {
             return Unmanaged.passUnretained(event)
         }
         lock.lock()
-        let isEnabled=enabled, wanted=modifierMask
-        var mode=activeMode
+        let isEnabled=enabled, binds=bindings
+        let down = type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown
+        let up = type == .leftMouseUp || type == .rightMouseUp || type == .otherMouseUp
+        let button: Int
         switch type {
-        case .leftMouseDown:
-            if isEnabled && modifierBits(event.flags) == wanted { mode = .move; activeMode=mode }
-        case .rightMouseDown:
-            if isEnabled && modifierBits(event.flags) == wanted { mode = .resize; activeMode=mode }
-        default: break
+        case .leftMouseDown,.leftMouseDragged,.leftMouseUp: button=1
+        case .rightMouseDown,.rightMouseDragged,.rightMouseUp: button=3
+        default: button=Int(event.getIntegerValueField(.mouseEventButtonNumber))
         }
-        let active=mode
-        let matching: Bool
-        switch (active,type) {
-        case (.move?,.leftMouseDown),(.move?,.leftMouseDragged),(.move?,.leftMouseUp),
-             (.resize?,.rightMouseDown),(.resize?,.rightMouseDragged),(.resize?,.rightMouseUp): matching=true
-        default: matching=false
+        if down,isEnabled,let bind=binds.first(where:{ $0.mask == modifierBits(event.flags) && $0.button == button }) {
+            activeMode=bind.action; activeButton=button
         }
-        if type == .leftMouseUp || type == .rightMouseUp { activeMode=nil }
+        let active=activeMode
+        let matching=active != nil && button == activeButton
+        if up { activeMode=nil; activeButton=0 }
         lock.unlock()
         guard matching,let active=active else { return Unmanaged.passUnretained(event) }
-        let phase: PointerPhase
-        switch type {
-        case .leftMouseDown,.rightMouseDown: phase = .begin
-        case .leftMouseUp,.rightMouseUp: phase = .end
-        default: phase = .drag
+        if active == .raise {
+            if down { DispatchQueue.main.async { [weak self] in self?.onPointer?(.raise,.begin,location) } }
+            return nil
         }
+        let phase: PointerPhase = down ? .begin : (up ? .end : .drag)
         DispatchQueue.main.async { [weak self] in self?.onPointer?(active,phase,location) }
         return nil
     }
