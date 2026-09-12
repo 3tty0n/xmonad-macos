@@ -67,9 +67,9 @@ main = xmonad $ def
 The border is an overlay window of the helper's own, because AX cannot give
 another application's window a border. It is click-through, sits at the
 public overlay window level so Electron content windows (Claude Desktop,
-Codex) do not cover it, is raised on every scan so Chrome cannot bury it, and
-follows the window as the helper observes it move, so it lags a fast drag
-slightly.
+Codex) do not cover it, is raised when a focus request is applied and on
+every later scan so Chrome cannot bury it, and follows the window as the
+helper observes it move, so it lags a fast drag slightly.
 
 ## Several displays
 

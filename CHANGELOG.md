@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- The focus border no longer lags a workspace switch, and no longer jumps back
+  onto the window that just lost focus. Only an explicit focus request pins the
+  overlay; ordinary placement plans leave it alone, and a restore still reports
+  `ownedHidden` until a later scan agrees. The panel stays ordered with
+  `alphaValue` rather than leaving the window list.
+
 - Finder windows stay on the workspace that owns them. A hide is journaled
   against the process instance that owns the window, so PID reuse cannot make
   a later process look like its owner, and the instance came from

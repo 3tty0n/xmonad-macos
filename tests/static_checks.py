@@ -34,6 +34,12 @@ check('reply(toApplicationShouldTerminate' not in app and 'restored.wait(timeout
       'Quit must bound its wait instead of replying on the undrained main queue')
 border=(root/'native/Border.swift').read_text()
 check('overlayWindow' in border and 'orderFrontRegardless' in border,'Focus border must sit above Electron overlay windows')
+check('animationBehavior' in border and 'alphaValue' in border,
+      'Focus border must not orderOut and fade back in after a workspace switch')
+check('tracesFocusBorder' in wire and 'tracesFocusBorder' in app,
+      'Focus border visibility is decided by a portable helper')
+check('borderPin' in app and 'plan.focus' in app,
+      'Focus border pins only to an explicit focus request, not every plan')
 check('_AXUIElementGetWindow' not in ax and not re.search(r'\b_?(?:CGS|SLS)[A-Z]\w*\s*\(', ax),'Private API introduced')
 engine=(root/'src/XMonad/MacOS/Engine.hs').read_text()
 check('focusAgeTicks base < 4' in engine,'Bound focus retry lifetime')

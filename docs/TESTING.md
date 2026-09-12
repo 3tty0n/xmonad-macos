@@ -10,8 +10,8 @@ make check          # everything below
 
 | Suite | What it covers |
 |---|---|
-| `tests/WireTests.swift` | 174 checks: signed coordinate conversion, displays above/left/below the primary, no double Retina scaling, display selection, JSON fields, popup subroles, Chrome CGWindow omission, Finder hide verification, process instance identity, key mapping, plan validation |
-| `tests/static_checks.py` | 211 source and packaging checks |
+| `tests/WireTests.swift` | 179 checks: signed coordinate conversion, displays above/left/below the primary, no double Retina scaling, display selection, JSON fields, popup subroles, Chrome CGWindow omission, Finder hide verification, process instance identity, key mapping, plan validation, focus-border tracing during restore |
+| `tests/static_checks.py` | 214 source and packaging checks |
 | `tests/ops_smoke.sh` | The installed recompile is atomic; a simulated build failure preserves the previous engine byte-for-byte |
 | `tests/CoreTests.hs` | StackSet focus/swap/shift/uniqueness, `Tall` geometry and area, `Full` stacking, `Choose` cycling, user vs. WM minimization, ignore, dialog floats, multiple displays, hotplug, checkpoints, observed focus on mapped workspaces, key parsing, JSON |
 | `tests/integration.py` | Runs the shipped config as a real engine and drives focus, mouse-float, dialog-float, layout, shift, view, checkpoint, and ping over NDJSON |

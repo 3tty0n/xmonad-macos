@@ -108,6 +108,14 @@ import Foundation
         check(parksByMinimizing("com.apple.finder"),"Finder hides by minimizing")
         check(!parksByMinimizing("com.apple.Safari") && !parksByMinimizing("com.google.Chrome"),
               "other apps still park first")
+        check(tracesFocusBorder(wi,displays:screen),"visible window is traced")
+        var restoring=wi; restoring.ownedHidden=true
+        check(!tracesFocusBorder(restoring,displays:screen),"owned hide is not traced as focus")
+        check(tracesFocusBorder(restoring,displays:screen,pinned:true),"pinned restore still traces an on-screen window")
+        restoring.frame=parked
+        check(!tracesFocusBorder(restoring,displays:screen,pinned:true),"parked window is not traced")
+        var mini=wi; mini.minimized=true
+        check(!tracesFocusBorder(mini,displays:screen),"minimized window is not traced")
         // Finder has no NSRunningApplication launch date, and a hide without a
         // process instance is refused. Every live process has a start time.
         let started=processStartTime(getpid())

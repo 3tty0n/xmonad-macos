@@ -109,6 +109,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pointerPendingPoint: CGPoint?
     private var pointerPendingEnd: CGPoint?
     private var sequence=0, currentEpoch=0, latestSent = -1
+    // Set only for an explicit focus request. Ordinary plans must not move the
+    // overlay, or a later scan of the outgoing window puts it on the old one.
+    private var borderPin: UInt64?
     private var lastResponse=Date()
     private var checkpoint: JSONValue?
     private var sendCheckpoint=false
@@ -405,7 +408,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             setStatus("\(row) · \(plan.layout)")
             axQueue.async { [weak self] in
                 guard let self=self else { return }
-                do { try self.store.apply(plan) }
+                do {
+                    let applied=try self.store.apply(plan)
+                    DispatchQueue.main.async {
+                        guard applied,self.running,self.configured else { return }
+                        self.tracePlan(plan)
+                    }
+                }
                 catch {
                     DispatchQueue.main.async { self.pause(reason:"Unsafe plan rejected: \(error)") }
                 }
@@ -457,15 +466,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     // Draw the focused window's border where the scan just saw it.
-    private func traceFocus(_ result: ScanResult) {
-        guard running,configured,!fullScreen,
-              let wid=result.focused,
-              let window=result.windows.first(where:{ $0.wid == wid }),
-              !window.minimized,!window.ownedHidden
-        else { border.hide(); hoverWid=result.focused; return }
-        border.show(window.frame,wid:wid)
+    private func traceFocus(_ result: ScanResult, displays: [DisplayInfo]) {
+        guard running,configured,!fullScreen else { borderPin=nil; border.hide(); return }
+        if let pin=borderPin {
+            if let wid=result.focused,wid != pin,
+               let window=result.windows.first(where:{ $0.wid == wid }),
+               tracesFocusBorder(window,displays:displays) {
+                borderPin=nil
+            } else if let window=result.windows.first(where:{ $0.wid == pin }),
+                      tracesFocusBorder(window,displays:displays,pinned:true) {
+                border.show(window.frame,wid:pin)
+                hoverWid=pin
+                if !window.ownedHidden,result.focused == pin { borderPin=nil }
+                return
+            } else { return }
+        }
+        if let wid=result.focused,
+           let window=result.windows.first(where:{ $0.wid == wid }),
+           tracesFocusBorder(window,displays:displays) {
+            border.show(window.frame,wid:wid)
+            hoverWid=wid
+            return
+        }
         // Keep the hover filter honest about what actually holds focus.
-        hoverWid=wid
+        hoverWid=result.focused
+        border.hide()
+    }
+    // An explicit focus request has already placed that window. Trace it now
+    // and keep it until a scan sees the same window, so a stale observation of
+    // the outgoing workspace cannot put the overlay back.
+    private func tracePlan(_ plan: Plan) {
+        guard running,configured,!fullScreen else { return }
+        if let id=plan.focus,let chosen=plan.frames.first(where:{ $0.wid == id }) {
+            borderPin=id
+            border.show(chosen.frame,wid:id)
+            hoverWid=id
+            return
+        }
+        if let id=borderPin ?? hoverWid,plan.hide.contains(id) {
+            borderPin=nil; border.hide(); hoverWid=nil
+        }
     }
     // Focus follows the mouse: the helper only reports it when the config asked
     // for it, and policy decides whether the window may take focus.
@@ -535,7 +575,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 self.fullScreen=result.nativeFullScreen
                 self.updateKeyState()
-                self.traceFocus(result)
+                self.traceFocus(result,displays:displays)
                 if self.fullScreen {
                     self.setStatus("Native full-screen; tiling suspended")
                 } else {
@@ -565,6 +605,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private func spaceChanged() {
         currentEpoch += 1; checkpoint=nil; latestSent = -1; fullScreen=false
+        borderPin=nil
         let ep=currentEpoch
         keyboard.setEnabled(false); pointer.setEnabled(false)
         axQueue.async { [weak self] in
@@ -574,7 +615,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     private func pause(reason: String) {
         running=false; scanWork?.cancel(); scanWork=nil; scanAgain=false; resetPointerCoalescer()
-        border.hide()
+        borderPin=nil; border.hide()
         stopEngine(); setStatus(reason); logMessage(reason)
         if store != nil { axQueue.async { [weak self] in self?.store.cancelPointerDrag(); self?.store.restoreAll() } }
     }

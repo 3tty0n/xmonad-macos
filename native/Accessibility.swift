@@ -651,13 +651,14 @@ final class AXStore {
             logMessage("Window \(r.wid) constrained requested=\(target) actual=\(observed), AX=\(e1.rawValue)/\(e2.rawValue)/\(e3.rawValue)")
         }
     }
-    func apply(_ p: Plan) throws {
+    @discardableResult
+    func apply(_ p: Plan) throws -> Bool {
         guard p.epoch == activeEpoch,p.generation == latestGeneration else {
             if !p.hide.isEmpty {
                 logMessage("Dropped plan gen=\(p.generation)/\(latestGeneration) "
                   + "epoch=\(p.epoch)/\(activeEpoch) hide=\(p.hide)")
             }
-            return
+            return false
         }
         try PlanSafety.validate(p,active:active)
         // Restore and place destinations before hiding sources. Only deliberate
@@ -682,6 +683,7 @@ final class AXStore {
             AXUIElementPerformAction(r.element,kAXRaiseAction as CFString)
         }
         if let screen=p.screen { followScreen(screen) }
+        return true
     }
     // The current screen is a policy idea with no macOS counterpart: with no
     // window to focus on the display it moved to, nothing would tell the system

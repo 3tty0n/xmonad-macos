@@ -56,6 +56,13 @@ func bundleOmitsOnScreenCGWindows(_ bundle: String) -> Bool {
 func parkedOffDisplay(_ rect: Rect, _ displays: [DisplayInfo]) -> Bool {
     displays.map { $0.usable.intersectionArea(rect) }.reduce(0,+) <= 4096
 }
+// The overlay follows a window that is already on a display. A restore keeps
+// ownedHidden true until a later scan agrees; only a pinned focus request may
+// trace through that interval. An owned-hidden window that is still painted
+// is the outgoing workspace, not the focused one.
+func tracesFocusBorder(_ window: WindowInfo, displays: [DisplayInfo], pinned: Bool = false) -> Bool {
+    !window.minimized && !parkedOffDisplay(window.frame,displays) && (pinned || !window.ownedHidden)
+}
 func cgHasWindow(pid: Int32, near rect: Rect, in windows: [(Int32,Rect)], tolerance: Int = 8) -> Bool {
     windows.contains { $0.0 == pid && $0.1.near(rect,tolerance:tolerance) }
 }

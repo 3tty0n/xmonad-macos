@@ -22,19 +22,21 @@ final class BorderOverlay {
         let p=panel ?? make()
         if rect != current {
             current=rect
-            p.setFrame(BorderOverlay.appKitFrame(rect,inset:CGFloat(width)),display:false)
-            p.contentView?.needsDisplay=true
+            p.setFrame(BorderOverlay.appKitFrame(rect,inset:CGFloat(width)),display:true)
         }
         // Raise on every observation. Full stacks every window at the same
         // frame; Electron sits at pop-up level; Chrome reorders its content
-        // window above a same-level overlay on each keystroke.
+        // window above a same-level overlay on each keystroke. alphaValue, not
+        // orderOut: re-inserting the panel after a workspace switch is what
+        // made the border lag the windows that were already back.
         currentWid=wid
+        p.alphaValue=1
         p.orderFrontRegardless()
     }
     func hide() {
         current=nil
         currentWid=nil
-        panel?.orderOut(nil)
+        panel?.alphaValue=0
     }
     private func make() -> NSPanel {
         let p=NSPanel(contentRect:.zero,styleMask:[.borderless,.nonactivatingPanel],
@@ -45,6 +47,8 @@ final class BorderOverlay {
         p.ignoresMouseEvents=true
         p.hidesOnDeactivate=false
         p.isReleasedWhenClosed=false
+        p.animationBehavior = .none
+        p.alphaValue=0
         // floatingWindow (3) sits under Electron's pop-up-level (101) content
         // windows. overlayWindow (102) is the public level above those.
         p.level=NSWindow.Level(Int(CGWindowLevelForKey(.overlayWindow)))
