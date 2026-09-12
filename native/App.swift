@@ -196,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
         if let url=Bundle.main.url(forResource:"MenuBarIcon",withExtension:"pdf"),
            let icon=NSImage(contentsOf:url) {
-            icon.size=NSSize(width:16,height:16)
+            icon.size=NSSize(width:26,height:16)
             icon.isTemplate=true // Follows the menu bar's light and dark styling.
             statusItem.button?.image=icon
             statusItem.button?.imagePosition = .imageLeading

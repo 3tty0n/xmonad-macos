@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- App icon is an original XM² mark on a dark plate. The menu bar uses the
+  same XM² at 26×16 with a heavier letter X.
+
+- `scripts/install.sh` no longer exits silently on a first install: codesign
+  of a missing app bundle used to fail the script under `pipefail`.
+
 - Unfocused (`normalBorderColor`) frames are clipped where they overlap the
   focused window, and stay a level below its overlay, so an active floating
   window is not covered by the tiled windows' white borders.

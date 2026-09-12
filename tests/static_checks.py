@@ -15,6 +15,14 @@ for path in (root/'src').rglob('*.hs'):
     check('import Graphics.X11' not in src, f'X11 dependency leaked into {path}')
 for name in ['README.md','LICENSE','CHANGELOG.md','docs/DESIGN.md','docs/COMPATIBILITY.md','docs/PROTOCOL.md','docs/TESTING.md','docs/UPSTREAM.md','native/Pointer.swift']:
     check((root/name).is_file(), f'Missing deliverable {name}')
+icon=(root/'native/icon.svg').read_text()
+check('m15.478 65.584' not in icon and 'm17.44 70.017' not in icon,
+      'App icon must not copy the upstream xmonad X paths')
+check('XM²' in icon and 'Hans Heintze' not in icon,
+      'App icon is the XM² mark, not the Heintze glyph')
+check('#3c3844' in icon, 'App icon plate should stay the original dark squircle')
+check('XM²' in (root/'native/menubar.svg').read_text(),
+      'Menu bar template must keep the XM² mark')
 info=plistlib.loads((root/'native/Info.plist').read_bytes())
 check(info['CFBundleIdentifier']=='org.xmonad.XMonadMac','Bundle identity changed')
 check(info['LSUIElement'] is True,'Menu bar app flag missing')
@@ -73,8 +81,9 @@ check(re.search(r'quit\s*=\s*request Quit', macos),'Quit must reach the helper')
 native_build=(root/'scripts/build-native.sh').read_text()
 check('native/Pointer.swift' in native_build,'Native build omits pointer backend')
 install=(root/'scripts/install.sh').read_text()
-for literal in ['build-kit']:
-    check(literal in install,f'Install integration missing {literal}')
+check('build-kit' in install, 'Install integration missing build-kit')
+check("sed -n 's/^designated => //p' || true" in install,
+      'First install must not abort when codesign has nothing to read')
 check('scripts/recompile-installed.sh' not in install and 'scripts/autostart.sh' not in install,
       'Installed instance must not copy shell recompile/autostart helpers')
 check('rm -f "$SUPPORT/recompile.sh"' in install,

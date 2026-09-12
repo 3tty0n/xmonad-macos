@@ -1,5 +1,7 @@
 # XMonadMac
 
+![XMonadMac Icon](./native/icon.svg)
+
 xmonad's policy core, ported to macOS. Your `xmonad.hs` is compiled as real
 Haskell and drives a signed Swift helper.
 

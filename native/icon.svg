@@ -1,23 +1,32 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Derived from the xmonad logo © Hans Heintze, CC BY-SA 4.0:
-     https://github.com/literallyunplayable -->
+<!-- XMonadMac mark: XM² (xmonad × macOS) on a dark squircle. One ink.
+     X is optically heavier than M so the diagonals do not look thin. -->
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" version="1.1"
      xmlns="http://www.w3.org/2000/svg">
  <defs>
   <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-   <stop offset="0" stop-color="#fdfdfd"/>
-   <stop offset="1" stop-color="#e6e4e9"/>
+   <stop offset="0" stop-color="#3c3844"/>
+   <stop offset="1" stop-color="#1b191f"/>
+  </linearGradient>
+  <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
+   <stop offset="0.42" stop-color="#ffffff" stop-opacity="0"/>
+  </linearGradient>
+  <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#f4f0f7"/>
+   <stop offset="1" stop-color="#d9d3e0"/>
   </linearGradient>
  </defs>
  <rect x="92" y="92" width="840" height="840" rx="188" fill="url(#bg)"/>
- <g transform="translate(242 242) scale(28.448)">
-  <g transform="translate(74.538 -132.08)">
-   <g transform="translate(137.8,446.82)">
-    <g transform="matrix(3.5586,0,0,3.5586,-255.42,-545)">
-     <path d="m15.478 65.584 0.59705-0.85778h1.2806l-1.2373 1.6986" fill="#3d3846"/>
-     <path d="m17.44 70.017h-1.3652l-1.3017-1.905-1.3335 1.905h-1.3335l2.0108-2.6987-1.8838-2.5929h1.3864" fill="#fd4d5e"/>
-    </g>
-   </g>
+ <rect x="92" y="92" width="840" height="840" rx="188" fill="url(#shine)"/>
+ <g fill="none" stroke="url(#ink)" stroke-linecap="round" stroke-linejoin="round">
+  <g stroke-width="96" transform="translate(278 528)">
+   <path d="M-96 -178 L96 178"/>
+   <path d="M-96 178 L96 -178"/>
+  </g>
+  <path stroke-width="80" d="M498 720 L498 336 L632 552 L766 336 L766 720"/>
+  <g stroke-width="40" transform="translate(784 214)">
+   <path d="M8 40 C8 12 78 8 82 40 C82 62 50 80 8 108 H82"/>
   </g>
  </g>
 </svg>

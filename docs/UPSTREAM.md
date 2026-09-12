@@ -58,6 +58,7 @@ this port behaves correctly on macOS — see [TESTING.md](TESTING.md) for that.
 
 ## Icon
 
-The app and menu bar icons are derived from the xmonad logo by Hans Heintze,
-licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
-Source SVGs live in `native/icon.svg` and `native/menubar.svg`.
+The app icon is an original XM² mark (xmonad × macOS) on a dark squircle.
+The menu bar uses the same XM² as a 26×16 template, with a heavier X so it
+does not read as a close-mark. Source SVGs live in `native/icon.svg` and
+`native/menubar.svg`; `make icon` rebuilds `AppIcon.icns` and `MenuBarIcon.pdf`.

@@ -23,11 +23,16 @@ rm -f "$SUPPORT/recompile.sh" "$SUPPORT/autostart.sh" "$SUPPORT/xmonadctl"
 # names are the engine binary itself.
 ln -sfn "$SUPPORT/xmonad-engine" "$HOME/.local/bin/xmonadctl"
 ln -sfn "$SUPPORT/xmonad-engine" "$HOME/.local/bin/xmonad"
-requirement() { /usr/bin/codesign -d -r- "$1" 2>/dev/null | sed -n 's/^designated => //p'; }
-OLD_REQ="$(requirement "$APP")"
+requirement() {
+  # Missing or unsigned bundles make codesign fail; pipefail would otherwise
+  # abort a first install with no message.
+  /usr/bin/codesign -d -r- "$1" 2>/dev/null | sed -n 's/^designated => //p' || true
+}
+OLD_REQ=""
+if [ -d "$APP" ]; then OLD_REQ="$(requirement "$APP")"; fi
 if [ -d "$APP" ]; then
   rm -rf "$HOME/Applications/XMonadMac.previous.app"
-  #mv "$APP" "$HOME/Applications/XMonadMac.previous.app"
+  mv "$APP" "$HOME/Applications/XMonadMac.previous.app"
 fi
 /usr/bin/ditto "$ROOT/build/XMonadMac.app" "$APP"
 # A changed designated requirement leaves a stale Accessibility entry that
