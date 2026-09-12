@@ -87,7 +87,9 @@ another application's window a border. It is click-through, sits at the
 public overlay window level so Electron content windows (Claude Desktop,
 Codex) do not cover it, is raised when a focus request is applied and on
 every later scan so Chrome cannot bury it, and follows the window as the
-helper observes it move, so it lags a fast drag slightly.
+helper observes it move, so it lags a fast drag slightly. Unfocused
+(`normalBorderColor`) frames are clipped where they overlap the focused
+window, so an active floating window stays above those white borders.
 
 ## Several displays
 

@@ -34,6 +34,8 @@ check('reply(toApplicationShouldTerminate' not in app and 'restored.wait(timeout
       'Quit must bound its wait instead of replying on the undrained main queue')
 border=(root/'native/Border.swift').read_text()
 check('overlayWindow' in border and 'orderFrontRegardless' in border,'Focus border must sit above Electron overlay windows')
+check('hole(in' in border and 'evenOdd' in border,
+      'Unfocused borders must clip out the focused window so a float is not covered')
 check('animationBehavior' in border and 'alphaValue' in border,
       'Focus border must not orderOut and fade back in after a workspace switch')
 check('tracesFocusBorder' in wire and 'tracesFocusBorder' in app,

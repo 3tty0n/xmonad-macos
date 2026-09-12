@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Unfocused (`normalBorderColor`) frames are clipped where they overlap the
+  focused window, and stay a level below its overlay, so an active floating
+  window is not covered by the tiled windows' white borders.
+
+- Portable xmonad-contrib layouts, actions, hooks and utils whose logic is
+  `StackSet` or geometry: `LayoutModifier`, Column/Spiral/Dwindle/OneBig/
+  MultiColumns/StackTile/Dishes/Gaps/IfMax/ToggleLayouts/LimitWindows,
+  CopyWindow, WindowGo, FloatKeys, InsertPosition, SpawnOnce, and others
+  listed in Compatibility.md. X11 decorations, prompts, EWMH and
+  `xmonad-contrib` as a package remain out of reach.
+
 - Installed control paths (`recompile`, `autostart`, `doctor`, `recover`,
   `start`, `reload`) live in the compiled `xmonad` binary. `scripts/` keeps
   only source-tree build, test, signing and packaging helpers. Menu/M-q

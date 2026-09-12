@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 
 @main struct WireTests {
     static var count=0
@@ -68,6 +69,18 @@ import Foundation
             check(BorderOverlay.parse(look.borderColor)?.greenComponent == 1,"border colour")
             check(BorderOverlay.parse("nope") == nil,"bad border colour rejected")
         } else { fatalError("configuration") }
+        let tiled=NSRect(x:0,y:0,width:800,height:900)
+        let floated=NSRect(x:200,y:200,width:400,height:300)
+        if let hole=BorderOverlay.hole(in:tiled,cutting:floated) {
+            check(hole.origin.x == 199 && hole.origin.y == 199
+                  && hole.width == 402 && hole.height == 302,"focused float punches a hole")
+        } else { check(false,"focused float must clip the tiled frame") }
+        let edge=NSRect(x:790,y:0,width:200,height:50)
+        if let hole=BorderOverlay.hole(in:tiled,cutting:edge) {
+            check(hole.origin.x == 789 && hole.width == 11,"clip is the overlap only")
+        } else { check(false,"overlapping edge must clip") }
+        check(BorderOverlay.hole(in:tiled,cutting:NSRect(x:900,y:0,width:10,height:10)) == nil,
+              "disjoint frames keep the unfocused border")
         try validateMouseBindings([MouseBind(mask:68,button:1,action:.move)]); count += 1
         do { try validateMouseBindings([]); fatalError("empty mouse bindings accepted") }
         catch { count += 1 }

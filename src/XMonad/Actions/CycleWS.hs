@@ -8,11 +8,10 @@ module XMonad.Actions.CycleWS
   ) where
 import XMonad.Core
 import XMonad.Operations (windows)
+import XMonad.Util.Types (Direction1D(..))
 import qualified XMonad.StackSet as W
 import Data.List (elemIndex)
 import Data.Maybe (fromMaybe)
-
-data Direction1D = Next | Prev deriving (Eq, Show, Read)
 
 -- Workspace order is the order in the config, wrapping at both ends.
 neighbour :: Direction1D -> X WorkspaceId

@@ -102,6 +102,9 @@ trace = io . hPutStrLn stderr
 whenJust :: Monad m => Maybe a -> (a -> m ()) -> m ()
 whenJust = flip $ maybe (pure ())
 
+whenX :: Monad m => m Bool -> m () -> m ()
+whenX cond action = cond >>= \ok -> if ok then action else pure ()
+
 -- The upstream layout interface, including stateful runLayout and messages.
 data Layout a = forall l. (LayoutClass l a, Read (l a)) => Layout (l a)
 

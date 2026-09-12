@@ -18,6 +18,14 @@ import XMonad.Layout.Reflect
 import XMonad.Layout.TwoPane
 import XMonad.Layout.Accordion
 import XMonad.Hooks.ManageHelpers (isDialog)
+import XMonad.Layout.Column
+import XMonad.Layout.Spiral
+import XMonad.Layout.OneBig
+import XMonad.Layout.StackTile
+import XMonad.Layout.Dishes
+import XMonad.Layout.ToggleLayouts
+import XMonad.Actions.CopyWindow (copy)
+import XMonad.Actions.FocusNth (focusNth')
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.List (isInfixOf,isPrefixOf,nub,sort)
@@ -299,6 +307,26 @@ main = do
   check "additionalMouseBindings overrides"
     (M.lookup (mod1Mask,button1) (mouseBindings (additionalMouseBindings cfg [((mod1Mask,button1),MouseRaise)]) cfg)
      == Just MouseRaise)
+  let colRect=Rectangle 0 0 100 900
+      colStack=W.Stack (1::Int) [] [2,3]
+  check "Column even split" (map snd (pureLayout (Column 1) colRect colStack)
+    == [Rectangle 0 0 100 300, Rectangle 0 300 100 300, Rectangle 0 600 100 300])
+  check "OneBig master occupies the fraction"
+    (case pureLayout (OneBig 0.75 0.75) (Rectangle 0 0 1000 800) (W.Stack (1::Int) [] [2,3,4]) of
+       (_,Rectangle 0 0 750 600):_ -> True; _ -> False)
+  check "StackTile masters sit on top"
+    (length (pureLayout (StackTile 1 (3/100) (1/2)) (Rectangle 0 0 1000 800) (W.Stack (1::Int) [] [2,3]))==3)
+  check "Dishes stacks extras below"
+    (length (pureLayout (Dishes 1 (1/6)) (Rectangle 0 0 1000 800) (W.Stack (1::Int) [] [2,3]))==3)
+  check "spiral produces one rectangle per window"
+    (length (pureLayout (spiral (6/7)) (Rectangle 0 0 1000 800) (W.Stack (1::Int) [] [2,3,4]))==4)
+  check "ToggleLayouts starts on the second layout"
+    (description (toggleLayouts Full (Tall 1 (3/100) (1/2) :: Tall Int))=="Tall")
+  let copied=copy "2" (W.insertUp (1::Int) (W.new () ["1","2"] [()]))
+  check "copyWindow tags a window onto another workspace"
+    (W.member 1 (W.view "2" copied) && W.member 1 copied)
+  check "focusNth' selects by index"
+    (focusNth' 0 (W.Stack (2::Int) [1] [3])==W.Stack 1 [] [2,3])
   testAtomicRecompile
   putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, key parser, protocol and atomic recompile"
 

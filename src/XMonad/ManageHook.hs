@@ -3,14 +3,13 @@
 -- properties: see the module comments on each.
 module XMonad.ManageHook
   ( className, resource, appName, title, subrole, queryInfo
-  , (=?), (-->), (<&&>), (<||>), composeAll
+  , (=?), (-->), (<&&>), (<||>), (<+>), composeAll, idHook
   , doF, doIgnore, doShift, doFloat
   ) where
 import XMonad.Core
+import XMonad.Operations (floatLocation)
 import qualified XMonad.StackSet as W
 import qualified Data.Map.Strict as M
-import Data.List (find)
-import Data.Maybe (fromMaybe)
 
 -- Read one field of the window's snapshot entry, with a value to use for a
 -- window we have no entry for.
@@ -46,6 +45,13 @@ infixr 2 <||>
 liftQ2 :: (a -> b -> c) -> Query a -> Query b -> Query c
 liftQ2 f a b = f <$> a <*> b
 
+idHook :: ManageHook
+idHook = mempty
+
+(<+>) :: ManageHook -> ManageHook -> ManageHook
+(<+>) = mappend
+infixr 1 <+>
+
 composeAll :: [ManageHook] -> ManageHook
 composeAll = mconcat
 
@@ -65,19 +71,5 @@ doShift t = ask >>= doF . W.shiftWin t
 doFloat :: ManageHook
 doFloat = do
   w <- ask
-  spot <- liftX (observedRect w)
+  spot <- liftX (floatLocation w)
   doF (W.float w spot)
-
-observedRect :: Window -> X W.RationalRect
-observedRect w = do
-  s <- get
-  pure $ fromMaybe centred $ do
-    wi <- M.lookup w (windowInfo s)
-    sc <- find ((==onDisplay wi) . displayID . W.screenDetail)
-            (W.screens $ windowset s)
-    let Rectangle sx sy sw sh = screenRect (W.screenDetail sc)
-        Rectangle x y ww hh = frame wi
-    if sw <= 0 || sh <= 0 then Nothing else Just $ W.RationalRect
-      (toRational (x-sx) / toRational sw) (toRational (y-sy) / toRational sh)
-      (toRational ww / toRational sw) (toRational hh / toRational sh)
-  where centred = W.RationalRect (1/5) (1/5) (3/5) (3/5)

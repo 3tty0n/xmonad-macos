@@ -10,7 +10,7 @@ make check          # everything below
 
 | Suite | What it covers |
 |---|---|
-| `tests/WireTests.swift` | 186 checks: signed coordinate conversion, displays above/left/below the primary, no double Retina scaling, display selection, JSON fields including action ids and mouse bindings, popup subroles, Chrome CGWindow omission, Finder hide verification, process instance identity, fingerprint remap, key mapping, plan validation, focus-border tracing during restore |
+| `tests/WireTests.swift` | 189 checks: signed coordinate conversion, displays above/left/below the primary, no double Retina scaling, display selection, JSON fields including action ids and mouse bindings, popup subroles, Chrome CGWindow omission, Finder hide verification, process instance identity, fingerprint remap, key mapping, plan validation, focus-border tracing during restore, unfocused-border clip against the focused window |
 | `tests/static_checks.py` | Source and packaging checks |
 | `tests/CoreTests.hs` | StackSet focus/swap/shift/uniqueness, `Tall` geometry and area, `Full` stacking, `Choose` cycling, user vs. WM minimization, ignore, dialog floats, multiple displays, hotplug, display affinity, checkpoints, action-id focus requests, observed focus on mapped workspaces, key parsing, JSON, atomic installed recompile (a failed cabal build leaves the previous engine) |
 | `tests/integration.py` | Runs the shipped config as a real engine and drives focus, mouse-float, dialog-float, layout, shift, view, checkpoint, and ping over NDJSON |

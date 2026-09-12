@@ -48,24 +48,56 @@ library
     XMonad.ManageHook
     XMonad.Config
     XMonad.Util.EZConfig
+    XMonad.Util.Types
+    XMonad.Util.SpawnOnce
+    XMonad.Util.CustomKeys
+    XMonad.Util.Run
+    XMonad.Layout.LayoutModifier
+    XMonad.Layout.LayoutCombinators
     XMonad.Layout.Spacing
     XMonad.Layout.ThreeColumns
     XMonad.Layout.Circle
     XMonad.Layout.Grid
     XMonad.Layout.Simplest
+    XMonad.Layout.SimplestFloat
     XMonad.Layout.ResizableTile
     XMonad.Layout.Renamed
+    XMonad.Layout.Named
     XMonad.Layout.Reflect
     XMonad.Layout.PerWorkspace
+    XMonad.Layout.PerScreen
     XMonad.Layout.TwoPane
     XMonad.Layout.Accordion
+    XMonad.Layout.Column
+    XMonad.Layout.Spiral
+    XMonad.Layout.Dwindle
+    XMonad.Layout.OneBig
+    XMonad.Layout.MultiColumns
+    XMonad.Layout.StackTile
+    XMonad.Layout.Dishes
+    XMonad.Layout.CenteredIfSingle
+    XMonad.Layout.Roledex
+    XMonad.Layout.ToggleLayouts
+    XMonad.Layout.IfMax
+    XMonad.Layout.LimitWindows
+    XMonad.Layout.Gaps
     XMonad.Actions.CycleWS
+    XMonad.Actions.CycleWindows
     XMonad.Actions.WithAll
+    XMonad.Actions.SinkAll
     XMonad.Actions.RotSlaves
     XMonad.Actions.SwapWorkspaces
     XMonad.Actions.DwmPromote
+    XMonad.Actions.Promote
     XMonad.Actions.PhysicalScreens
+    XMonad.Actions.CopyWindow
+    XMonad.Actions.FocusNth
+    XMonad.Actions.OnScreen
+    XMonad.Actions.FindEmptyWorkspace
+    XMonad.Actions.WindowGo
+    XMonad.Actions.FloatKeys
     XMonad.Hooks.ManageHelpers
+    XMonad.Hooks.InsertPosition
     XMonad.MacOS
     XMonad.MacOS.Types
     XMonad.MacOS.Protocol
