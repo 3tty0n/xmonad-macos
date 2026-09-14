@@ -48,14 +48,30 @@ func axMinSize(_ e: AXUIElement) -> (Int,Int)? {
     return nil
 }
 func windowEligible(_ e: AXUIElement, subrole: String) -> Bool {
-    guard axString(e,kAXRoleAttribute) == kAXWindowRole, !axBool(e,"AXFullScreen"),
-          axSettable(e,kAXPositionAttribute) else { return false }
-    if subrole == kAXStandardWindowSubrole {
-        return axSettable(e,kAXSizeAttribute) && axSettable(e,kAXMinimizedAttribute)
+    windowRoleIsEligible(role:axString(e,kAXRoleAttribute),subrole:subrole,
+                         fullScreen:axBool(e,"AXFullScreen"),
+                         positionSettable:axSettable(e,kAXPositionAttribute),
+                         sizeSettable:axSettable(e,kAXSizeAttribute))
+}
+func axListedAsWindow(_ e: AXUIElement) -> Bool {
+    reportsAsWindowRole(axString(e,kAXRoleAttribute)) && axFrame(e) != nil
+}
+// System-wide AXFocusedWindow can name a text area inside the frame (Emacs).
+func axWindowRoot(_ e: AXUIElement) -> AXUIElement {
+    if axString(e,kAXRoleAttribute) == kAXWindowRole { return e }
+    if let w=axElement(e,kAXWindowAttribute) { return w }
+    var current=e
+    for _ in 0..<8 {
+        guard let parent=axElement(current,kAXParentAttribute) else { break }
+        if axString(parent,kAXRoleAttribute) == kAXWindowRole { return parent }
+        current=parent
     }
-    // Dialogs often cannot be minimized; parking still hides them. Size is
-    // left as observed when it is not settable.
-    return isManagedPopupSubrole(subrole)
+    return e
+}
+func axSameWindow(_ a: AXUIElement, _ b: AXUIElement) -> Bool {
+    if CFEqual(a,b) { return true }
+    let ra=axWindowRoot(a), rb=axWindowRoot(b)
+    return CFEqual(ra,rb) || CFEqual(a,rb) || CFEqual(ra,b)
 }
 // System-wide AXFocusedApplication is empty for Chromium even while the
 // browser is frontmost. The workspace PID plus that app's AXFocusedWindow
@@ -64,13 +80,13 @@ func focusedAXWindow() -> AXUIElement? {
     let system=AXUIElementCreateSystemWide()
     if let app=axElement(system,kAXFocusedApplicationAttribute),
        let window=axElement(app,kAXFocusedWindowAttribute) {
-        return window
+        return axWindowRoot(window)
     }
     guard let pid=NSWorkspace.shared.frontmostApplication?.processIdentifier,
           pid != getpid() else { return nil }
     let app=AXUIElementCreateApplication(pid)
     AXUIElementSetMessagingTimeout(app,0.15)
-    return axElement(app,kAXFocusedWindowAttribute)
+    return axElement(app,kAXFocusedWindowAttribute).map(axWindowRoot)
 }
 // Chromium animates or drops AX geometry writes while this is on. Toggle it
 // only around a write, then restore, so VoiceOver is not left disabled.
@@ -389,7 +405,7 @@ final class AXStore {
                     // The desktop is an AXScrollArea in Finder's window list.
                     // Recording it would inflate same-PID/same-frame peers and
                     // drop the real Finder window from every snapshot.
-                    guard axString(e,kAXRoleAttribute) == kAXWindowRole,
+                    guard axListedAsWindow(e),
                           let frame=axFrame(e) else { continue }
                     r=AXRecord(nextID,e,app,frame); nextID += 1; records[r.wid]=r
                     r.minSize=axMinSize(e)
@@ -494,7 +510,9 @@ final class AXStore {
             // not minimized rather than skipping the window every scan.
             if let observed=axBoolean(r.element,kAXMinimizedAttribute) {
                 r.lastMinimized=observed
-            } else if r.lastMinimized == nil && isManagedPopupSubrole(r.subrole) {
+            } else if r.lastMinimized == nil {
+                // emacs-mac undecorated frames and many dialogs have no
+                // AXMinimized; that is "not minimized", not "unreadable".
                 r.lastMinimized=false
             }
             guard let mini=r.lastMinimized else { continue }
@@ -502,7 +520,7 @@ final class AXStore {
             // On-screen association uses public PID + bounds only. Ambiguous
             // same-PID/same-frame windows across native Spaces are NOT touched.
             let peers=peerCount[r.wid] ?? 0
-            let visible=(cgByPid[r.descriptor.pid] ?? []).filter { $0.1.near(r.frame) }.count
+            let visible=(cgByPid[r.descriptor.pid] ?? []).filter { cgMatchesAXFrame(r.frame,$0.1) }.count
             // visible==0 is normally another Space. Chrome withholds CGWindow
             // metadata instead, and AX already hides its other-Space windows.
             let onScreen=(visible > 0 && visible >= peers)
@@ -549,8 +567,8 @@ final class AXStore {
         var focused: UInt64?, fullScreen=false
         if let window=focusedAXWindow() {
             fullScreen=axBool(window,"AXFullScreen")
-            focused=all.first(where:{ CFEqual($0.element,window) && active.contains($0.wid) &&
-              axBoolean($0.element,kAXMinimizedAttribute) != true })?.wid
+            focused=all.first(where:{ active.contains($0.wid) && $0.lastMinimized != true &&
+              axSameWindow($0.element,window) })?.wid
         }
         return ScanResult(windows:result,focused:focused,nativeFullScreen:fullScreen)
     }
@@ -613,7 +631,7 @@ final class AXStore {
     }
     func observedFocus() -> UInt64? {
         guard let window=focusedAXWindow() else { return nil }
-        return records.values.first { CFEqual($0.element,window) }?.wid
+        return records.values.first { axSameWindow($0.element,window) }?.wid
     }
 
     // A window on another workspace is parked past the right edge of the

@@ -105,6 +105,30 @@ import AppKit
               "popup subroles")
         check(!isManagedPopupSubrole("AXStandardWindow") && !isManagedPopupSubrole("AXSheet")
               && !isManagedPopupSubrole("AXUnknown"),"sheets stay unmanaged")
+        check(reportsAsWindowRole("AXWindow") && reportsAsWindowRole("AXTextField")
+              && reportsAsWindowRole("AXTextArea"),"Emacs frames report as windows")
+        check(!reportsAsWindowRole("AXSheet") && !reportsAsWindowRole("AXUnknown"),
+              "sheets are not window roles")
+        check(windowRoleIsEligible(role:"AXWindow",subrole:"AXStandardWindow",fullScreen:false,
+                                   positionSettable:true,sizeSettable:true),
+              "standard window tiles without AXMinimized")
+        check(windowRoleIsEligible(role:"AXWindow",subrole:"",fullScreen:false,
+                                   positionSettable:true,sizeSettable:true),
+              "empty subrole is a standard window")
+        check(windowRoleIsEligible(role:"AXTextField",subrole:"AXStandardWindow",fullScreen:false,
+                                   positionSettable:true,sizeSettable:true),
+              "NS Emacs AXTextField frames are eligible")
+        check(!windowRoleIsEligible(role:"AXWindow",subrole:"AXSheet",fullScreen:false,
+                                    positionSettable:true,sizeSettable:true),
+              "sheets stay ineligible")
+        check(!windowRoleIsEligible(role:"AXWindow",subrole:"AXUnknown",fullScreen:false,
+                                    positionSettable:true,sizeSettable:true),
+              "unknown subroles stay ineligible")
+        let axFrame=Rect(x:0,y:24,width:800,height:600)
+        let cgFrame=Rect(x:0,y:0,width:800,height:624)
+        check(cgMatchesAXFrame(axFrame,cgFrame),"titlebar offset still matches CG")
+        check(!cgMatchesAXFrame(axFrame,Rect(x:900,y:0,width:800,height:624)),
+              "a neighbour CG window is not this frame")
         check(cgWindowIsApplicationLayer(0) && cgWindowIsApplicationLayer(3)
               && cgWindowIsApplicationLayer(8) && cgWindowIsApplicationLayer(19),"application layers")
         check(!cgWindowIsApplicationLayer(-1) && !cgWindowIsApplicationLayer(20)

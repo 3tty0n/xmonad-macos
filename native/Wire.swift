@@ -40,6 +40,30 @@ func isManagedPopupSubrole(_ subrole: String) -> Bool {
         return false
     }
 }
+// AXWindows lists real frames. GNU NS Emacs reports those frames as
+// AXTextField; emacs-mac is usually AXWindow. Either is a window if it
+// appears in that list.
+func reportsAsWindowRole(_ role: String) -> Bool {
+    role == "AXWindow" || role == "AXTextField" || role == "AXTextArea"
+}
+// Tiling admission. Minimized need not be settable: emacs-mac undecorated
+// frames often have no AXMinimized. Empty subrole is a standard window that
+// has not filled the attribute in yet.
+func windowRoleIsEligible(role: String, subrole: String, fullScreen: Bool,
+                          positionSettable: Bool, sizeSettable: Bool) -> Bool {
+    guard reportsAsWindowRole(role), !fullScreen, positionSettable else { return false }
+    if isManagedPopupSubrole(subrole) { return true }
+    let standard = subrole == "AXStandardWindow" || subrole.isEmpty
+      || role == "AXTextField" || role == "AXTextArea"
+    return standard && sizeSettable
+}
+// AX and CG disagree by a titlebar on emacs-mac and similar NS ports.
+func cgMatchesAXFrame(_ ax: Rect, _ cg: Rect, originSlop: Int = 24) -> Bool {
+    if ax.near(cg, tolerance: originSlop) { return true }
+    let area=ax.intersectionArea(cg)
+    let smaller=Double(min(ax.width*ax.height, cg.width*cg.height))
+    return smaller > 0 && area >= 0.72 * smaller
+}
 // Normal (0), floating (3), modal panel (8) and utility (19). Dock is 20
 // and the menu bar is 24; those are not application windows.
 func cgWindowIsApplicationLayer(_ layer: Int) -> Bool {

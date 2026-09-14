@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- emacs-mac / NS Emacs frames stay managed and focused: AXTextField windows
+  in `AXWindows` are admitted, `AXMinimized` is optional, focus walks to the
+  enclosing window, and CG matching allows a titlebar-sized slop.
+
 - App icon is an original XM² mark on a dark plate. The menu bar uses the
   same XM² at 26×16 with a heavier letter X.
 

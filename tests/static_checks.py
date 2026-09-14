@@ -108,6 +108,12 @@ check('parksByMinimizing' in wire and 'com.apple.finder' in wire,'Finder must hi
 check('processStartTime' in wire and 'KERN_PROC_PID' in wire,'Process instance identity helper missing')
 check('processStartTime(app.processIdentifier)' in app,'Apps without a launch date must still get a process instance')
 check('windowEligible' in ax,'Popup window admission missing')
+check('windowRoleIsEligible' in wire and 'reportsAsWindowRole' in wire,
+      'Emacs AXTextField / empty-subrole admission helpers missing')
+check('axWindowRoot' in ax and 'axSameWindow' in ax,
+      'Focus must walk from an Emacs text area to its window')
+check('cgMatchesAXFrame' in ax and 'cgMatchesAXFrame' in wire,
+      'On-screen match must allow a titlebar-sized AX/CG slop')
 check('focusedAXWindow' in ax and 'frontmostApplication' in ax,'Chromium focus fallback missing')
 check('AXEnhancedUserInterface' in ax and 'withImmediateAXGeometry' in ax,'Chromium geometry write fallback missing')
 check('AXDialog' in wire and 'AXSystemDialog' in wire,'Popup subroles missing')

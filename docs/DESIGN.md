@@ -98,13 +98,17 @@ falls back to `NSWorkspace.frontmostApplication` and that app's
 `AXFocusedWindow`. Geometry writes temporarily clear `AXEnhancedUserInterface`
 so a frame lands instead of animating away.
 
-Only `AXStandardWindow` windows whose position, size, and minimized state are
-settable are tiled. Dialogs and floating panels (`AXDialog`, `AXSystemDialog`,
-`AXFloatingWindow`, `AXSystemFloatingWindow`) are admitted when position is
-settable, reported with their AX subrole, and floated by policy so they keep
-the size the application chose. Sheets, popovers, native full-screen windows,
-user-minimized windows, and hidden apps are left alone. The admission rule is
-deliberately still narrow: a sheet is tied to its parent.
+Only `AXStandardWindow` windows (and Emacs frames that report as `AXTextField`
+in `AXWindows`) whose position and size are settable are tiled. Minimized need
+not be settable: emacs-mac undecorated frames often have no `AXMinimized`.
+Empty subrole is treated as standard. Dialogs and floating panels (`AXDialog`,
+`AXSystemDialog`, `AXFloatingWindow`, `AXSystemFloatingWindow`) are admitted
+when position is settable, reported with their AX subrole, and floated by
+policy so they keep the size the application chose. Sheets, popovers, native
+full-screen windows, user-minimized windows, and hidden apps are left alone.
+The admission rule is deliberately still narrow: a sheet is tied to its parent.
+On-screen correlation allows a titlebar-sized slop between AX and CG frames,
+because emacs-mac draws its own chrome.
 
 ## State transitions and focus
 
