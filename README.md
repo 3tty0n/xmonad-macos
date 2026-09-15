@@ -2,12 +2,15 @@
 
 ![XMonadMac Icon](./native/icon.svg)
 
-xmonad's policy core, ported to macOS. Your `xmonad.hs` is compiled as real
+A ported xmonad's policy core to macOS. Your `xmonad.hs` is compiled as real
 Haskell and drives a signed Swift helper.
 
 > [!IMPORTANT]
-> It is a subset, not a drop-in replacement. See [Compatibility](docs/COMPATIBILITY.md)
-> for the exact limitations.
+> It is a subset, not a drop-in replacement. See [Compatibility](docs/COMPATIBILITY.md).
+>
+> Workspaces are **virtual** (xmonad tags such as `1`…`9` / `0`). They are
+> not macOS Mission Control Desktops / Spaces. This port cannot move another
+> app's window between native Spaces, so it pages windows itself.
 
 ## Install
 
@@ -17,11 +20,8 @@ cd xmonad-macos
 make bootstrap
 ```
 
-Then,
-
-- System Settings -> Privacy & Security -> Accessibility
-- Add `~/Applications/XMonadMac.app`
-- Restart it
+Then System Settings → Privacy & Security → Accessibility → add
+`~/Applications/XMonadMac.app`, and restart it.
 
 ## Prerequisite
 
@@ -37,7 +37,7 @@ make run
 ```
 
 > [!CAUTION]
-> Stage manager compatibility is unsupported
+> Stage Manager is unsupported.
 
 ## Configure
 
@@ -60,8 +60,6 @@ main = xmonad $ def
   `additionalKeysP` [ ("M-f", toggleFloat) ]
 ```
 
-Apply it:
-
 ```sh
 xmonad --recompile     # compile; the running engine keeps going
 xmonad --restart       # run the new one
@@ -69,12 +67,12 @@ xmonad --restart       # run the new one
 
 A compile failure never replaces the running engine.
 
-Match windows with `bundleId` (stable), `className` (localized app name),
-`title`, or `subrole`. Dialogs and floating panels are floated automatically.
+Match windows with `bundleId`, `className`, `title`, or `subrole`. Dialogs
+and floating panels are floated automatically.
 
 > [!NOTE]
-> More layouts, hooks and ported contrib modules: [Compatibility](docs/COMPATIBILITY.md).
-> Other config locations: [Usage](docs/USAGE.md).
+> Ported layouts and contrib modules: [Compatibility](docs/COMPATIBILITY.md).
+> Paths, keys, and recovery: [Usage](docs/USAGE.md).
 
 ## Keys
 
@@ -88,68 +86,59 @@ Match windows with `bundleId` (stable), `className` (localized app name),
 | `M-S-Return` | Launch the terminal |
 | `M-h` / `M-l` | Shrink / expand the master area |
 | `M-Space` | Next layout |
-| `M-1…0` | Go to that workspace |
+| `M-1…0` | Go to that **virtual** workspace |
 | `M-S-1…0` | Send the window to that workspace |
 | `M-f` / `M-t` | Float / unfloat |
-| `M` + drag | Move (left button) or resize (right button) |
+| `M` + drag | Move (left) or resize (right) |
 | `M-S-c` | Close the window |
 | `M-q` / `M-S-q` | Recompile / quit |
-| `Ctrl-Opt-Cmd-Esc` | Emergency stop, restores every hidden window |
+| `Ctrl-Opt-Cmd-Esc` | Emergency stop; restores every hidden window |
 
-> [!TIP]
-> Full list, including per-screen keys: [Usage](docs/USAGE.md).
+## Virtual workspaces
 
-## Workspaces
+`M-1`…`M-0` switch XMonadMac workspaces. Switching a Desktop in Mission
+Control is a different, native Space and is not how this port hides windows.
 
-Workspaces are XMonadMac's own:  **not** macOS Desktops, which cannot be used
-for this because macOS forbids moving another app's window between them.
-
-Windows on other workspaces are placed off-screen. An app that refuses to be
-placed is minimized instead. Either way they return to where they were.
-
-> [!TIP]
-> Type `xmonad recover`. It puts every hidden window back.
+Windows on other virtual workspaces are parked off-screen. An app that
+refuses that (Finder) is minimized instead. `xmonad recover` puts every
+WM-hidden window back.
 
 ## Commands
 
-`make` builds, `xmonad` drives a running instance.
+`make` builds; `xmonad` drives a running instance.
 
 | | |
 |---|---|
 | `make bootstrap` | Toolchain, build, install |
 | `make build` / `make install` | Build / install |
 | `make run` / `make dry-run` | `xmonad start` / `xmonad start --dry-run` |
-| `make check` | Run the tests |
+| `make check` | Tests |
 | `xmonad start [--dry-run]` | Launch the installed app |
 | `xmonad --recompile` / `--restart` | Compile the config / run it |
-| `xmonad status` / `log` / `doctor` | What it is doing, and why not |
-| `xmonad pause` / `resume` / `recover` | Suspend / resume / unhide windows |
+| `xmonad status` / `log` / `doctor` | What it is doing |
+| `xmonad pause` / `resume` / `recover` | Suspend / resume / unhide |
 | `xmonad autostart on` | Start at login |
 
-The menu bar shows the workspace row and layout, xmobar style: `[2] 1 3 -
-Tall`, and `xmonad status` publishes the same as JSON for sketchybar or
-Übersicht. Menu toggles and installed paths: [Usage](docs/USAGE.md).
+The menu bar shows `[2] 1 3 - Tall`. `xmonad status` publishes the same as
+JSON.
 
-## Keeping the Accessibility grant
+## Accessibility grant
 
-Rebuilding changes the app's identity, so macOS asks you to grant
-Accessibility again. Run this once to stop that:
+Rebuilding an ad-hoc signed app asks for Accessibility again. Once:
 
 ```sh
 ./scripts/signing-identity.sh
 ```
 
-It creates a local signing certificate, once, with a password prompt.
-
 ## Documentation
 
-- [Usage](docs/USAGE.md): every key, menu, path and recovery step.
-- [Design](docs/DESIGN.md): how it works and why.
-- [Compatibility](docs/COMPATIBILITY.md): what of xmonad's API works.
-- [Protocol](docs/PROTOCOL.md): the contract between the two halves.
-- [Testing](docs/TESTING.md): automated checks and the manual matrix.
-- [Upstream](docs/UPSTREAM.md): attribution and primary sources.
+- [Usage](docs/USAGE.md) — keys, paths, recovery
+- [Design](docs/DESIGN.md) — policy vs helper
+- [Compatibility](docs/COMPATIBILITY.md) — xmonad API subset
+- [Protocol](docs/PROTOCOL.md) — NDJSON
+- [Testing](docs/TESTING.md) — checks and manual matrix
+- [Upstream](docs/UPSTREAM.md) — attribution
 
 ## License
 
-BSD-3-Clause, preserving xmonad's original copyright. See [LICENSE](LICENSE).
+BSD-3-Clause. See [LICENSE](LICENSE).
