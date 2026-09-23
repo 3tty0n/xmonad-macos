@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- System sleep still pauses a running session and restores owned windows,
+  but waking now resumes it without a trip to the menu. A session that was
+  already paused stays paused.
+
 - `Layout.NoBorders` is ported: `noBorders`, `smartBorders`, `withBorder`,
   `lessBorders` with `Ambiguity` / `SetsAmbiguous` / `With`, and
   `hasBorder`. A layout cannot set an X11 border width from here, so the

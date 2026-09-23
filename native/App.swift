@@ -103,6 +103,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var lockFD: Int32 = -1
     private var running=false, configured=false, tapReady=false, pointerReady=false, recoveryDone=false
     private var quitting=false, recovering=false, recompiling=false, fullScreen=false
+    // Set when system sleep, not the user, paused a running session.
+    private var sleepPaused=false
     private var scanInFlight=false, scanAgain=false
     private var scanWork: DispatchWorkItem?
     private var pointerUpdateInFlight=false
@@ -165,7 +167,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observers.append(center.addObserver(forName:NSWorkspace.activeSpaceDidChangeNotification,
           object:nil,queue:.main) { [weak self] _ in self?.spaceChanged() })
         observers.append(center.addObserver(forName:NSWorkspace.willSleepNotification,
-          object:nil,queue:.main) { [weak self] _ in self?.pause(reason:"Paused for sleep; choose Resume after wake") })
+          object:nil,queue:.main) { [weak self] _ in
+            guard let self=self,self.running else { return }
+            self.pause(reason:"Paused for sleep"); self.sleepPaused=true
+          })
+        observers.append(center.addObserver(forName:NSWorkspace.didWakeNotification,
+          object:nil,queue:.main) { [weak self] _ in
+            guard let self=self,self.sleepPaused else { return }
+            self.sleepPaused=false; logMessage("Resuming after wake"); self.resume()
+          })
         // Display sleep, unlike system sleep, keeps everything running.
         for name in [NSWorkspace.screensDidSleepNotification,
                      NSWorkspace.sessionDidResignActiveNotification] {
@@ -667,7 +677,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     private func pause(reason: String) {
-        running=false; scanWork?.cancel(); scanWork=nil; scanAgain=false; resetPointerCoalescer()
+        sleepPaused=false; running=false; scanWork?.cancel(); scanWork=nil; scanAgain=false; resetPointerCoalescer()
         borderPin=nil; border.hide()
         stopEngine(); setStatus(reason); logMessage(reason)
         if store != nil { axQueue.async { [weak self] in self?.store.cancelPointerDrag(); self?.store.restoreAll() } }
