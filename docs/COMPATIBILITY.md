@@ -47,6 +47,9 @@ the same names.
 | `Actions.FindEmptyWorkspace` / `FloatKeys` | |
 | `Actions.WindowGo` | No `$BROWSER` / `$EDITOR` |
 | `Hooks.ManageHelpers` / `InsertPosition` | No X11 property queries |
+| `Hooks.StatusBar.PP` | No `ppUrgent` (no urgency hints); default `ppOutput` is stderr, since stdout is the protocol |
+| `Hooks.StatusBar` | `withSB`, `statusBarGeneric`, `statusBarPipe`; adds `statusBarFile`, `statusBarSpawn`, `macMenuBarPP`. No `statusBarProp` / `withEasySB` / `sbCleanupHook` (X11 properties, struts) |
+| `Hooks.DynamicLog` | Re-exports `StatusBar.PP` plus `dynamicLog`; no xmobar/dzen launchers |
 | `Util.EZConfig` / `Types` / `CustomKeys` | |
 | `Util.SpawnOnce` | In-process, not persisted |
 | `Util.Run` | No dzen / `runInTerm` |
@@ -64,6 +67,7 @@ ignores the field and draws the width from the config for every window.
 
 | API | Status |
 |---|---|
+| `logHook` | Run before every plan, i.e. after each state change |
 | `manageHook` | `composeAll`, `doFloat`, `doShift`, `doIgnore`; dialogs float |
 | `className` / `bundleId` / `title` / `subrole` | App name / bundle / `AXTitle` / AX subrole |
 | `isDialog` | AX dialog and floating-panel subroles |

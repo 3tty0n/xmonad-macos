@@ -48,6 +48,9 @@ at the width from the handshake. The field is additive — a helper that does
 not know it draws the handshake's width everywhere, which is what it did
 before.
 
+`status`, when present, is menu bar text a logHook rendered
+(`macMenuBarPP`); without it the helper builds its own workspace row.
+
 `checkpoint` is opaque JSON stored by the helper and returned in `restore`.
 On helper restart, wids are rewritten from public fingerprints.
 

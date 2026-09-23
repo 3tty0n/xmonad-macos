@@ -80,6 +80,9 @@ data XState = XState
   -- borderWidth stays the default for every window not listed here.
   , borderOverrides :: M.Map Window Int
   , commands :: [NativeCommand]
+  -- Text a logHook asked the menu bar to show in this pass; Nothing keeps the
+  -- helper's own workspace row.
+  , menuBarText :: Maybe String
   }
 focusRequested :: XState -> Bool
 focusRequested = isJust . pendingFocus

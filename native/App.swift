@@ -426,7 +426,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             workspaces=plan.workspaces ?? []
             rememberBorders(plan)
             let row=workspaces.isEmpty ? plan.workspace : workspaceRow(workspaces)
-            setStatus("\(row) · \(plan.layout)")
+            setStatus(plan.status ?? "\(row) · \(plan.layout)")
             axBusySince=axBusySince ?? Date()
             axQueue.async { [weak self] in
                 guard let self=self else { return }

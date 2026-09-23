@@ -52,6 +52,28 @@ Menu bar: `[2] 1 3 - Tall`. Settings can swallow macOS window shortcuts
 while tiling (nothing is written to System Settings) and log key events.
 `xmonad status` is JSON for an external bar.
 
+`XMonad.Hooks.StatusBar` renders a `PP` on every state change; each sink
+writes only when the text changed. `ppTitle` is the focused window's
+`AXTitle`. `macMenuBarPP` replaces the menu bar row (and the `status` field
+of `xmonad status`) with the rendered line.
+
+```haskell
+import XMonad
+import XMonad.Hooks.StatusBar
+
+main = do
+  file <- statusBarFile "/tmp/xmonad-status" (pure def)
+  sketchy <- statusBarSpawn
+    (\s -> "sketchybar --trigger xmonad_update INFO=" ++ shellQuote s)
+    (pure def {ppOrder = take 1})
+  xmonad $ withSB (file <> sketchy <> macMenuBarPP (pure def {ppSep = " · "}))
+         $ def
+```
+
+`statusBarPipe "cmd" pp` starts `cmd` at startup and writes each line to its
+stdin. A PP's own `ppOutput` goes to stderr (the bridge log) because the
+engine's stdout is the helper protocol.
+
 ## Paths
 
 | Path | |
