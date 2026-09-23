@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `make install` no longer refuses while XMonadMac is running: it quits the
+  app, installs, and relaunches it in the same mode (normal or dry-run).
+
 - System sleep still pauses a running session and restores owned windows,
   but waking now resumes it without a trip to the menu. A session that was
   already paused stays paused.

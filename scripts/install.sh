@@ -2,8 +2,18 @@
 source "$(dirname "$0")/common.sh"
 mac_only
 [ -x "$ROOT/build/xmonad-engine" ] && [ -d "$ROOT/build/XMonadMac.app" ] || { echo "Run scripts/build.sh first." >&2; exit 1; }
+# A running app is quit (SIGTERM restores owned windows) and relaunched in the
+# same mode once the new build is in place.
+RELAUNCH=""
 if pgrep -x XMonadMac >/dev/null 2>&1; then
-  echo "Quit XMonadMac from its menu before replacing the native app. Use xmonad --recompile for config-only updates." >&2; exit 1
+  RELAUNCH=normal
+  if pgrep -f 'XMonadMac.*--dry-run' >/dev/null 2>&1; then RELAUNCH=dry-run; fi
+  echo "Stopping the running XMonadMac for the swap..."
+  pkill -TERM -x XMonadMac || true
+  for _ in $(seq 50); do pgrep -x XMonadMac >/dev/null 2>&1 || break; sleep 0.2; done
+  if pgrep -x XMonadMac >/dev/null 2>&1; then
+    echo "XMonadMac did not quit within 10s; quit it from its menu and retry." >&2; exit 1
+  fi
 fi
 umask 077
 mkdir -p "$HOME/Applications" "$SUPPORT" "$HOME/.config/xmonad-mac" "$HOME/.local/bin"
@@ -55,3 +65,7 @@ echo "Installed: $APP"
 echo "Config: $HOME/.config/xmonad-mac/xmonad.hs"
 echo "Control: $HOME/.local/bin/xmonad (and xmonadctl)"
 echo "Start a read-only preview: xmonad start --dry-run"
+case "$RELAUNCH" in
+  normal) /usr/bin/open "$APP"; echo "Relaunched XMonadMac." ;;
+  dry-run) /usr/bin/open "$APP" --args --dry-run; echo "Relaunched XMonadMac (dry-run)." ;;
+esac
