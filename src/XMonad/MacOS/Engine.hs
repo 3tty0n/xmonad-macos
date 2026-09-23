@@ -31,7 +31,7 @@ initialState c ds = XState
   , pendingFocus=Nothing, nextActionId=0
   , displayAffinity=M.fromList [(displayID (W.screenDetail sc), W.tag (W.workspace sc))
                                | sc <- W.screens ws]
-  , borderOverrides=M.empty
+  , borderOverrides=M.empty, keyGrab=Nothing
   , commands=[], extensibleState=M.empty, menuBarText=Nothing }
   where
     ds' = if null ds then [DisplayInfo 0 (Rectangle 0 0 1 1)] else ds
@@ -501,8 +501,11 @@ handleEvent keymap event = case event of
     known <- gets (W.member w . windowset)
     when known $ windows (W.focusWindow w)
   -- A bound key is the one thing that may ask the helper to change focus.
-  KeyEvent m k -> whenJust (M.lookup (m,k) keymap) $ \action -> do
-    action
+  KeyEvent m k grabbed -> do
+    pending <- gets keyGrab
+    modify $ \s -> s {keyGrab=Nothing}
+    if grabbed then whenJust pending ($ (m,k))
+      else whenJust (M.lookup (m,k) keymap) id
   AckEvent aid focused expired -> do
     s <- get
     case pendingFocus s of

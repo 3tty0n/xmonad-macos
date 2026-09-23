@@ -29,8 +29,13 @@ expired. Snapshot:
 
 ```json
 {"type":"key","mask":8,"sym":106}
+{"type":"key","mask":0,"sym":97,"grabbed":true}
 {"type":"mouseFloat","wid":1}
 ```
+
+`grabbed` marks the stroke answering a `grab` command; it may be any key,
+unmodified or unbound, and `sym` is 0 for a key with no keysym. A key
+without it is an ordinary binding, and tells the engine no grab is armed.
 
 ## Engine → helper
 
@@ -59,5 +64,12 @@ On helper restart, wids are rewritten from public fingerprints.
 ## Control
 
 `ping`/`exit` helper→engine; `pong`/`command` engine→helper.
-Commands: `close`, `reload`, `recompile`, `pause`, `quit`. JSON is never
-executed as a shell command.
+Commands: `close`, `reload`, `recompile`, `pause`, `quit`, `grab`. JSON is
+never executed as a shell command.
+
+`grab` is a submap waiting for its next stroke: the helper swallows the next
+key press, whatever it is, and sends it back `grabbed`. The grab covers one
+stroke — a nested submap sends `grab` again — and lapses after 5 s, on
+pause, or on a new `configure`. The emergency stop (Ctrl-Opt-Cmd-Esc) is
+never grabbed. There is no `ungrab`: Escape or any unbound stroke reaches
+the engine, which drops the submap as upstream does.

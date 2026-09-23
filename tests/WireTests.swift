@@ -92,6 +92,8 @@ import AppKit
         }
         check(keyCodeForSym[106] == 38,"J physical key")
         check(keyCodeForSym[0xffd1] == 90,"F20 mapping")
+        check(symForKeyCode[38] == 106 && symForKeyCode[53] == 0xff1b,"grabbed keys map back to keysyms")
+        check(keyCodeForSym.allSatisfy { symForKeyCode[$0.value] == $0.key },"key codes are unique")
         let config=Data(("{\"type\":\"configure\",\"protocol\":1,\"keys\":[{\"mask\":68,\"sym\":106}]"
           + ",\"mouseMask\":68,\"mouse\":[{\"mask\":68,\"button\":1,\"action\":\"move\"}"
           + ",{\"mask\":68,\"button\":3,\"action\":\"resize\"},{\"mask\":68,\"button\":2,\"action\":\"raise\"}]"

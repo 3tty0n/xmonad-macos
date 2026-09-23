@@ -290,6 +290,7 @@ let keyCodeForSym: [Int:UInt16] = {
     for (i,k) in fs.enumerated() { map[0xffbe+i] = k }
     return map
 }()
+let symForKeyCode = Dictionary(uniqueKeysWithValues: keyCodeForSym.map { ($0.value,$0.key) })
 func validateModifierMask(_ mask: Int) throws {
     guard mask >= 0, mask & ~(1|4|8|64) == 0 else {
         throw WireError.invalid("Unsupported modifier mask=\(mask)")

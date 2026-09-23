@@ -26,10 +26,11 @@ final class KeyboardTap {
     private var enabled = false
     private var suppressSystem = false
     private var logKeys = false
+    private var grabUntil: Date?
     private var port: CFMachPort?
     private var runLoop: CFRunLoop?
     private var thread: Thread?
-    var onKey: ((KeyBinding?) -> Void)?  // nil = emergency pause/recovery
+    var onKey: (((KeyBinding,Bool)?) -> Void)?  // (key, grabbed); nil = emergency pause
     var onReady: (() -> Void)?
     var onFailure: ((String) -> Void)?
     var onDebug: ((String) -> Void)?
@@ -41,9 +42,12 @@ final class KeyboardTap {
             guard next[p] == nil else { throw WireError.invalid("Duplicate physical binding") }
             next[p] = k
         }
-        lock.lock(); bindings=next; lock.unlock()
+        lock.lock(); bindings=next; grabUntil=nil; lock.unlock()
     }
-    func setEnabled(_ value: Bool) { lock.lock(); enabled=value; lock.unlock() }
+    // A submap is waiting: the next stroke goes to the engine whatever it is.
+    // One stroke only, and a user who walks away gets the keyboard back.
+    func grabNext(for seconds: TimeInterval) { lock.lock(); grabUntil=Date()+seconds; lock.unlock() }
+    func setEnabled(_ value: Bool) { lock.lock(); enabled=value; if !value { grabUntil=nil }; lock.unlock() }
     func setSuppressSystemShortcuts(_ value: Bool) { lock.lock(); suppressSystem=value; lock.unlock() }
     func setLogKeys(_ value: Bool) { lock.lock(); logKeys=value; lock.unlock() }
     func start() {
@@ -98,20 +102,23 @@ final class KeyboardTap {
             return consumed ? nil : Unmanaged.passUnretained(event)
         }
         let emergency=code == 53 && mask == (4|8|64)
-        let key=bindings[PhysicalKey(code:code,mask:mask)]
+        let grabbed=enabled && !emergency && (grabUntil.map { $0 > Date() } ?? false)
+        if !emergency { grabUntil=nil }
+        let key=grabbed ? KeyBinding(mask:mask,sym:symForKeyCode[code] ?? 0)
+                        : bindings[PhysicalKey(code:code,mask:mask)]
         let suppressed=enabled && key == nil && suppressSystem
                        && systemShortcuts.contains(PhysicalKey(code:code,mask:mask))
         let consume=emergency || (enabled && key != nil) || suppressed
         if consume { swallowed.insert(code) }
         // Opt-in diagnosis for "my modifier does nothing": modified keys only.
         let report=(logKeys && mask != 0)
-          ? "key code=\(code) mask=\(mask) bound=\(key != nil) consumed=\(consume) tiling=\(enabled)"
+          ? "key code=\(code) mask=\(mask) bound=\(key != nil) grabbed=\(grabbed) consumed=\(consume) tiling=\(enabled)"
           : nil
         lock.unlock()
         if let report=report { DispatchQueue.main.async { [weak self] in self?.onDebug?(report) } }
         if consume {
             if emergency || key != nil {
-                DispatchQueue.main.async { [weak self] in self?.onKey?(emergency ? nil : key) }
+                DispatchQueue.main.async { [weak self] in self?.onKey?(emergency ? nil : key.map { ($0,grabbed) }) }
             }
             return nil
         }

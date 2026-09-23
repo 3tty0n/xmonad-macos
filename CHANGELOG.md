@@ -19,6 +19,16 @@
   method, as upstream, so it builds a `PP` too. No `ppUrgent`,
   `statusBarProp` or `withEasySB`.
 
+- Multi-stroke bindings: `additionalKeysP` / `mkKeymap` accept Emacs-style
+  sequences such as `"M-x a"` or `"M-C-x M-s"`, built on a port of
+  `Actions.Submap` (`submap`, `submapDefault`, `submapDefaultWithKey`).
+  After a prefix the helper grabs exactly the next stroke (new `grab`
+  command, `grabbed` key field); Escape or an unbound key cancels, and an
+  idle grab lapses after 5 s. `checkKeymap` logs duplicates and prefix
+  conflicts to stderr, and a key bound both alone and as a prefix is a hard
+  error. `removeKeysP` of a sequence removes its whole first stroke, as
+  upstream. An installed app older than this engine pauses on `grab`.
+
 - `Layout.MultiToggle` and `MultiToggle.Instances` are ported, with
   `REFLECTX` / `REFLECTY` in `Layout.Reflect`. The bundled config wraps its
   layouts in `mkToggle (single REFLECTX)` and binds `M-r` to flip the
