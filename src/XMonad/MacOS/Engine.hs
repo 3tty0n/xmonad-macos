@@ -32,7 +32,7 @@ initialState c ds = XState
   , displayAffinity=M.fromList [(displayID (W.screenDetail sc), W.tag (W.workspace sc))
                                | sc <- W.screens ws]
   , borderOverrides=M.empty
-  , commands=[] }
+  , commands=[], extensibleState=M.empty }
   where
     ds' = if null ds then [DisplayInfo 0 (Rectangle 0 0 1 1)] else ds
     configured = nub (filter (not . null) $ workspaces c)
@@ -131,6 +131,7 @@ adoptSnapshot snap c previous observed = put base
       _ -> Nothing
   , displayAffinity = M.fromList affinity
   , commands = []
+  , extensibleState = extensibleState previous
   }
   where
     base | snapEpoch snap /= epoch previous = initialState c (snapDisplays snap)
@@ -145,12 +146,16 @@ adoptSnapshot snap c previous observed = put base
 restoreSaved :: Snapshot -> XConfig Layout -> M.Map Window WindowInfo -> X ()
 restoreSaved snap c observed = whenJust (snapRestore snap) $ \saved -> do
   s <- get
-  case restoreCheckpoint c (snapEpoch snap) (snapDisplays snap) observed saved of
-    Left problem -> trace $ "Checkpoint ignored: " ++ problem
-    Right restored -> put s {windowset=restored
-                            ,displayAffinity=case fromJSON saved :: Result Saved of
-                               Success sv -> M.fromList (savedDisplays sv)
-                               _ -> displayAffinity s}
+  case (restoreCheckpoint c (snapEpoch snap) (snapDisplays snap) observed saved
+       ,parseSaved saved) of
+    (Right restored,Right sv) -> put s
+      {windowset=restored
+      ,displayAffinity=M.fromList (savedDisplays sv)
+      -- Read back lazily, by the first get of each type, as upstream does.
+      ,extensibleState=M.union (extensibleState s) $
+         M.fromList [(k,Left v) | (k,v) <- fromMaybe [] (savedExtensions sv)]}
+    (Left problem,_) -> trace $ "Checkpoint ignored: " ++ problem
+    (_,Left problem) -> trace $ "Checkpoint ignored: " ++ problem
 
 -- A floating window the user dragged keeps its new geometry, and joins the
 -- workspace of the display it landed on. Only an actually changed frame
@@ -313,7 +318,9 @@ instance FromJSON SavedFloat
 data Saved = Saved
   { savedVersion :: Int, savedEpoch :: Int, savedCurrent :: String
   , savedWorkspaces :: [SavedWorkspace], savedDisplays :: [(Int,String)]
-  , savedFloats :: [SavedFloat] } deriving (Generic,Show)
+  , savedFloats :: [SavedFloat]
+  -- Show-encoded PersistentExtension values; absent from older checkpoints.
+  , savedExtensions :: Maybe [(String,String)] } deriving (Generic,Show)
 instance ToJSON Saved
 instance FromJSON Saved
 checkpoint :: XState -> Value
@@ -324,15 +331,24 @@ checkpoint s = toJSON $ Saved 1 (epoch s) (W.currentTag ws)
         ++ [(displayID $ W.screenDetail sc,W.tag $ W.workspace sc) | sc <- W.screens ws]))
   [SavedFloat w (fromRational x) (fromRational y) (fromRational rw) (fromRational rh)
     | (w,W.RationalRect x y rw rh) <- M.toList (W.floating ws)]
+  (Just [(k,v) | (k,Just v) <- M.toList (M.map persisted (extensibleState s))])
   where ws=windowset s
+        persisted (Left v) = Just v
+        persisted (Right (PersistentExtension a)) = Just (show a)
+        persisted (Right (StateExtension _)) = Nothing
+
+parseSaved :: Value -> Either String Saved
+parseSaved value = case fromJSON value of
+  Error e -> Left e
+  Success saved -> Right saved
 -- Rebuild policy state from a checkpoint. Rejected outright if it describes a
 -- different protocol version or a different native Space epoch; otherwise
 -- every window in it must still exist, and each may appear on one workspace.
 restoreCheckpoint :: XConfig Layout -> Int -> [DisplayInfo]
                   -> M.Map Window WindowInfo -> Value -> Either String WindowSet
-restoreCheckpoint c ep ds live value = case fromJSON value of
-  Error e -> Left e
-  Success saved
+restoreCheckpoint c ep ds live value = case parseSaved value of
+  Left e -> Left e
+  Right saved
     | savedVersion saved /= 1 -> Left "unsupported version"
     | savedEpoch saved /= ep -> Left "different native Space epoch"
     | otherwise -> Right (rebuild c ds live saved)

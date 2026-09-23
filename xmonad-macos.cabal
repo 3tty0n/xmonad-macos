@@ -50,6 +50,8 @@ library
     XMonad.Util.EZConfig
     XMonad.Util.Types
     XMonad.Util.SpawnOnce
+    XMonad.Util.ExtensibleState
+    XMonad.Hooks.WorkspaceHistory
     XMonad.Util.CustomKeys
     XMonad.Util.Run
     XMonad.Util.NamedScratchpad

@@ -49,6 +49,8 @@ not know it draws the handshake's width everywhere, which is what it did
 before.
 
 `checkpoint` is opaque JSON stored by the helper and returned in `restore`.
+Its `savedExtensions` holds each `PersistentExtension` as a (type, `show`)
+pair; a checkpoint without it restores with no extensible state.
 On helper restart, wids are rewritten from public fingerprints.
 
 ## Control

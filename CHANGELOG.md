@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `Util.ExtensibleState` is ported, backed by an `extensibleState` field in
+  `XState` as upstream. A `PersistentExtension` value is written into the
+  restart checkpoint with `show` and read back lazily on its first `get`, so
+  it survives `xmonad --restart`; checkpoints from before this still load.
+  `Hooks.WorkspaceHistory` is ported on top of it. `cycleRecentWindows` is
+  still missing: it needs a grab that holds until the modifier is released.
+
 - `Layout.MultiToggle` and `MultiToggle.Instances` are ported, with
   `REFLECTX` / `REFLECTY` in `Layout.Reflect`. The bundled config wraps its
   layouts in `mkToggle (single REFLECTX)` and binds `M-r` to flip the

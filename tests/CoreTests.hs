@@ -44,6 +44,9 @@ import qualified Data.Set as S
 import Data.List (isInfixOf,isPrefixOf,nub,sort,(\\))
 import Data.Maybe (fromMaybe,listToMaybe,isJust)
 import Data.Aeson
+import qualified XMonad.Util.ExtensibleState as XS
+import XMonad.Hooks.WorkspaceHistory
+import qualified Data.Aeson.KeyMap as KM
 import Control.Exception (finally)
 import Control.Monad (forM_,unless)
 import System.Directory
@@ -70,6 +73,12 @@ initial :: XState
 initial=initialState cfg displays
 conf :: XConf
 conf=XConf cfg
+newtype Counter = Counter Int deriving (Eq, Read, Show)
+instance ExtensionClass Counter where
+  initialValue = Counter 0
+  extensionType = PersistentExtension
+newtype Scratch = Scratch Int deriving (Eq, Show)
+instance ExtensionClass Scratch where initialValue = Scratch 0
 main :: IO ()
 main = do
   forM_ [1..30::Int] $ \n -> do
@@ -289,6 +298,28 @@ main = do
   case restoreCheckpoint cfg 99 displays (windowInfo s3) saved of
     Left _ -> pure ()
     Right _ -> ioError $ userError "FAIL: wrong epoch checkpoint accepted"
+  (_,xs) <- runX conf s3 $ do
+    XS.modify (\(Counter n) -> Counter (n+2))
+    XS.put (Scratch 7)
+  (sc,_) <- runX conf xs (XS.gets (\(Scratch n) -> n))
+  check "extensible state get after put" (sc==7)
+  (gone,_) <- runX conf xs (XS.remove (Scratch 0) >> XS.get)
+  check "extensible state remove" (gone==Scratch 0)
+  let restart=snapshot {snapRestore=Just (checkpoint xs)}
+  (back,_) <- runX conf initial (reconcile restart >> ((,) <$> XS.get <*> XS.get))
+  check "persistent extension survives restart" (back==(Counter 2,Scratch 0))
+  let older=case checkpoint s3 of
+        Object o -> Object (KM.delete "savedExtensions" o)
+        v -> v
+  check "checkpoint without extensions still loads"
+    (either (const False) (const True) (restoreCheckpoint cfg 1 displays (windowInfo s3) older))
+  (hist,_) <- runX conf s3 $ do
+    workspaceHistoryHook
+    windows (W.view "1") >> workspaceHistoryHook
+    windows (W.view "3") >> workspaceHistoryHook
+    (,) <$> workspaceHistory <*> workspaceHistoryByScreen
+  check "workspace history is most recent first"
+    (take 2 (fst hist)==["3","1"] && length (snd hist)==2)
   let unplugged=rescreen [displays !! 1] (windowset s2)
       plugged=rescreen (displays ++ [DisplayInfo 30 r]) unplugged
   check "hotplug loses no windows" (sort (W.allWindows plugged)==[1,2,3])
@@ -476,7 +507,7 @@ main = do
     (fullFloat (borderState (lessBorders (Combine Difference OnlyFloat Screen) tallW) ws3)) makePlan
   check "Combine Difference subtracts the second rule" (widthOf 2 planDiff==Nothing)
   testAtomicRecompile
-  putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, magnifier, boring windows, scratchpads, no borders, key parser, protocol and atomic recompile"
+  putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, extensible state, magnifier, boring windows, scratchpads, no borders, key parser, protocol and atomic recompile"
 
 -- Fake ghc/cabal/helper on PATH: a successful swap, then a failed cabal build
 -- that must leave the previous engine byte-for-byte.
