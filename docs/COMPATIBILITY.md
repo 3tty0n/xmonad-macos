@@ -47,14 +47,17 @@ the same names.
 | `Actions.FindEmptyWorkspace` / `FloatKeys` | |
 | `Actions.WindowGo` | No `$BROWSER` / `$EDITOR` |
 | `Hooks.ManageHelpers` / `InsertPosition` | No X11 property queries |
+| `Hooks.WorkspaceHistory` | History survives a restart |
 | `Util.EZConfig` / `Types` / `CustomKeys` | |
 | `Util.SpawnOnce` | In-process, not persisted |
+| `Util.ExtensibleState` | X monad only; `PersistentExtension` rides in the checkpoint |
 | `Util.Run` | No dzen / `runInTerm` |
 | `Util.NamedScratchpad` | `NSP` is created on demand and shows in the status list; a checkpoint restore drops it |
 
-Not ported: Tabbed, Decoration, Prompt, EWMH, `ExtensibleState`.
-Named scratchpad exclusives, dynamic scratchpads and `nsHideOnFocusLoss` need
-`ExtensibleState`, so they are not provided.
+Not ported: Tabbed, Decoration, Prompt, EWMH.
+Named scratchpad exclusives, dynamic scratchpads and `nsHideOnFocusLoss` are
+not provided. `cycleRecentWindows` needs a grab that holds until the modifier
+is released, which the helper does not report.
 
 A layout's border widths reach the helper in the plan, so `NoBorders` and
 `withBorder` need a helper built alongside the engine. An older installed app

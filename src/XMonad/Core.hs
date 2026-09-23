@@ -80,7 +80,19 @@ data XState = XState
   -- borderWidth stays the default for every window not listed here.
   , borderOverrides :: M.Map Window Int
   , commands :: [NativeCommand]
+  -- Keyed by the value's type; a Left is a persisted value not yet read back.
+  , extensibleState :: M.Map String (Either String StateExtension)
   }
+-- Upstream's extensible state, as used by XMonad.Util.ExtensibleState.
+class Typeable a => ExtensionClass a where
+  initialValue :: a
+  extensionType :: a -> StateExtension
+  extensionType = StateExtension
+
+data StateExtension
+  = forall a. ExtensionClass a => StateExtension a
+  | forall a. (Read a, Show a, ExtensionClass a) => PersistentExtension a
+
 focusRequested :: XState -> Bool
 focusRequested = isJust . pendingFocus
 runX :: XConf -> XState -> X a -> IO (a, XState)
