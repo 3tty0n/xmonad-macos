@@ -47,11 +47,19 @@ instance ToJSON WorkspaceInfo where
 data Placement = Placement Window Rectangle deriving (Show,Eq)
 instance ToJSON Placement where
   toJSON (Placement w r) = object ["wid" .= w,"frame" .= r]
+-- A window whose border width the layout asked for. Anything not listed here
+-- is drawn at the width the config gives, so a helper that does not know this
+-- field draws exactly what it drew before.
+data BorderWidth = BorderWidth
+  { borderWindow :: Window, borderPixels :: Int } deriving (Show,Eq)
+instance ToJSON BorderWidth where
+  toJSON b = object ["wid" .= borderWindow b,"width" .= borderPixels b]
 -- What the helper should make true: place these, hide the rest, focus at most
 -- one, and show this workspace row.
 data Plan = Plan
   { planGeneration :: Int, planEpoch :: Int
   , planFrames :: [Placement], planHide :: [Window], planFocus :: Maybe Window
+  , planBorders :: [BorderWidth]
   , planAction :: Maybe Int, planFocusForMs :: Int
   , planWorkspace :: String, planLayout :: String, planCheckpoint :: Value
   -- The display the current screen sits on, so the helper can follow it.
@@ -62,6 +70,7 @@ instance ToJSON Plan where
   toJSON p = object
     ["type" .= ("plan" :: String),"generation" .= planGeneration p,"epoch" .= planEpoch p
     ,"frames" .= planFrames p,"hide" .= planHide p,"focus" .= planFocus p
+    ,"borders" .= planBorders p
     ,"action" .= planAction p,"focusForMs" .= planFocusForMs p
     ,"workspace" .= planWorkspace p,"layout" .= planLayout p,"checkpoint" .= planCheckpoint p
     ,"screen" .= planScreen p

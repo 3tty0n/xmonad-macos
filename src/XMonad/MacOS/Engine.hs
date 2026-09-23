@@ -3,7 +3,8 @@
 {-# LANGUAGE DeriveGeneric #-}
 module XMonad.MacOS.Engine
   ( xmonad, initialState, reconcile, floatObservedWindow, makePlan, rescreen
-  , rescreenWith, checkpoint, restoreCheckpoint, handleEvent ) where
+  , rescreenWith, checkpoint, restoreCheckpoint, handleEvent
+  , workspaceSummary ) where
 import XMonad.Core
 import XMonad.MacOS.Protocol
 import XMonad.MacOS.CLI (handleCommand)
@@ -30,6 +31,7 @@ initialState c ds = XState
   , pendingFocus=Nothing, nextActionId=0
   , displayAffinity=M.fromList [(displayID (W.screenDetail sc), W.tag (W.workspace sc))
                                | sc <- W.screens ws]
+  , borderOverrides=M.empty
   , commands=[] }
   where
     ds' = if null ds then [DisplayInfo 0 (Rectangle 0 0 1 1)] else ds
@@ -235,6 +237,9 @@ floatObservedWindow w = do
 -- should show.
 makePlan :: X Plan
 makePlan = do
+  -- A plan states every border it wants, so the overrides a layout asked for
+  -- during this pass start from nothing.
+  modify $ \s -> s {borderOverrides = M.empty}
   screens <- gets (W.screens . windowset)
   placements <- concat <$> mapM placeScreen screens
   c <- asks config
@@ -246,6 +251,7 @@ makePlan = do
     { planGeneration = generation s
     , planEpoch = epoch s
     , planFrames = placements
+    , planBorders = [BorderWidth w n | (w,n) <- M.toList (borderOverrides s)]
     , planHide = W.allWindows ws \\ shown
     , planFocus = requestedFocus s shown
     , planAction = case requestedFocus s shown of

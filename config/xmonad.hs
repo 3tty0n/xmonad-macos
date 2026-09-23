@@ -1,6 +1,7 @@
 import XMonad
 import qualified XMonad.StackSet as W
 import XMonad.Util.EZConfig
+import XMonad.Layout.NoBorders
 import XMonad.Layout.Spacing
 import XMonad.Layout.ThreeColumns()
 import XMonad.MacOS
@@ -16,7 +17,8 @@ main = xmonad $ def
   , focusedBorderColor = "#ff0000" -- "#61afef"
   , normalBorderColor = "#dddddd"
   , focusFollowsMouse = False      -- Default: True
-  , layoutHook = spacing 5 $
+  -- smartBorders drops the border when a lone window fills the tile.
+  , layoutHook = smartBorders $ spacing 5 $
       Tall 1 (3/100) (1/2)
       ||| ThreeColMid 1 (3/100) (1/2)     -- ThreeColMid for a centred master
       ||| Circle

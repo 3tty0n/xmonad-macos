@@ -74,6 +74,11 @@ data XState = XState
   , nextActionId :: Int
   -- Display ID -> workspace tag, including displays that are currently gone.
   , displayAffinity :: M.Map Int WorkspaceId
+  -- Per-window border width a layout asked for while it was being run. The
+  -- next plan carries these and is rebuilt from scratch, so an entry only
+  -- lasts as long as the layout keeps asking for it; the configured
+  -- borderWidth stays the default for every window not listed here.
+  , borderOverrides :: M.Map Window Int
   , commands :: [NativeCommand]
   }
 focusRequested :: XState -> Bool

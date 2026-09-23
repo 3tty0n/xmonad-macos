@@ -36,6 +36,30 @@ import AppKit
         try PlanSafety.validate(plan,active:[1,2,3]); count += 1
         check(plan.workspace == "日本語","UTF-8 protocol")
         check(plan.action == 7 && plan.focusForMs == 400,"action sequencing fields")
+        check(plan.borders == nil,"a plan without borders still decodes")
+        let bjson="""
+        {"type":"plan","generation":1,"epoch":1,
+         "frames":[{"wid":1,"frame":{"x":0,"y":24,"width":800,"height":900}},
+                   {"wid":3,"frame":{"x":0,"y":924,"width":800,"height":900}}],
+         "hide":[],"focus":1,"workspace":"1","layout":"Tall","checkpoint":null,
+         "borders":[{"wid":1,"width":0},{"wid":3,"width":4}]}
+        """
+        let bdata=Data(bjson.utf8)
+        let msg=try JSONDecoder().decode(EngineMessage.self,from:bdata)
+        guard case .plan(let named)=msg else { fatalError("decode borders") }
+        check(named.borders?.count == 2,"per-window border widths decode")
+        check(named.borders?.first?.wid == 1
+              && named.borders?.first?.width == 0,"zero means no border at all")
+        check(named.borders?.last?.width == 4,"the plan may narrow a border")
+        try PlanSafety.validate(named,active:[1,3]); count += 1
+        let ejson="""
+        {"type":"plan","generation":1,"epoch":1,"frames":[],"hide":[],
+         "workspace":"1","layout":"Tall","checkpoint":null,"borders":[]}
+        """
+        let edata=Data(ejson.utf8)
+        let emsg=try JSONDecoder().decode(EngineMessage.self,from:edata)
+        guard case .plan(let none)=emsg else { fatalError("empty borders") }
+        check(none.borders?.isEmpty == true,"an empty border list is not nil")
         var bad=plan; bad.hide=[1]; rejects(bad,"show/hide conflict")
         bad=plan; bad.frames.append(bad.frames[0]); rejects(bad,"duplicate frame")
         bad=plan; bad.hide=[2,2]; rejects(bad,"duplicate hidden ID")
@@ -43,6 +67,14 @@ import AppKit
         bad=plan; bad.frames[0].frame.width=0; rejects(bad,"zero dimension")
         bad=plan; bad.frames[0].frame.x=Int.max; rejects(bad,"coordinate overflow")
         bad=plan; bad.hide=[9]; rejects(bad,"unknown window ID")
+        bad=plan; bad.borders=[BorderOverride(wid:9,width:1)]
+        rejects(bad,"border width for a window the plan does not place")
+        bad=plan; bad.borders=[BorderOverride(wid:1,width:-1)]
+        rejects(bad,"negative border width")
+        bad=plan; bad.borders=[BorderOverride(wid:1,width:65)]
+        rejects(bad,"border width above the cap")
+        bad=plan; bad.borders=[BorderOverride(wid:1,width:0)]
+        try PlanSafety.validate(bad,active:[1,2,3]); count += 1
         bad=plan; bad.frames[0].frame.height = -1; rejects(bad,"negative dimension")
         plan.frames[0].frame.x = -1800
         try PlanSafety.validate(plan,active:[1,2,3]); count += 1

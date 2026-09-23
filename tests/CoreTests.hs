@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 import XMonad
@@ -26,9 +27,20 @@ import XMonad.Layout.Dishes
 import XMonad.Layout.ToggleLayouts
 import XMonad.Actions.CopyWindow (copy)
 import XMonad.Actions.FocusNth (focusNth')
+import XMonad.Layout.BoringWindows
+  (boringAuto, boringWindows, clearBoring, focusUp, markBoring)
+import qualified XMonad.Layout.BoringWindows as BW
+import XMonad.Layout.Magnifier
+  (magnifiercz, magnifiercz', MagnifyMsg(MagnifyMore, ToggleOff))
+import XMonad.Layout.NoBorders
+  (noBorders, smartBorders, withBorder, lessBorders, hasBorder
+  ,Ambiguity(Screen, OnlyFloat, Combine), With(Difference), BorderMessage(ResetBorder))
+import XMonad.Util.NamedScratchpad
+  (NamedScratchpad(NS), customFloating, namedScratchpadAction
+  ,namedScratchpadManageHook, nonFloating, scratchpadWorkspaceTag)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
-import Data.List (isInfixOf,isPrefixOf,nub,sort)
+import Data.List (isInfixOf,isPrefixOf,nub,sort,(\\))
 import Data.Maybe (fromMaybe,listToMaybe,isJust)
 import Data.Aeson
 import Control.Exception (finally)
@@ -327,8 +339,128 @@ main = do
     (W.member 1 (W.view "2" copied) && W.member 1 copied)
   check "focusNth' selects by index"
     (focusNth' 0 (W.Stack (2::Int) [1] [3])==W.Stack 1 [] [2,3])
+  -- Magnifier scales the focused window about its centre, clips it to the
+  -- frame, and lists it last, which is the top of the stack here.
+  let magStack = W.Stack (1::Window) [] [2,3]
+      tallW = Tall 1 (3/100) (1/2) :: Tall Window
+      magLayout = magnifiercz 1.2 tallW
+  check "magnifier names itself" (description magLayout=="Magnifier Tall")
+  ((magRects,_),_) <- runX conf s1 $
+    runLayout (W.Workspace "1" magLayout (Just magStack)) frame3
+  check "magnifier grows the focused window" (lookup 1 magRects==Just (Rectangle 0 24 600 800))
+  check "magnifier leaves the others to the layout"
+    (lookup 2 magRects==lookup 2 (pureLayout tallW frame3 magStack)
+     && lookup 3 magRects==lookup 3 (pureLayout tallW frame3 magStack))
+  check "the magnified window is listed last" (fst (last magRects)==1)
+  (magMore,_) <- runX conf s1 (handleMessage magLayout (SomeMessage MagnifyMore))
+  ((magBigger,_),_) <- runX conf s1 $
+    runLayout (W.Workspace "1" (fromMaybe magLayout magMore) (Just magStack)) frame3
+  check "MagnifyMore zooms it further"
+    (fmap rect_width (lookup 1 magBigger)==Just 650)
+  (magOff,_) <- runX conf s1 (handleMessage magLayout (SomeMessage ToggleOff))
+  check "ToggleOff turns the magnifier off"
+    (fmap description magOff==Just "Magnifier (off) Tall")
+  ((magOffRects,_),_) <- runX conf s1 $
+    runLayout (W.Workspace "1" (fromMaybe magLayout magOff) (Just magStack)) frame3
+  check "a magnifier that is off changes nothing"
+    (magOffRects==pureLayout tallW frame3 magStack)
+  ((magNoMaster,_),_) <- runX conf s1 $
+    runLayout (W.Workspace "1" (magnifiercz' 1.2 tallW) (Just magStack)) frame3
+  check "magnifier' leaves a focused master alone"
+    (magNoMaster==pureLayout tallW frame3 magStack)
+  -- BoringWindows: navigation skips what the user marked boring, and what
+  -- the layout is not showing at all.
+  let bLayout = Layout (boringWindows tallW)
+      bStack = W.Stack (1::Window) [] [2,3]
+      bState = s1 {windowset=W.modify' (const bStack)
+                     (W.mapWorkspace (\w -> w {W.layout=bLayout}) (windowset s1))}
+  (_,boringSkipped) <- runX conf bState $
+    sendMessage (BW.Replace "test" [3]) >> focusUp
+  check "focusUp skips a window marked boring"
+    (W.peek (windowset boringSkipped)==Just 2)
+  -- clearBoring clears the windows the user marked, so the walk comes back to
+  -- the one it skipped before.
+  (_,boringCleared) <- runX conf bState $
+    markBoring >> clearBoring >> focusUp >> focusUp >> focusUp
+  check "clearBoring stops the skipping" (W.peek (windowset boringCleared)==Just 1)
+  (_,boringMarked) <- runX conf bState $
+    markBoring >> focusUp >> focusUp >> focusUp
+  check "a boring window does not take focus"
+    (W.peek (windowset boringMarked)/=Just 1)
+  ((bAutoRects,bAuto),_) <- runX conf bState $
+    runLayout (W.Workspace "1" (boringAuto (TwoPane (3/100) (1/2))) (Just bStack)) frame3
+  let unarranged = W.integrate bStack \\ map fst bAutoRects
+  (_,boringAutoSkipped) <- runX conf bState $ handleMessage
+    (fromMaybe (boringAuto (TwoPane (3/100) (1/2))) bAuto) (SomeMessage BW.FocusUp)
+  check "boringAuto marks the window the layout hides boring"
+    (unarranged==[3] && W.peek (windowset boringAutoSkipped)==Just 2)
+  -- NamedScratchpad: the manage hook places the window, the action toggles it
+  -- between this workspace and a hidden NSP workspace created on demand.
+  let pads=[NS "term" "true" (title =? "1")
+               (customFloating (W.RationalRect 0 0 (1/2) 1))]
+  (_,padded) <- runX (XConf (cfg {manageHook=namedScratchpadManageHook pads})) initial
+    (reconcile snapshot)
+  check "the scratchpad manage hook floats its window"
+    (M.lookup 1 (W.floating (windowset padded))==Just (W.RationalRect 0 0 (1/2) 1))
+  check "the scratchpad manage hook leaves the rest tiled"
+    (M.notMember 2 (W.floating (windowset padded)))
+  (_,padHidden) <- runX conf padded (namedScratchpadAction pads "term")
+  check "the scratchpad action hides it on the NSP workspace"
+    (W.findTag 1 (windowset padHidden)==Just scratchpadWorkspaceTag)
+  check "the NSP workspace is created on demand"
+    (W.tagMember scratchpadWorkspaceTag (windowset padHidden))
+  check "a hidden scratchpad does not keep focus"
+    (W.peek (windowset padHidden)/=Just 1)
+  check "the status summary reports the NSP workspace"
+    (any ((==scratchpadWorkspaceTag) . wsTag) (workspaceSummary cfg (windowset padHidden)))
+  (_,padShown) <- runX conf padHidden (namedScratchpadAction pads "term")
+  check "the same action brings it back to this workspace"
+    (W.findTag 1 (windowset padShown)==Just "1")
+  check "the summoned scratchpad takes focus" (W.peek (windowset padShown)==Just 1)
+  (_,padNone) <- runX conf padded $
+    namedScratchpadAction [NS "none" "true" (title =? "nothing") nonFloating] "none"
+  check "an absent scratchpad only spawns"
+    (W.allWindows (windowset padNone)==W.allWindows (windowset padded)
+     && W.currentTag (windowset padNone)==W.currentTag (windowset padded))
+  -- NoBorders: a layout decides per-window border widths, and the plan the
+  -- helper receives carries them to the overlay it draws.
+  let base1 = initialState cfg [head displays]
+      ws3 = W.focusWindow 1 (foldl (flip W.insertUp) (windowset base1) [1,2,3])
+      borderState l ws = base1 {windowset=W.mapWorkspace (\w -> w {W.layout=Layout l}) ws}
+      widthOf w p = lookup w [(borderWindow b,borderPixels b) | b <- planBorders p]
+  (planSolo,_) <- runX conf (borderState (smartBorders tallW)
+                               (W.modify' (const (W.Stack 1 [] [])) ws3)) makePlan
+  check "smartBorders drops a lone window's border"
+    (planBorders planSolo==[BorderWidth 1 0])
+  (planThree,_) <- runX conf (borderState (smartBorders tallW) ws3) makePlan
+  check "smartBorders keeps borders when windows share the screen"
+    (null (planBorders planThree))
+  (planNone,_) <- runX conf (borderState (noBorders tallW) ws3) makePlan
+  check "noBorders drops every border"
+    (length (planBorders planNone)==3 && all ((==0) . borderPixels) (planBorders planNone))
+  (planWide,_) <- runX conf (borderState (withBorder 3 tallW) ws3) makePlan
+  check "withBorder asks for its own width"
+    (length (planBorders planWide)==3 && all ((==3) . borderPixels) (planBorders planWide))
+  -- hasBorder marks one window wherever it is shown, ResetBorder forgets it.
+  (planAsked,_) <- runX conf (borderState (smartBorders tallW) ws3) $ do
+    runQuery (hasBorder False) 1
+    makePlan
+  check "hasBorder hides one window's border" (widthOf 1 planAsked==Just 0)
+  check "hasBorder leaves the other borders alone" (widthOf 2 planAsked==Nothing)
+  (planReset,_) <- runX conf (borderState (smartBorders tallW) ws3) $ do
+    runQuery (hasBorder False) 1
+    broadcastMessage (ResetBorder 1)
+    makePlan
+  check "ResetBorder forgets the request" (null (planBorders planReset))
+  -- Floats: a full-screen float is ambiguous, and a combined rule can subtract.
+  let fullFloat st = st {windowset=W.float 2 (W.RationalRect 0 0 1 1) (windowset st)}
+  (planFloat,_) <- runX conf (fullFloat (borderState (lessBorders OnlyFloat tallW) ws3)) makePlan
+  check "OnlyFloat hides a floating window's border" (widthOf 2 planFloat==Just 0)
+  (planDiff,_) <- runX conf
+    (fullFloat (borderState (lessBorders (Combine Difference OnlyFloat Screen) tallW) ws3)) makePlan
+  check "Combine Difference subtracts the second rule" (widthOf 2 planDiff==Nothing)
   testAtomicRecompile
-  putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, key parser, protocol and atomic recompile"
+  putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, magnifier, boring windows, scratchpads, no borders, key parser, protocol and atomic recompile"
 
 -- Fake ghc/cabal/helper on PATH: a successful swap, then a failed cabal build
 -- that must leave the previous engine byte-for-byte.

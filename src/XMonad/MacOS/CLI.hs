@@ -169,7 +169,6 @@ recompileInstalled p config = do
 installBuiltEngine :: Paths -> FilePath -> IO ExitCode
 installBuiltEngine p engine = do
   let dest = support p </> "xmonad-engine"
-      previous = dest ++ ".previous"
       confDest = support p </> "configure.json"
   createDirectoryIfMissing True (support p)
   tmpEngine <- namedTemp (support p) "xmonad-engine.new"
@@ -184,9 +183,9 @@ installBuiltEngine p engine = do
       validated <- validateHandshake p tmpConf
       case validated of
         ExitSuccess -> do
-          had <- doesFileExist dest
-          when had $ copyFile dest previous
-          -- The running engine may still hold the old inode; rename replaces atomically.
+          -- Nothing is kept beside the installed engine: a rejected build never
+          -- reaches here, and the running engine may still hold the old inode,
+          -- so the rename is what replaces it.
           renameFile tmpEngine dest
           copyFile tmpConf confDest
           cleanup

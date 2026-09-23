@@ -52,6 +52,7 @@ library
     XMonad.Util.SpawnOnce
     XMonad.Util.CustomKeys
     XMonad.Util.Run
+    XMonad.Util.NamedScratchpad
     XMonad.Layout.LayoutModifier
     XMonad.Layout.LayoutCombinators
     XMonad.Layout.Spacing
@@ -81,6 +82,9 @@ library
     XMonad.Layout.IfMax
     XMonad.Layout.LimitWindows
     XMonad.Layout.Gaps
+    XMonad.Layout.BoringWindows
+    XMonad.Layout.Magnifier
+    XMonad.Layout.NoBorders
     XMonad.Actions.CycleWS
     XMonad.Actions.CycleWindows
     XMonad.Actions.WithAll

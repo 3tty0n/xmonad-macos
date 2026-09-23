@@ -35,12 +35,18 @@ expired. Snapshot:
 ## Engine → helper
 
 ```json
-{"type":"plan","generation":3,"epoch":1,"frames":[{"wid":1,"frame":{"x":4,"y":28,"width":1592,"height":992}}],"hide":[],"focus":1,"action":7,"focusForMs":400,"workspace":"1","layout":"Tall","screen":10,"checkpoint":{}}
+{"type":"plan","generation":3,"epoch":1,"frames":[{"wid":1,"frame":{"x":4,"y":28,"width":1592,"height":992}}],"hide":[],"focus":1,"action":7,"focusForMs":400,"workspace":"1","layout":"Tall","screen":10,"checkpoint":{},"borders":[{"wid":1,"width":0}]}
 ```
 
 `frames` / `hide` are disjoint. `focus` + `action` only for explicit
 intent. `epoch` bumps on a native Space switch; both `generation` and
 `epoch` must match or the plan is dropped.
+
+`borders` is the width a layout asked for, per window: 0 draws no border at
+all. It is a statement about this plan only, so anything left out is drawn
+at the width from the handshake. The field is additive — a helper that does
+not know it draws the handshake's width everywhere, which is what it did
+before.
 
 `checkpoint` is opaque JSON stored by the helper and returned in `restore`.
 On helper restart, wids are rewritten from public fingerprints.

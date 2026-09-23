@@ -24,6 +24,11 @@ macOS 26.6.2, arm64, GHC 9.12.3, cabal-install 3.18.1.0, Apple Swift 6.2.
 Not yet verified: hotplug, mixed Retina, native Space transitions, long
 AX-queue latency, crash recovery from the journal.
 
+Magnifier, BoringWindows, NamedScratchpad and NoBorders are covered by
+`CoreTests` (and the Swift side by `WireTests.swift`) only. No desktop run has
+observed a magnified frame, a skipped window, a scratchpad parked on `NSP`, or
+a border the layout dropped.
+
 ## Manual matrix
 
 Shipped config, one native Space per display, Stage Manager off, no unsaved

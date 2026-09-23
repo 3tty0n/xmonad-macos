@@ -2,10 +2,14 @@
 import AppKit
 import QuartzCore
 
+// One window and the width its border is drawn at in this pass. A layout may
+// ask for a narrower border or for none at all.
+struct BorderSpec { var wid: UInt64; var rect: Rect; var width: Int }
+
 // A window belonging to another application cannot be given a border, so the
 // helper traces them with click-through overlays of its own.
 final class BorderOverlay {
-    private var width=0
+    private(set) var width=0
     private var focusedColor=NSColor.systemRed
     private var normalColor=NSColor(white:0.85,alpha:1)
     private var focused: NSPanel?
@@ -18,20 +22,32 @@ final class BorderOverlay {
         self.normalColor=BorderOverlay.parse(normal) ?? NSColor(white:0.85,alpha:1)
         if self.width == 0 { hide() }
     }
-    func show(_ rect: Rect, wid: UInt64) { paint(focused:(wid,rect),rest:[]) }
-    func paint(focused: (UInt64,Rect)?, rest: [(UInt64,Rect)]) {
-        guard width > 0 else { hide(); return }
+    func show(_ rect: Rect, wid: UInt64) {
+        paint(focused:BorderSpec(wid:wid,rect:rect,width:width),rest:[])
+    }
+    func paint(focused: BorderSpec?, rest: [BorderSpec]) {
+        // The hole is cut from the focused window's rectangle as if it kept the
+        // configured width, so a borderless focused window still is not covered
+        // by the unfocused frames around it.
         let inset=CGFloat(width)
-        let focusedFrame=focused.map { BorderOverlay.appKitFrame($0.1,inset:inset) }
-        if let (_,rect)=focused {
-            self.focused=place(self.focused,rect:rect,color:focusedColor,exclude:nil,front:true)
+        let focusedFrame=focused.map {
+            BorderOverlay.appKitFrame($0.rect,inset:inset)
+        }
+        if let spec=focused, spec.width > 0 {
+            self.focused=place(self.focused,rect:spec.rect,width:spec.width,
+                               color:focusedColor,exclude:nil,front:true)
         } else { retire(&self.focused) }
-        let skip=focused?.0
+        let skip=focused?.wid
         var next: [UInt64:NSPanel]=[:]
-        for (id,rect) in rest where id != skip {
-            let overlay=BorderOverlay.appKitFrame(rect,inset:inset)
-            let hole=focusedFrame.flatMap { BorderOverlay.hole(in:overlay,cutting:$0) }
-            next[id]=place(others.removeValue(forKey:id),rect:rect,color:normalColor,exclude:hole,front:false)
+        for spec in rest where spec.wid != skip && spec.width > 0 {
+            let inset=CGFloat(spec.width)
+            let overlay=BorderOverlay.appKitFrame(spec.rect,inset:inset)
+            let hole=focusedFrame.flatMap {
+                BorderOverlay.hole(in:overlay,cutting:$0)
+            }
+            let existing=others.removeValue(forKey:spec.wid)
+            next[spec.wid]=place(existing,rect:spec.rect,width:spec.width,
+                                 color:normalColor,exclude:hole,front:false)
         }
         for p in others.values { retire(p); spare.append(p) }
         others=next
@@ -45,7 +61,9 @@ final class BorderOverlay {
         others=[:]
         spare.forEach(retire)
     }
-    private func place(_ existing: NSPanel?, rect: Rect, color: NSColor, exclude: NSRect?, front: Bool) -> NSPanel {
+    private func place(_ existing: NSPanel?, rect: Rect, width: Int,
+                       color: NSColor, exclude: NSRect?,
+                       front: Bool) -> NSPanel {
         let overlayLevel=Int(CGWindowLevelForKey(.overlayWindow))
         let p=existing ?? spare.popLast() ?? make()
         p.setFrame(BorderOverlay.appKitFrame(rect,inset:CGFloat(width)),display:true)

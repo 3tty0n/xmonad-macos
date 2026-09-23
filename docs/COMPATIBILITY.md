@@ -34,6 +34,9 @@ the same names.
 | `Layout.LimitWindows` | No `limitSelect` |
 | `Layout.Renamed` / `Reflect` / `PerWorkspace` | |
 | `Layout.TwoPane` / `Accordion` / `Spacing` | |
+| `Layout.Magnifier` | Magnified window is listed last, not first |
+| `Layout.BoringWindows` | |
+| `Layout.NoBorders` | No `OnlyLayoutFloatBelow` / `OtherIndicated`, no deprecated `borderEventHook` |
 | `Actions.CycleWS` | No predicate / `WSType` API |
 | `Actions.CycleWindows` | No `cycleRecentWindows` |
 | `Actions.WithAll` / `SinkAll` / `RotSlaves` | |
@@ -46,8 +49,15 @@ the same names.
 | `Util.EZConfig` / `Types` / `CustomKeys` | |
 | `Util.SpawnOnce` | In-process, not persisted |
 | `Util.Run` | No dzen / `runInTerm` |
+| `Util.NamedScratchpad` | `NSP` is created on demand and shows in the status list; a checkpoint restore drops it |
 
-Not ported: Tabbed, Decoration, Prompt, NoBorders, EWMH, `ExtensibleState`.
+Not ported: Tabbed, Decoration, Prompt, EWMH, `ExtensibleState`.
+Named scratchpad exclusives, dynamic scratchpads and `nsHideOnFocusLoss` need
+`ExtensibleState`, so they are not provided.
+
+A layout's border widths reach the helper in the plan, so `NoBorders` and
+`withBorder` need a helper built alongside the engine. An older installed app
+ignores the field and draws the width from the config for every window.
 
 ## Runtime
 

@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- `Layout.NoBorders` is ported: `noBorders`, `smartBorders`, `withBorder`,
+  `lessBorders` with `Ambiguity` / `SetsAmbiguous` / `With`, and
+  `hasBorder`. A layout cannot set an X11 border width from here, so the
+  width it asks for travels to the helper in the plan (`"borders"`), and 0
+  means the window is drawn with no border at all. `OnlyLayoutFloatBelow`
+  and `OtherIndicated` are not provided, and the deprecated
+  `borderEventHook` is gone. An installed app that predates the plan field
+  ignores it and draws the configured width for every window.
+
+- Recompiling no longer leaves a 52 MB `xmonad-engine.previous` beside the
+  installed engine. Nothing read it: a rejected build never reaches the
+  install step, and the rename is what replaces a running engine's binary.
+
+- Ported three more xmonad-contrib modules. `Layout.Magnifier` scales the
+  focused window about its centre, clips it to the frame and lists it last,
+  which is the top of the stack here, not upstream's first.
+  `Layout.BoringWindows` skips marked windows in focus, swap and sift, and
+  `boringAuto` treats a window the layout gives no rectangle to as boring.
+  `Util.NamedScratchpad` toggles a window between the current workspace and
+  a hidden `NSP` workspace created on demand, so that tag shows up in the
+  status list. A checkpoint restore only rebuilds the configured workspaces,
+  so after `xmonad --restart` a hidden scratchpad is adopted again on the
+  current workspace instead of staying hidden. Scratchpad exclusives and
+  dynamic scratchpads need `ExtensibleState`, which this port does not have.
+
 - emacs-mac / NS Emacs frames stay managed and focused: AXTextField windows
   in `AXWindows` are admitted, `AXMinimized` is optional, focus walks to the
   enclosing window, and CG matching allows a titlebar-sized slop.

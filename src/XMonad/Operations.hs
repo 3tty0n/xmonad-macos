@@ -6,6 +6,7 @@ module XMonad.Operations
   , float, floatLocation, floatWithRect, isClient
   , sendMessage, sendMessageWithNoRefresh, broadcastMessage, setLayout
   , screenWorkspace, containedIn, pointWithin, scaleRationalRect
+  , setWindowBorderWidth, bordersFor
   ) where
 import XMonad.Core
 import qualified XMonad.StackSet as W
@@ -149,3 +150,14 @@ setLayoutOf t l = modify $ \s -> s {windowset = W.mapWorkspace
 
 screenWorkspace :: ScreenId -> X (Maybe WorkspaceId)
 screenWorkspace i = gets (W.lookupWorkspace i . windowset)
+
+-- A window cannot be given a border from here: the helper draws them. What a
+-- layout states here reaches the helper with the next plan. Zero means the
+-- window is drawn with no border at all, whatever the config asks for.
+setWindowBorderWidth :: Window -> Int -> X ()
+setWindowBorderWidth w n = modify $ \s ->
+  s {borderOverrides = M.insert w (max 0 n) (borderOverrides s)}
+
+-- The width a layout asked for, if it asked for one.
+bordersFor :: Window -> X (Maybe Int)
+bordersFor w = gets (M.lookup w . borderOverrides)

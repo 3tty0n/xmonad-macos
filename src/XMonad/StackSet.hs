@@ -9,7 +9,8 @@ module XMonad.StackSet
   , currentTag, peek, index, integrate, integrate', differentiate
   , focusUp, focusDown, focusUp', focusDown', focusMaster, focusWindow
   , tagMember, renameTag, ensureTags, member, findTag, mapWorkspace, mapLayout
-  , insertUp, delete, delete', filter, swapUp, swapDown, swapMaster, shiftMaster
+  , insertUp, delete, delete', filter, swapUp, swapDown, swapUp', swapDown'
+  , swapMaster, shiftMaster
   , modify, modify', float, sink, shift, shiftWin, abort
   ) where
 
@@ -131,7 +132,7 @@ focusUp, focusDown, swapUp, swapDown :: StackSet i l a s sd -> StackSet i l a s 
 focusUp = modify' focusUp'
 focusDown = modify' focusDown'
 swapUp = modify' swapUp'
-swapDown = modify' (reverseStack . swapUp' . reverseStack)
+swapDown = modify' swapDown'
 
 focusUp' :: Stack a -> Stack a
 focusUp' (Stack t (l:ls) rs) = Stack l ls (t:rs)
@@ -143,6 +144,9 @@ focusDown' = reverseStack . focusUp' . reverseStack
 swapUp' :: Stack a -> Stack a
 swapUp' (Stack t (l:ls) rs) = Stack t ls (l:rs)
 swapUp' (Stack t [] rs) = Stack t (reverse rs) []
+
+swapDown' :: Stack a -> Stack a
+swapDown' = reverseStack . swapUp' . reverseStack
 
 reverseStack :: Stack a -> Stack a
 reverseStack (Stack t ls rs) = Stack t rs ls

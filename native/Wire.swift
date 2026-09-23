@@ -121,12 +121,19 @@ struct Snapshot: Encodable {
 }
 struct KeyBinding: Codable, Hashable { var mask: Int; var sym: Int }
 struct Placement: Codable { var wid: UInt64; var frame: Rect }
+// A border width the plan asks for by name. Zero means the window is drawn
+// with no border at all; a window the plan does not name keeps the configured
+// width.
+struct BorderOverride: Codable { var wid: UInt64; var width: Int }
 struct WorkspaceInfo: Codable, Equatable {
     var tag: String, windows: Int, current: Bool, visible: Bool
 }
 struct Plan: Decodable {
     var generation: Int, epoch: Int, frames: [Placement], hide: [UInt64]
     var focus: UInt64?, workspace: String, layout: String, checkpoint: JSONValue
+    // Additive and optional: a signed helper that predates this field draws
+    // the configured width for every window.
+    var borders: [BorderOverride]?
     var workspaces: [WorkspaceInfo]?
     var screen: Int?
     var action: Int?
@@ -236,6 +243,14 @@ struct PlanSafety {
         }
         if let focus = p.focus, !shown.contains(focus) {
             throw WireError.invalid("Focus target is hidden")
+        }
+        if let borders = p.borders {
+            guard borders.allSatisfy({ shown.contains($0.wid) }) else {
+                throw WireError.invalid("Border width for an unplaced window")
+            }
+            guard borders.allSatisfy({ (0...64).contains($0.width) }) else {
+                throw WireError.invalid("Border width outside 0...64")
+            }
         }
     }
 }

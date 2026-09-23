@@ -112,6 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Set only for an explicit focus request. Ordinary plans must not move the
     // overlay, or a later scan of the outgoing window puts it on the old one.
     private var borderPin: UInt64?
+    // Border widths of the last accepted plan. The map is replaced whole, so a
+    // window the plan stopped placing loses its entry; everything else is drawn
+    // at the width the configure handshake gave.
+    private var borderWidths: [UInt64:Int]=[:]
+    private var borderDefaultWidth=0
     private var lastResponse=Date()
     private var checkpoint: JSONValue?
     private var sendCheckpoint=false
@@ -391,6 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do { try keyboard.configure(keys); try pointer.configure(bindings:mouse) }
             catch { pause(reason:"Invalid input configuration: \(error)"); return }
             border.configure(width:look.borderWidth,color:look.borderColor,normal:look.normalBorderColor)
+            borderDefaultWidth=border.width
             pointer.setHover(look.focusFollowsMouse)
             configured=true; updateKeyState(); scheduleScan()
         case .plan(let plan):
@@ -408,6 +414,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             checkpoint=plan.checkpoint
             workspaces=plan.workspaces ?? []
+            rememberBorders(plan)
             let row=workspaces.isEmpty ? plan.workspace : workspaceRow(workspaces)
             setStatus("\(row) · \(plan.layout)")
             axBusySince=axBusySince ?? Date()
@@ -479,10 +486,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+    // A plan states every border it wants, so the widths of the previous plan
+    // are dropped rather than merged: an entry nothing places is stale.
+    private func rememberBorders(_ plan: Plan) {
+        var widths: [UInt64:Int]=[:]
+        for entry in plan.borders ?? [] { widths[entry.wid]=entry.width }
+        borderWidths=widths
+    }
+    private func borderWidth(for wid: UInt64) -> Int {
+        borderWidths[wid] ?? borderDefaultWidth
+    }
     // Draw borders where this observation says they belong. An empty rest
     // clears unfocused overlays; it must not reuse the previous workspace.
     private func paintBorders(focused: (UInt64,Rect)?, rest: [(UInt64,Rect)]) {
-        border.paint(focused:focused,rest:rest)
+        func spec(_ wid: UInt64,_ rect: Rect) -> BorderSpec {
+            BorderSpec(wid:wid,rect:rect,width:borderWidth(for:wid))
+        }
+        border.paint(focused:focused.map { spec($0.0,$0.1) },
+                     rest:rest.map { spec($0.0,$0.1) })
     }
     private func traceFocus(_ result: ScanResult, displays: [DisplayInfo]) {
         guard running,configured,!fullScreen else { borderPin=nil; border.hide(); return }
