@@ -135,6 +135,8 @@ struct Plan: Decodable {
     // the configured width for every window.
     var borders: [BorderOverride]?
     var workspaces: [WorkspaceInfo]?
+    // Menu bar text rendered by a logHook's PP; nil keeps workspaceRow.
+    var status: String?
     var screen: Int?
     var action: Int?
     var focusForMs: Int?

@@ -106,6 +106,9 @@ library
     XMonad.Actions.FloatKeys
     XMonad.Hooks.ManageHelpers
     XMonad.Hooks.InsertPosition
+    XMonad.Hooks.StatusBar
+    XMonad.Hooks.StatusBar.PP
+    XMonad.Hooks.DynamicLog
     XMonad.MacOS
     XMonad.MacOS.Types
     XMonad.MacOS.Protocol

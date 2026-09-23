@@ -9,6 +9,16 @@
   `Hooks.WorkspaceHistory` is ported on top of it. `cycleRecentWindows` is
   still missing: it needs a grab that holds until the modifier is released.
 
+- `Hooks.StatusBar`, `Hooks.StatusBar.PP` and a `Hooks.DynamicLog` shim are
+  ported: `PP` with `ppCurrent` … `ppOutput`, `dynamicLogString`,
+  `dynamicLogWithPP`, `xmobarPP` and the `wrap` / `pad` / `shorten` /
+  `xmobarColor` helpers, `withSB`, `statusBarGeneric` and `statusBarPipe`.
+  `statusBarFile` and `statusBarSpawn` feed a file or a command such as
+  SketchyBar, and `macMenuBarPP` puts the rendered line in the menu bar via
+  a new optional plan field `"status"`. `def` is now a `Default` class
+  method, as upstream, so it builds a `PP` too. No `ppUrgent`,
+  `statusBarProp` or `withEasySB`.
+
 - `Layout.MultiToggle` and `MultiToggle.Instances` are ported, with
   `REFLECTX` / `REFLECTY` in `Layout.Reflect`. The bundled config wraps its
   layouts in `mkToggle (single REFLECTX)` and binds `M-r` to flip the

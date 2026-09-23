@@ -1,6 +1,7 @@
 -- The default config, and the key bindings it installs. Everything here can
 -- be replaced field by field from your own xmonad.hs.
-module XMonad.Config (def, defaultConfig, defaultKeys, defaultMouse) where
+{-# LANGUAGE TypeFamilies, TypeOperators #-}
+module XMonad.Config (Default(..), defaultConfig, defaultKeys, defaultMouse) where
 import XMonad.Core
 import XMonad.Layout
 import XMonad.MacOS (quit, recompile)
@@ -9,8 +10,12 @@ import qualified XMonad.StackSet as W
 import qualified Data.Map.Strict as M
 import Data.Bits ((.|.))
 
-def, defaultConfig :: XConfig (Choose Tall (Choose (Mirror Tall) Full))
-def = defaultConfig
+-- data-default's class, so `def` also builds a PP as it does upstream.
+class Default a where def :: a
+instance a ~ Choose Tall (Choose (Mirror Tall) Full) => Default (XConfig a) where
+  def = defaultConfig
+
+defaultConfig :: XConfig (Choose Tall (Choose (Mirror Tall) Full))
 defaultConfig = XConfig
   { terminal = "open -a Terminal"
   , modMask = mod1Mask

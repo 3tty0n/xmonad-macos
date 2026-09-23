@@ -32,7 +32,7 @@ initialState c ds = XState
   , displayAffinity=M.fromList [(displayID (W.screenDetail sc), W.tag (W.workspace sc))
                                | sc <- W.screens ws]
   , borderOverrides=M.empty
-  , commands=[], extensibleState=M.empty }
+  , commands=[], extensibleState=M.empty, menuBarText=Nothing }
   where
     ds' = if null ds then [DisplayInfo 0 (Rectangle 0 0 1 1)] else ds
     configured = nub (filter (not . null) $ workspaces c)
@@ -244,7 +244,7 @@ makePlan :: X Plan
 makePlan = do
   -- A plan states every border it wants, so the overrides a layout asked for
   -- during this pass start from nothing.
-  modify $ \s -> s {borderOverrides = M.empty}
+  modify $ \s -> s {borderOverrides = M.empty, menuBarText = Nothing}
   screens <- gets (W.screens . windowset)
   placements <- concat <$> mapM placeScreen screens
   c <- asks config
@@ -268,6 +268,7 @@ makePlan = do
     , planLayout = description . W.layout . W.workspace $ W.current ws
     , planCheckpoint = checkpoint s
     , planWorkspaces = workspaceSummary c ws
+    , planStatus = menuBarText s
     }
 
 -- Run one screen's layout, keep any layout state it returns, and add the

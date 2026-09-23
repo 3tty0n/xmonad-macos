@@ -37,6 +37,7 @@ import AppKit
         check(plan.workspace == "日本語","UTF-8 protocol")
         check(plan.action == 7 && plan.focusForMs == 400,"action sequencing fields")
         check(plan.borders == nil,"a plan without borders still decodes")
+        check(plan.status == nil,"a plan without a PP status still decodes")
         let bjson="""
         {"type":"plan","generation":1,"epoch":1,
          "frames":[{"wid":1,"frame":{"x":0,"y":24,"width":800,"height":900}},
@@ -54,12 +55,14 @@ import AppKit
         try PlanSafety.validate(named,active:[1,3]); count += 1
         let ejson="""
         {"type":"plan","generation":1,"epoch":1,"frames":[],"hide":[],
-         "workspace":"1","layout":"Tall","checkpoint":null,"borders":[]}
+         "workspace":"1","layout":"Tall","checkpoint":null,"borders":[],
+         "status":"[1] : Tall"}
         """
         let edata=Data(ejson.utf8)
         let emsg=try JSONDecoder().decode(EngineMessage.self,from:edata)
         guard case .plan(let none)=emsg else { fatalError("empty borders") }
         check(none.borders?.isEmpty == true,"an empty border list is not nil")
+        check(none.status == "[1] : Tall","a logHook's PP status decodes")
         var bad=plan; bad.hide=[1]; rejects(bad,"show/hide conflict")
         bad=plan; bad.frames.append(bad.frames[0]); rejects(bad,"duplicate frame")
         bad=plan; bad.hide=[2,2]; rejects(bad,"duplicate hidden ID")

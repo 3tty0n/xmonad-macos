@@ -65,9 +65,11 @@ data Plan = Plan
   -- The display the current screen sits on, so the helper can follow it.
   , planScreen :: Int
   , planWorkspaces :: [WorkspaceInfo]
+  -- Menu bar text from a logHook (Hooks.StatusBar.macMenuBarPP).
+  , planStatus :: Maybe String
   } deriving (Show)
 instance ToJSON Plan where
-  toJSON p = object
+  toJSON p = object $
     ["type" .= ("plan" :: String),"generation" .= planGeneration p,"epoch" .= planEpoch p
     ,"frames" .= planFrames p,"hide" .= planHide p,"focus" .= planFocus p
     ,"borders" .= planBorders p
@@ -75,6 +77,7 @@ instance ToJSON Plan where
     ,"workspace" .= planWorkspace p,"layout" .= planLayout p,"checkpoint" .= planCheckpoint p
     ,"screen" .= planScreen p
     ,"workspaces" .= planWorkspaces p]
+    ++ maybe [] (\t -> ["status" .= t]) (planStatus p)
 commandJSON :: NativeCommand -> Value
 commandJSON c = case c of
   Close w -> object ["type" .= ("command" :: String),"name" .= ("close" :: String),"wid" .= w]

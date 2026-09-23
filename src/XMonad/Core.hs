@@ -82,6 +82,9 @@ data XState = XState
   , commands :: [NativeCommand]
   -- Keyed by the value's type; a Left is a persisted value not yet read back.
   , extensibleState :: M.Map String (Either String StateExtension)
+  -- Text a logHook asked the menu bar to show in this pass; Nothing keeps the
+  -- helper's own workspace row.
+  , menuBarText :: Maybe String
   }
 -- Upstream's extensible state, as used by XMonad.Util.ExtensibleState.
 class Typeable a => ExtensionClass a where

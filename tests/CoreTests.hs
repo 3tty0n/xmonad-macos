@@ -39,6 +39,7 @@ import XMonad.Layout.NoBorders
 import XMonad.Util.NamedScratchpad
   (NamedScratchpad(NS), customFloating, namedScratchpadAction
   ,namedScratchpadManageHook, nonFloating, scratchpadWorkspaceTag)
+import XMonad.Hooks.StatusBar
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S
 import Data.List (isInfixOf,isPrefixOf,nub,sort,(\\))
@@ -158,6 +159,25 @@ main = do
   check "initial display assignment" (W.findTag 3 (windowset s1)==Just "2")
   check "observed focus" (W.peek (windowset s1)==Just 1)
   (p1,s2) <- runX conf s1 makePlan
+  -- StatusBar.PP renders from the window set and the snapshot's titles.
+  (ppLine,_) <- runX conf s1 (dynamicLogString def)
+  check "PP default line" (ppLine=="[1] <2> : Tall : 1")
+  (ppXm,_) <- runX conf s1 $ dynamicLogString (filterOutWsPP ["2"] xmobarPP
+    {ppOrder=take 1, ppHiddenNoWindows=id, ppWsSep=""})
+  check "PP xmobar helpers and filter" (ppXm=="<fc=yellow>[1]</fc>34567890")
+  check "PP helpers" (shorten 5 "abcdefgh"=="ab..." && wrap "<" ">" ""=="" &&
+    xmobarStrip "<fc=red>a</fc>b"=="ab" && shellQuote "it's"=="'it'\\''s'")
+  let menuCfg=withSB (macMenuBarPP (pure def {ppOrder=take 2})) cfg
+  (menuPlan,_) <- runX (XConf menuCfg) s1 makePlan
+  check "macMenuBarPP drives the plan status" (planStatus menuPlan==Just "[1] <2> : Tall")
+  check "plan without a PP has no status" (planStatus p1==Nothing)
+  sbTmp <- getTemporaryDirectory
+  let sbFile=sbTmp </> "xmonad-pp-test.txt"
+  sbc <- statusBarFile sbFile (pure def {ppOrder=take 1})
+  _ <- runX (XConf (withSB sbc cfg)) s1 makePlan
+  sbOut <- readStrict sbFile
+  check "statusBarFile writes the rendered line" (sbOut=="[1] <2>\n")
+  removeFile sbFile
   check "passive snapshot never requests focus" (planFocus p1==Nothing)
   check "three windows laid out" (length (planFrames p1)==3 && null (planHide p1))
   (_,mouseFloat) <- runX conf s2 (floatObservedWindow 2)
