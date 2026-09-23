@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- XMonadMac mark: XM² (xmonad × macOS) on a dark squircle. One ink.
-     X is optically heavier than M so the diagonals do not look thin. -->
+<!-- XMonadMac mark: a λ tiled from three windows on a Big Sur squircle.
+     Master = long diagonal, stack = short leg (focused, red), plus the arm.
+     Gaps are 48 units (~1/17 of the body) so the tiles survive at 16 px. -->
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" version="1.1"
      xmlns="http://www.w3.org/2000/svg">
  <defs>
@@ -10,23 +11,24 @@
   </linearGradient>
   <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
    <stop offset="0" stop-color="#ffffff" stop-opacity="0.14"/>
-   <stop offset="0.42" stop-color="#ffffff" stop-opacity="0"/>
+   <stop offset="0.45" stop-color="#ffffff" stop-opacity="0"/>
   </linearGradient>
   <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
    <stop offset="0" stop-color="#f4f0f7"/>
-   <stop offset="1" stop-color="#d9d3e0"/>
+   <stop offset="1" stop-color="#d6d0de"/>
+  </linearGradient>
+  <linearGradient id="focus" x1="0" y1="0" x2="0" y2="1">
+   <stop offset="0" stop-color="#ff5a4e"/>
+   <stop offset="1" stop-color="#e0261c"/>
   </linearGradient>
  </defs>
- <rect x="92" y="92" width="840" height="840" rx="188" fill="url(#bg)"/>
- <rect x="92" y="92" width="840" height="840" rx="188" fill="url(#shine)"/>
- <g fill="none" stroke="url(#ink)" stroke-linecap="round" stroke-linejoin="round">
-  <g stroke-width="96" transform="translate(278 528)">
-   <path d="M-96 -178 L96 178"/>
-   <path d="M-96 178 L96 -178"/>
-  </g>
-  <path stroke-width="80" d="M498 720 L498 336 L632 552 L766 336 L766 720"/>
-  <g stroke-width="40" transform="translate(784 214)">
-   <path d="M8 40 C8 12 78 8 82 40 C82 62 50 80 8 108 H82"/>
-  </g>
+ <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+ <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#shine)"/>
+ <g transform="translate(19 -33)">
+  <rect x="-320" y="-75" width="640" height="150" rx="34" fill="url(#ink)"
+        transform="translate(600 530) rotate(60)"/>
+  <rect x="-150" y="-75" width="300" height="150" rx="34" fill="url(#focus)"
+        transform="translate(375 720) rotate(-60)"/>
+  <rect x="175" y="215" width="176" height="130" rx="34" fill="url(#ink)"/>
  </g>
 </svg>
