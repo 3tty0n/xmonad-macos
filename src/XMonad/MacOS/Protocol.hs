@@ -15,7 +15,7 @@ data Snapshot = Snapshot
 -- Everything the helper can send us.
 data InputEvent
   = SnapshotEvent Snapshot     -- the world changed
-  | KeyEvent KeyMask KeySym    -- a bound key was pressed
+  | KeyEvent KeyMask KeySym Bool  -- a bound or grabbed key was pressed
   | MouseFloatEvent Window     -- a mod-drag started on this window
   | PointerFocusEvent Window   -- the pointer moved onto this window
   | AckEvent Int (Maybe Window) Bool  -- action id, observed focus, expired
@@ -29,7 +29,7 @@ instance FromJSON InputEvent where
       "snapshot" -> SnapshotEvent <$> (Snapshot
         <$> o .: "generation" <*> o .: "epoch" <*> o .: "screens"
         <*> o .: "windows" <*> o .:? "focused" <*> o .:? "restore")
-      "key" -> KeyEvent <$> o .: "mask" <*> o .: "sym"
+      "key" -> KeyEvent <$> o .: "mask" <*> o .: "sym" <*> o .:? "grabbed" .!= False
       "mouseFloat" -> MouseFloatEvent <$> o .: "wid"
       "pointerFocus" -> PointerFocusEvent <$> o .: "wid"
       "ack" -> AckEvent <$> o .: "action" <*> o .:? "focused" <*> o .:? "expired" .!= False
@@ -82,4 +82,5 @@ commandJSON c = case c of
   Recompile -> named "recompile"
   Quit -> named "quit"
   TogglePause -> named "pause"
+  GrabKeyboard -> named "grab"
   where named n = object ["type" .= ("command" :: String),"name" .= (n :: String)]

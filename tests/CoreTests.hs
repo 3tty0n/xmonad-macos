@@ -5,7 +5,8 @@ import XMonad
 import qualified XMonad.StackSet as W
 import XMonad.MacOS.Engine
 import XMonad.MacOS.Protocol
-import XMonad.Util.EZConfig (parseKey, additionalMouseBindings)
+import XMonad.Util.EZConfig (parseKey, parseKeySequence, mkKeymap, keymapProblems, additionalMouseBindings)
+import XMonad.Actions.Submap (submap)
 import XMonad.Layout.Grid
 import XMonad.Layout.Simplest
 import XMonad.Layout.ResizableTile
@@ -324,6 +325,30 @@ main = do
       _ -> False)
   check "EZConfig modifiers" (parseKey 68 "M-S-<Return>"==Right (69,xK_Return))
   check "EZConfig rejects multistroke" (case parseKey 68 "M-x M-y" of Left _ -> True; _ -> False)
+  check "EZConfig sequence" (parseKeySequence 68 "M-x  C-a <F1>"==Right [(68,120),(4,97),(0,0xffbe)])
+  let mark n=modify (\st -> st {nextActionId=n})
+      seqMap=mkKeymap cfg [("M-x a",mark 1),("M-x M-s b",mark 2),("M-j",mark 3)]
+      press st m k g=snd <$> runX conf st (handleEvent seqMap (KeyEvent m k g))
+      bare=initial {commands=[]}
+  check "sequences share one prefix" (M.keys seqMap==[(8,106),(8,120)])
+  check "prefix conflict reported"
+    (not (null (keymapProblems cfg [("M-x",()),("M-x a",())])))
+  check "duplicate binding reported" (keymapProblems cfg [("M-a",()),("M-A",())]==["duplicate binding \"M-A\""])
+  armed <- press bare 8 120 False
+  check "submap grabs the next stroke" (commands armed==[GrabKeyboard] && isJust (keyGrab armed))
+  fired <- press armed 0 97 True
+  check "grabbed stroke runs the submap action" (nextActionId fired==1 && not (isJust (keyGrab fired)))
+  nested <- press armed 8 115 True >>= \st -> press st {commands=[]} 0 98 True
+  check "nested submap grabs again" (nextActionId nested==2)
+  aborted <- press armed 0 xK_Escape True >>= \st -> press st 0 97 True
+  check "unbound stroke aborts the submap" (nextActionId aborted==0)
+  lapsed <- press armed 8 106 False
+  check "ungrabbed stroke drops a stale submap" (nextActionId lapsed==3 && not (isJust (keyGrab lapsed)))
+  (_,once) <- runX conf bare (submap M.empty >> submap M.empty)
+  check "one grab per stroke" (commands once==[GrabKeyboard])
+  check "grab command protocol" (commandJSON GrabKeyboard == object ["type" .= ("command" :: String),"name" .= ("grab" :: String)])
+  check "JSON key grabbed parse" (case eitherDecode "{\"type\":\"key\",\"mask\":0,\"sym\":97,\"grabbed\":true}" :: Either String InputEvent of
+    Right (KeyEvent 0 97 True) -> True; _ -> False)
   check "recompile command protocol" (commandJSON Recompile == object ["type" .= ("command" :: String),"name" .= ("recompile" :: String)])
   check "bad protocol rejected" (case eitherDecode "{\"type\":\"wrong\"}" :: Either String InputEvent of Left _ -> True; _ -> False)
   check "JSON snapshot parse" (case eitherDecode

@@ -146,7 +146,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self=self else { return }
             guard let key=key else { self.pause(reason:"Emergency pause; restoring owned windows"); return }
             if self.running && self.configured && !self.fullScreen {
-                self.sendObject(["type":"key","mask":key.mask,"sym":key.sym])
+                var obj: [String:Any]=["type":"key","mask":key.0.mask,"sym":key.0.sym]
+                if key.1 { obj["grabbed"]=true }
+                self.sendObject(obj)
             }
         }
         keyboard.onReady={ [weak self] in self?.tapReady=true; self?.updateKeyState() }
@@ -450,6 +452,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     DispatchQueue.main.async { self.pause(reason:"Unsafe plan rejected: \(error)") }
                 }
             }
+        case .command("grab",_):
+            keyboard.grabNext(for:5)
         case .command(let name,let wid):
             if dryRun { logMessage("DRY-RUN ignored command: \(name)"); return }
             switch name {

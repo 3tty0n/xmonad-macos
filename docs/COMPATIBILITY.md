@@ -46,8 +46,9 @@ the same names.
 | `Actions.CopyWindow` | No `copiesPP` |
 | `Actions.FindEmptyWorkspace` / `FloatKeys` | |
 | `Actions.WindowGo` | No `$BROWSER` / `$EDITOR` |
+| `Actions.Submap` | No `visualSubmap`; the grab lapses after 5 s |
 | `Hooks.ManageHelpers` / `InsertPosition` | No X11 property queries |
-| `Util.EZConfig` / `Types` / `CustomKeys` | |
+| `Util.EZConfig` / `Types` / `CustomKeys` | `checkKeymap` logs to stderr, not xmessage |
 | `Util.SpawnOnce` | In-process, not persisted |
 | `Util.Run` | No dzen / `runInTerm` |
 | `Util.NamedScratchpad` | `NSP` is created on demand and shows in the status list; a checkpoint restore drops it |
@@ -68,7 +69,7 @@ ignores the field and draws the width from the config for every window.
 | `className` / `bundleId` / `title` / `subrole` | App name / bundle / `AXTitle` / AX subrole |
 | `isDialog` | AX dialog and floating-panel subroles |
 | `spawn` / `kill` | Shell command / native Close |
-| `keys` / `additionalKeysP` | Single stroke; unsupported keys are a hard error |
+| `keys` / `additionalKeysP` | Sequences (`"M-x a"`) become submaps; unsupported keys and a key that is also a prefix are hard errors |
 | `mod1Mask` / `mod4Mask` | Option / Command |
 | `mouseBindings` | `move` / `resize` / `raise` |
 | Multi-screen | One virtual workspace per display; hotplug by display ID |

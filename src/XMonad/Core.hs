@@ -58,7 +58,7 @@ data XConfig l = XConfig
   }
 data XConf = XConf { config :: XConfig Layout }
 
-data NativeCommand = Close Window | Reload | Recompile | Quit | TogglePause
+data NativeCommand = Close Window | Reload | Recompile | Quit | TogglePause | GrabKeyboard
   deriving (Eq, Show)
 -- Everything policy knows: the window set, the last observation of the world,
 -- and what the helper still has to be told.
@@ -79,6 +79,9 @@ data XState = XState
   -- lasts as long as the layout keeps asking for it; the configured
   -- borderWidth stays the default for every window not listed here.
   , borderOverrides :: M.Map Window Int
+  -- A submap waiting for its next stroke. The helper grabs exactly one key
+  -- for it, so a stroke that arrives ungrabbed means the grab is gone.
+  , keyGrab :: Maybe ((KeyMask,KeySym) -> X ())
   , commands :: [NativeCommand]
   }
 focusRequested :: XState -> Bool

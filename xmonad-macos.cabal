@@ -95,6 +95,7 @@ library
     XMonad.Actions.SwapWorkspaces
     XMonad.Actions.DwmPromote
     XMonad.Actions.Promote
+    XMonad.Actions.Submap
     XMonad.Actions.PhysicalScreens
     XMonad.Actions.CopyWindow
     XMonad.Actions.FocusNth
