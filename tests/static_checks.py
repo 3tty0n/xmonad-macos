@@ -18,11 +18,11 @@ for name in ['README.md','LICENSE','CHANGELOG.md','docs/DESIGN.md','docs/COMPATI
 icon=(root/'native/icon.svg').read_text()
 check('m15.478 65.584' not in icon and 'm17.44 70.017' not in icon,
       'App icon must not copy the upstream xmonad X paths')
-check('XM²' in icon and 'Hans Heintze' not in icon,
-      'App icon is the XM² mark, not the Heintze glyph')
+check('λ tiled' in icon and 'Hans Heintze' not in icon,
+      'App icon is the tiled λ mark, not the Heintze glyph')
 check('#3c3844' in icon, 'App icon plate should stay the original dark squircle')
-check('XM²' in (root/'native/menubar.svg').read_text(),
-      'Menu bar template must keep the XM² mark')
+check('tiled λ' in (root/'native/menubar.svg').read_text(),
+      'Menu bar template must keep the tiled λ mark')
 info=plistlib.loads((root/'native/Info.plist').read_bytes())
 check(info['CFBundleIdentifier']=='org.xmonad.XMonadMac','Bundle identity changed')
 check(info['LSUIElement'] is True,'Menu bar app flag missing')
