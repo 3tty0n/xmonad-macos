@@ -2,8 +2,10 @@
 
 ![XMonadMac Icon](./native/icon.svg)
 
-A ported xmonad's policy core to macOS. Your `xmonad.hs` is compiled as real
-Haskell and drives a signed Swift helper.
+xmonad's policy core, ported to macOS. Your `xmonad.hs` is compiled as real
+Haskell and drives a signed Swift helper that moves the windows.
+
+![Tall layout with three terminals](docs/images/tall.jpg)
 
 > [!IMPORTANT]
 > It is a subset, not a drop-in replacement. See [Compatibility](docs/COMPATIBILITY.md).
@@ -11,6 +13,17 @@ Haskell and drives a signed Swift helper.
 > Workspaces are **virtual** (xmonad tags such as `1`…`9` / `0`). They are
 > not macOS Mission Control Desktops / Spaces. This port cannot move another
 > app's window between native Spaces, so it pages windows itself.
+
+## Screenshots
+
+| `ThreeColMid` | `Tall`, flipped with `M-r` |
+|---|---|
+| ![ThreeColMid layout](docs/images/threecol.jpg) | ![Tall layout reflected](docs/images/reflect.jpg) |
+
+The menu bar shows the workspaces, with the current one in brackets, and
+the layout:
+
+![Menu bar item](docs/images/menubar.png)
 
 ## Install
 
@@ -22,6 +35,10 @@ make bootstrap
 
 Then System Settings → Privacy & Security → Accessibility → add
 `~/Applications/XMonadMac.app`, and restart it.
+
+To update, run `make build && make install`. If the app is running,
+install quits it (restoring its windows), swaps it, and relaunches it in
+the same mode.
 
 ## Prerequisite
 
@@ -35,6 +52,9 @@ Then System Settings → Privacy & Security → Accessibility → add
 make dry-run     # read-only: logs what it would do, touches nothing
 make run
 ```
+
+System sleep pauses tiling and puts windows back; waking resumes it. A
+session you paused yourself stays paused.
 
 > [!CAUTION]
 > Stage Manager is unsupported.
@@ -86,6 +106,7 @@ and floating panels are floated automatically.
 | `M-S-Return` | Launch the terminal |
 | `M-h` / `M-l` | Shrink / expand the master area |
 | `M-Space` | Next layout |
+| `M-r` | Flip the layout left to right (bundled config) |
 | `M-1…0` | Go to that **virtual** workspace |
 | `M-S-1…0` | Send the window to that workspace |
 | `M-f` / `M-t` | Float / unfloat |
@@ -119,8 +140,8 @@ WM-hidden window back.
 | `xmonad pause` / `resume` / `recover` | Suspend / resume / unhide |
 | `xmonad autostart on` | Start at login |
 
-The menu bar shows `[2] 1 3 - Tall`. `xmonad status` publishes the same as
-JSON.
+The menu bar shows `1 [9] · Tall`. `xmonad status` publishes the same as
+JSON, for external bars.
 
 ## Accessibility grant
 
