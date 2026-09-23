@@ -16,6 +16,7 @@ import XMonad.Actions.SwapWorkspaces
 import XMonad.Actions.DwmPromote
 import XMonad.Layout.Renamed
 import XMonad.Layout.Reflect
+import qualified XMonad.Layout.MultiToggle as MT
 import XMonad.Layout.TwoPane
 import XMonad.Layout.Accordion
 import XMonad.Hooks.ManageHelpers (isDialog)
@@ -189,6 +190,21 @@ main = do
     runLayout (W.Workspace "1" (reflectHoriz (Tall 1 (3/100) (1/2))) (Just stack3)) frame3
   check "reflectHoriz mirrors the master to the right"
     (maximum [rect_x r | (_,r) <- fst reflected]==500)
+  let toggled=MT.mkToggle (MT.single REFLECTX) (Tall 1 (3/100) (1/2))
+      masterX l=do
+        (res,_) <- runX conf initial $
+          runLayout (W.Workspace "1" l (Just stack3)) frame3
+        pure (maybe (-1) rect_x (lookup 1 (fst res)))
+      flip' l=do
+        (res,_) <- runX conf initial $
+          handleMessage l (SomeMessage (MT.Toggle REFLECTX))
+        pure (fromMaybe l res)
+  on <- flip' toggled
+  off <- flip' on
+  xs <- mapM masterX [toggled,on,off]
+  check "Toggle REFLECTX flips the layout and flips it back" (xs==[0,500,0])
+  check "a toggled layout survives Show and Read"
+    (description (read (show on) `asTypeOf` on)==description on)
   check "renamed replaces the description"
     (description (renamed [Replace "custom"] (Tall 1 (3/100) (1/2)))=="custom")
   check "renamed can wrap the old description"

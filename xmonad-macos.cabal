@@ -65,6 +65,8 @@ library
     XMonad.Layout.Renamed
     XMonad.Layout.Named
     XMonad.Layout.Reflect
+    XMonad.Layout.MultiToggle
+    XMonad.Layout.MultiToggle.Instances
     XMonad.Layout.PerWorkspace
     XMonad.Layout.PerScreen
     XMonad.Layout.TwoPane

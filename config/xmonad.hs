@@ -3,6 +3,8 @@ import qualified XMonad.StackSet as W
 import XMonad.Util.EZConfig
 import XMonad.Layout.NoBorders
 import XMonad.Layout.Spacing
+import XMonad.Layout.MultiToggle
+import XMonad.Layout.Reflect
 import XMonad.Layout.ThreeColumns()
 import XMonad.MacOS
 
@@ -18,7 +20,8 @@ main = xmonad $ def
   , normalBorderColor = "#dddddd"
   , focusFollowsMouse = False      -- Default: True
   -- smartBorders drops the border when a lone window fills the tile.
-  , layoutHook = smartBorders $ spacing 5 $
+  -- M-r flips the current layout left to right.
+  , layoutHook = smartBorders $ spacing 5 $ mkToggle (single REFLECTX) $
       Tall 1 (3/100) (1/2)
       ||| ThreeColMid 1 (3/100) (1/2)     -- ThreeColMid for a centred master
       ||| Circle
@@ -34,6 +37,7 @@ main = xmonad $ def
     [ ("M-f", toggleFloat)
     , ("M-S-p", pause)
     , ("M-S-m", windows W.shiftMaster)
+    , ("M-r", sendMessage (Toggle REFLECTX))
     ]
   `additionalMouseBindings`
     [ ((mod1Mask, button2), MouseRaise) ]

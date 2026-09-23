@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `Layout.MultiToggle` and `MultiToggle.Instances` are ported, with
+  `REFLECTX` / `REFLECTY` in `Layout.Reflect`. The bundled config wraps its
+  layouts in `mkToggle (single REFLECTX)` and binds `M-r` to flip the
+  current layout left to right. That replaces the stock `M-r` (focus the
+  third screen); `M-S-r` still moves a window there.
+
 - `make install` no longer refuses while XMonadMac is running: it quits the
   app, installs, and relaunches it in the same mode (normal or dry-run).
 

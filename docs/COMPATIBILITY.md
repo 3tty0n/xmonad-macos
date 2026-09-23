@@ -36,6 +36,7 @@ the same names.
 | `Layout.TwoPane` / `Accordion` / `Spacing` | |
 | `Layout.Magnifier` | Magnified window is listed last, not first |
 | `Layout.BoringWindows` | |
+| `Layout.MultiToggle` / `MultiToggle.Instances` | `REFLECTX` / `REFLECTY` live in `Layout.Reflect` |
 | `Layout.NoBorders` | No `OnlyLayoutFloatBelow` / `OtherIndicated`, no deprecated `borderEventHook` |
 | `Actions.CycleWS` | No predicate / `WSType` API |
 | `Actions.CycleWindows` | No `cycleRecentWindows` |
