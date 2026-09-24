@@ -20,11 +20,6 @@ Haskell and drives a signed Swift helper that moves the windows.
 |---|---|
 | ![ThreeColMid layout](docs/images/threecol.jpg) | ![Tall layout reflected](docs/images/reflect.jpg) |
 
-The menu bar shows the workspaces, with the current one in brackets, and
-the layout:
-
-![Menu bar item](docs/images/menubar.png)
-
 ## Install
 
 ```sh
