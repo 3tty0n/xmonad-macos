@@ -1,8 +1,10 @@
 # XMonadMac
 
-![XMonadMac Icon](./native/icon.svg)
+<div align="center">
+<img src="./native/icon.svg" width="350" alt="XMonadMac Icon">
+</div>
 
-xmonad's policy core, ported to macOS. Your `xmonad.hs` is compiled as real
+[XMonad](https://xmonad.org/)'s policy core, ported to macOS. Your `xmonad.hs` is compiled as real
 Haskell and drives a signed Swift helper that moves the windows.
 
 ![Tall layout with three terminals](docs/images/tall.jpg)
