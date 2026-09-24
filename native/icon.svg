@@ -25,8 +25,8 @@
  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#shine)"/>
  <g transform="translate(19 -33)">
-  <rect x="-320" y="-75" width="640" height="150" rx="34" fill="url(#ink)"
-        transform="translate(600 530) rotate(60)"/>
+  <rect x="-345" y="-75" width="690" height="150" rx="34" fill="url(#ink)"
+        transform="translate(612.5 551.65) rotate(60)"/>
   <rect x="-150" y="-75" width="300" height="150" rx="34" fill="url(#focus)"
         transform="translate(375 720) rotate(-60)"/>
   <rect x="175" y="215" width="176" height="130" rx="34" fill="url(#ink)"/>
