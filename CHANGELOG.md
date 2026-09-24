@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- A recompile reports what it is doing: the build's own output goes straight to
+  the terminal instead of being buffered until the process exits, so a slow
+  compile is visible rather than indistinguishable from a hang, and no pipe has
+  to reach EOF before the command can return. `install.sh` also carries the
+  kit's build cache over now: dropping it made the first recompile after every
+  install rebuild the whole library, which on a loaded machine is minutes of
+  silence.
+
 - `Util.ExtensibleState` is ported, backed by an `extensibleState` field in
   `XState` as upstream. A `PersistentExtension` value is written into the
   restart checkpoint with `show` and read back lazily on its first `get`, so

@@ -21,8 +21,9 @@ import System.FilePath (takeDirectory, (</>))
 import System.IO (Handle, hClose, hPutStr, hPutStrLn, openTempFile, stderr, stdout)
 import System.IO.Error (tryIOError)
 import System.Process
-  ( CreateProcess(..), cwd, proc, rawSystem, readCreateProcessWithExitCode
-  , readProcess, readProcessWithExitCode )
+  ( CreateProcess(..), createProcess, cwd, proc, rawSystem
+  , readCreateProcessWithExitCode, readProcess, readProcessWithExitCode
+  , waitForProcess )
 
 -- | Arguments the engine itself understands. Anything else is a command for a
 -- running or installed XMonadMac, and never starts an engine.
@@ -156,7 +157,8 @@ recompileInstalled p config = do
         Left err -> complain err
         Right () -> do
           stageConfig kit config
-          (built, _, err) <- runIn kit "cabal" ["build", "exe:xmonad-engine"]
+          hPutStrLn stderr "Building xmonad.hs; the installed engine keeps going."
+          built <- runStreamed kit "cabal" ["build", "exe:xmonad-engine"]
           case built of
             ExitSuccess -> do
               (listed, out, _) <- runIn kit "cabal" ["list-bin", "exe:xmonad-engine"]
@@ -164,7 +166,8 @@ recompileInstalled p config = do
                 ExitSuccess | engine <- lastNonEmpty (lines out), not (null engine) ->
                   installBuiltEngine p engine
                 _ -> complain "cabal list-bin did not report xmonad-engine"
-            _ -> hPutStr stderr err >> pure built
+            _ -> hPutStrLn stderr "Config did not compile; the installed engine is unchanged."
+                   >> pure built
 
 installBuiltEngine :: Paths -> FilePath -> IO ExitCode
 installBuiltEngine p engine = do
@@ -234,6 +237,11 @@ namedTemp dir prefix = do
 
 runIn :: FilePath -> String -> [String] -> IO (ExitCode, String, String)
 runIn dir cmd args = readCreateProcessWithExitCode (proc cmd args) { cwd = Just dir } ""
+
+runStreamed :: FilePath -> String -> [String] -> IO ExitCode
+runStreamed dir cmd args = do
+  (_, _, _, handle) <- createProcess (proc cmd args) { cwd = Just dir }
+  waitForProcess handle
 
 lastNonEmpty :: [String] -> String
 lastNonEmpty xs = case reverse (filter (not . null) xs) of
