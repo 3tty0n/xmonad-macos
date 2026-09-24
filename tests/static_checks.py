@@ -41,7 +41,8 @@ check('pointerPendingPoint' in app and 'pointerUpdateInFlight' in app,'Pointer A
 check('reply(toApplicationShouldTerminate' not in app and 'restored.wait(timeout:' in app,
       'Quit must bound its wait instead of replying on the undrained main queue')
 border=(root/'native/Border.swift').read_text()
-check('overlayWindow' in border and 'orderFrontRegardless' in border,'Focus border must sit above Electron overlay windows')
+check('dockWindow' in border and 'orderFrontRegardless' in border,
+      'Borders must sit below the Dock and menu bar, or they draw over a revealed Dock')
 check('hole(in' in border and 'evenOdd' in border,
       'Unfocused borders must clip out the focused window so a float is not covered')
 check('animationBehavior' in border and 'alphaValue' in border,

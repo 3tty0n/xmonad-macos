@@ -15,6 +15,7 @@ final class BorderOverlay {
     private var focused: NSPanel?
     private var others: [UInt64:NSPanel]=[:]
     private var spare: [NSPanel]=[]
+    private static let overlayLevel=Int(CGWindowLevelForKey(.dockWindow)) - 1
 
     func configure(width: Int, color hex: String, normal: String = "#dddddd") {
         self.width=max(0,min(width,16))
@@ -64,13 +65,9 @@ final class BorderOverlay {
     private func place(_ existing: NSPanel?, rect: Rect, width: Int,
                        color: NSColor, exclude: NSRect?,
                        front: Bool) -> NSPanel {
-        let overlayLevel=Int(CGWindowLevelForKey(.overlayWindow))
         let p=existing ?? spare.popLast() ?? make()
         p.setFrame(BorderOverlay.appKitFrame(rect,inset:CGFloat(width)),display:true)
-        // Unfocused frames stay just under the focused overlay. Both remain at
-        // public overlay levels so Electron content cannot cover them, but a
-        // hole is clipped where they would paint over the focused window.
-        p.level=NSWindow.Level(overlayLevel - (front ? 0 : 1))
+        p.level=NSWindow.Level(BorderOverlay.overlayLevel - (front ? 0 : 1))
         let view=p.contentView as? BorderView
         view?.color=color
         view?.lineWidth=CGFloat(width)
@@ -99,7 +96,7 @@ final class BorderOverlay {
         p.isReleasedWhenClosed=false
         p.animationBehavior = .none
         p.alphaValue=0
-        p.level=NSWindow.Level(Int(CGWindowLevelForKey(.overlayWindow)))
+        p.level=NSWindow.Level(BorderOverlay.overlayLevel)
         p.collectionBehavior=[.canJoinAllSpaces,.stationary,.ignoresCycle,.fullScreenNone]
         p.contentView=BorderView()
         return p

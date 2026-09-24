@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Window borders no longer paint over a revealed Dock. They were placed at
+  `kCGOverlayWindowLevel`, above the Dock's own window, so the line along the
+  bottom of the screen drew straight across the Dock's icons; they now sit just
+  under the Dock and the menu bar, still above ordinary window content.
+
 - A recompile reports what it is doing: the build's own output goes straight to
   the terminal instead of being buffered until the process exits, so a slow
   compile is visible rather than indistinguishable from a hang, and no pipe has
