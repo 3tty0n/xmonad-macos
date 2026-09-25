@@ -24,5 +24,14 @@ resolve_config() {
   done
   printf '%s\n' "$HOME/.config/xmonad-mac/xmonad.hs"
 }
+# The source a config recompile needs, without build products. Both
+# install.sh and the release bundle ship exactly this.
+stage_kit() {
+  local dest="$1" dir
+  mkdir -p "$dest"
+  cp -p "$ROOT/xmonad-macos.cabal" "$ROOT/cabal.project" "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/CHANGELOG.md" "$dest/"
+  for dir in src config docs native scripts tests .github; do cp -Rp "$ROOT/$dir" "$dest/"; done
+  rm -rf "$dest/build" "$dest/tests/__pycache__"
+}
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $1" >&2; exit 1; }; }
 mac_only() { [ "$(uname -s)" = Darwin ] || { echo "This command requires macOS." >&2; exit 1; }; }

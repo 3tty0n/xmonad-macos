@@ -11,6 +11,8 @@ import Control.Applicative ((<|>))
 import Control.Monad (filterM, unless, void, when)
 import Data.List (isInfixOf, isPrefixOf)
 import Data.Maybe (fromMaybe, isJust, listToMaybe)
+import Data.Version (showVersion)
+import Paths_xmonad_macos (version)
 import System.Directory
   ( copyFile, createDirectoryIfMissing, doesDirectoryExist, doesFileExist
   , findExecutable, getHomeDirectory, listDirectory, pathIsSymbolicLink
@@ -42,16 +44,32 @@ data Paths = Paths
   , logFile :: FilePath
   }
 
+-- The running helper records its bundle, so a copy dragged to /Applications
+-- is found as well as the one make install puts in ~/Applications.
 paths :: IO Paths
 paths = do
   home <- getHomeDirectory
-  let bundle = home </> "Applications" </> "XMonadMac.app"
+  let supportDir = home </> "Library" </> "Application Support" </> "XMonadMac"
+      installed = home </> "Applications" </> "XMonadMac.app"
+  recorded <- recordedApp (supportDir </> "app-path")
+  system <- doesDirectoryExist "/Applications/XMonadMac.app"
+  local <- doesDirectoryExist installed
+  let bundle = fromMaybe (if system && not local then "/Applications/XMonadMac.app"
+                          else installed) recorded
   pure Paths
-    { support = home </> "Library" </> "Application Support" </> "XMonadMac"
+    { support = supportDir
     , app = bundle
     , helper = bundle </> "Contents" </> "MacOS" </> "XMonadMac"
     , logFile = home </> "Library" </> "Logs" </> "XMonadMac" </> "bridge.log"
     }
+
+recordedApp :: FilePath -> IO (Maybe FilePath)
+recordedApp file = do
+  there <- doesFileExist file
+  if not there then pure Nothing else do
+    b <- lastNonEmpty . lines <$> readFile file
+    ok <- if null b then pure False else doesDirectoryExist b
+    pure (if ok then Just b else Nothing)
 
 -- Config search order: explicit argument, XMONAD_CONFIG, then the first of
 -- ~/.xmonad/xmonad.hs (upstream layout) and the XDG location that exists.
@@ -82,6 +100,7 @@ run (cmd:rest) = do
     "reload" -> toHelper p "--reload"
     "dump" -> toHelper p "--dump"
     "quit" -> toHelper p "--quit"
+    "relaunch" -> toHelper p "--relaunch"
     "recover" -> toHelper p "--recover"
     "doctor" -> doctor p
     "self-test" -> toHelper p "--self-test"
@@ -95,9 +114,12 @@ run (cmd:rest) = do
       there <- doesFileExist config
       if there then rawSystem "/usr/bin/open" [config]
                else complain ("Config not found: " ++ config)
-    "log" -> rawSystem "/usr/bin/tail" ["-f", logFile p]
+    -- -F follows bridge.log across the helper's rotation.
+    "log" -> rawSystem "/usr/bin/tail" ["-F", logFile p]
     "autostart" -> autostart p (fromMaybe "status" (listToMaybe rest))
-    _ | cmd `elem` ["help", "-h", "--help"] -> usage stdout >> pure ExitSuccess
+    _ | cmd `elem` ["--version", "version"] ->
+          putStrLn ("xmonad-macos " ++ showVersion version) >> pure ExitSuccess
+      | cmd `elem` ["help", "-h", "--help"] -> usage stdout >> pure ExitSuccess
       | otherwise -> usage stderr >> pure (ExitFailure 2)
 
 toHelper :: Paths -> String -> IO ExitCode
@@ -150,12 +172,13 @@ recompileInstalled p config = do
   kitOk <- (&&) <$> doesDirectoryExist (kit </> "src") <*> doesFileExist (kit </> "xmonad-macos.cabal")
   cfgOk <- doesFileExist config
   if not kitOk
-    then complain "Installed build kit is missing. Re-run make install from the XMonadMac source tree."
+    then complain "Installed build kit is missing. Launch XMonadMac.app once, or run make install."
     else if not cfgOk then complain ("Config not found: " ++ config) else do
       tools <- ensureToolchain
       case tools of
         Left err -> complain err
         Right () -> do
+          ensurePackageIndex kit
           stageConfig kit config
           hPutStrLn stderr "Building xmonad.hs; the installed engine keeps going."
           built <- runStreamed kit "cabal" ["build", "exe:xmonad-engine"]
@@ -247,6 +270,17 @@ lastNonEmpty :: [String] -> String
 lastNonEmpty xs = case reverse (filter (not . null) xs) of
   (y:_) -> y
   [] -> ""
+
+-- A fresh cabal install has no Hackage index, and the kit's dependencies
+-- cannot be resolved without one.
+ensurePackageIndex :: FilePath -> IO ()
+ensurePackageIndex kit = do
+  (code, out, _) <- runIn kit "cabal" ["path", "--remote-repo-cache"]
+  case code of
+    ExitSuccess | cache <- lastNonEmpty (lines out), not (null cache) -> do
+      indexed <- doesDirectoryExist (cache </> "hackage.haskell.org")
+      unless indexed $ void (runStreamed kit "cabal" ["update"])
+    _ -> pure ()
 
 ensureToolchain :: IO (Either String ())
 ensureToolchain = do
@@ -362,6 +396,7 @@ usage h = hPutStr h $ unlines
   ,""
   ,"  --recompile [xmonad.hs]  compile the config; leave the running engine alone"
   ,"  --restart                run the compiled config, starting the app if needed"
+  ,"  --version                print the XMonadMac version"
   ,"  start [--dry-run]        launch the app (read-only with --dry-run)"
   ,""
   ,"  status                   show current bridge status"
@@ -371,6 +406,7 @@ usage h = hPutStr h $ unlines
   ,"  pause|resume             pause/resume tiling"
   ,"  recover                  restore windows minimized by XMonadMac"
   ,"  quit                     quit XMonadMac"
+  ,"  relaunch                 quit XMonadMac and start it again"
   ,"  autostart on|off|status  manage login startup"
   ,"  self-test                verify focused-window AX read/write and read-back"
   ,"  dump                     write diagnostic snapshot"

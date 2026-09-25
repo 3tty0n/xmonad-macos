@@ -49,8 +49,15 @@ are still not these workspaces.
 ## Menu and status
 
 Menu bar: `[2] 1 3 - Tall`. Settings can swallow macOS window shortcuts
-while tiling (nothing is written to System Settings) and log key events.
-`xmonad status` is JSON for an external bar.
+while tiling (nothing is written to System Settings), log key events, and
+delete old logs. `xmonad status` is JSON for an external bar.
+
+**Restart XMonadMac** (or `xmonad relaunch`) quits the app, restoring its
+windows, and starts it again in the same mode.
+
+`bridge.log` is kept as `bridge-<date>-<time>.log` once it passes 5 MB. With
+**Delete logs older than 7 days** on, which is the default, kept logs past
+that age are removed.
 
 `XMonad.Hooks.StatusBar` renders a `PP` on every state change; each sink
 writes only when the text changed. `ppTitle` is the focused window's
@@ -78,10 +85,10 @@ engine's stdout is the helper protocol.
 
 | Path | |
 |---|---|
-| `~/Applications/XMonadMac.app` | Helper |
+| `/Applications` or `~/Applications/XMonadMac.app` | Helper |
 | `~/.local/bin/xmonad` | Control command (also `xmonadctl`) |
 | `~/Library/Application Support/XMonadMac/` | Engine, `build-kit`, `recovery.json`, `session.json` |
-| `~/Library/Logs/XMonadMac/bridge.log` | Log |
+| `~/Library/Logs/XMonadMac/bridge.log` | Log, with kept `bridge-*.log` |
 
 `./scripts/signing-identity.sh` makes the Accessibility grant survive
 rebuilds. `xmonad recover` restores WM-hidden windows after a crash.

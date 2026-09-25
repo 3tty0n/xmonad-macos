@@ -27,6 +27,14 @@ info=plistlib.loads((root/'native/Info.plist').read_bytes())
 check(info['CFBundleIdentifier']=='org.xmonad.XMonadMac','Bundle identity changed')
 check(info['LSUIElement'] is True,'Menu bar app flag missing')
 check(info['LSMinimumSystemVersion']=='13.0','Deployment targets disagree')
+cabal_version=re.search(r'^version:\s*(\S+)',(root/'xmonad-macos.cabal').read_text(),re.M).group(1)
+check(info['CFBundleShortVersionString']==cabal_version,
+      'Info.plist and xmonad-macos.cabal must carry the same version')
+check(re.search(rf'^## {re.escape(cabal_version)} - \d{{4}}-\d{{2}}-\d{{2}}$',
+                (root/'CHANGELOG.md').read_text(),re.M),
+      f'CHANGELOG.md has no dated section for {cabal_version}')
+check('Paths_xmonad_macos' in (root/'xmonad-macos.cabal').read_text(),
+      'xmonad --version needs the generated Paths module')
 app=(root/'native/App.swift').read_text()
 for literal in ['--no-startup','--dry-run','--validate-config','--self-test','runToken','checkpoint','O_NOFOLLOW','recompileConfig','--recompile','Open xmonad.hs','PointerTap','mouseFloat']:
     check(literal in app, f'Missing native contract {literal}')
@@ -47,6 +55,8 @@ check('hole(in' in border and 'evenOdd' in border,
       'Unfocused borders must clip out the focused window so a float is not covered')
 check('animationBehavior' in border and 'alphaValue' in border,
       'Focus border must not orderOut and fade back in after a workspace switch')
+check('panels: [UInt64:NSPanel]' in border and 'private var focused: NSPanel?' not in border,
+      'Each window keeps its own border panel so a focus change does not swap panels')
 check('tracesFocusBorder' in wire and 'tracesFocusBorder' in app,
       'Focus border visibility is decided by a portable helper')
 check('borderPin' in app and 'plan.focus' in app,
@@ -81,6 +91,18 @@ check(re.search(r'recompile\s*=\s*request Recompile', macos),'Recompile must rea
 check(re.search(r'quit\s*=\s*request Quit', macos),'Quit must reach the helper')
 native_build=(root/'scripts/build-native.sh').read_text()
 check('native/Pointer.swift' in native_build,'Native build omits pointer backend')
+check('native/Install.swift' in native_build,'Native build omits the bundled installer')
+package=(root/'scripts/package.sh').read_text()
+check('stage_kit' in package and 'stage_kit' in (root/'scripts/install.sh').read_text(),
+      'The release bundle and make install must ship the same kit')
+check('Contents/Helpers' in package and 'Contents/Helpers' in (root/'native/Install.swift').read_text(),
+      'The bundled engine must live where the installer looks for it')
+check('@loader_path' in package,'The bundled engine must carry its non-system libraries')
+check('scripts/package.sh' in (root/'.github/workflows/release.yml').read_text(),
+      'The release workflow must build with package.sh')
+check('Restart XMonadMac' in app and 'restartApp' in app,'Restart menu item missing')
+check('LogFiles.prune' in app and 'pruneLogsDefaultsKey' in app,'Old log deletion option missing')
+check('forwardToLog(engineLog)' in app,'Engine output must follow bridge.log rotation')
 install=(root/'scripts/install.sh').read_text()
 check('build-kit' in install, 'Install integration missing build-kit')
 check("sed -n 's/^designated => //p' || true" in install,

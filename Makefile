@@ -2,12 +2,13 @@
 # `xmonad` command that `make install` puts on your PATH.
 CONFIG ?= config/xmonad.hs
 
-.PHONY: help bootstrap build install run dry-run check icon clean
+.PHONY: help bootstrap build install package run dry-run check icon clean
 
 help:
 	@echo "make bootstrap   install the toolchain, build, and install"
 	@echo "make build       build the engine and the native app (CONFIG=$(CONFIG))"
 	@echo "make install     install the app, the engine, and the xmonad command"
+	@echo "make package     build the release XMonadMac.app and its zip"
 	@echo "make run         launch XMonadMac (xmonad start)"
 	@echo "make check       Swift, Haskell, integration and packaging tests"
 	@echo "make clean       remove build/ and dist-newstyle/"
@@ -22,6 +23,7 @@ help:
 bootstrap: ; ./scripts/bootstrap.sh $(CONFIG)
 build: ; ./scripts/build.sh $(CONFIG)
 install: ; ./scripts/install.sh
+package: ; ./scripts/package.sh
 run: ; "$(HOME)/.local/bin/xmonad" start
 dry-run: ; "$(HOME)/.local/bin/xmonad" start --dry-run
 check: ; ./scripts/test-portable.sh && ./scripts/test.sh

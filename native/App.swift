@@ -60,6 +60,7 @@ func displayInfo() -> [DisplayInfo] {
 }
 let suppressDefaultsKey="SuppressSystemShortcuts"
 let logKeysDefaultsKey="LogKeyEvents"
+let pruneLogsDefaultsKey="DeleteOldLogs"
 func acquireLock() throws -> Int32 {
     let url=Paths.support.appendingPathComponent("bridge.lock")
     let fd=open(url.path,O_CREAT|O_RDWR|O_CLOEXEC|O_NOFOLLOW,0o600)
@@ -69,15 +70,54 @@ func acquireLock() throws -> Int32 {
     }
     return fd
 }
-func redirectLog() {
-    if let size=(try? FileManager.default.attributesOfItem(atPath:Paths.log.path)[.size]) as? NSNumber,
-       size.intValue>5_000_000 {
-        let previous=Paths.log.appendingPathExtension("previous")
-        try? FileManager.default.removeItem(at:previous)
-        try? FileManager.default.moveItem(at:Paths.log,to:previous)
+// bridge.log is stderr. Once it outgrows the limit it is kept under a
+// timestamped name and stderr moves to a fresh file; with DeleteOldLogs on,
+// kept logs past the retention age are deleted.
+enum LogFiles {
+    static let limit=5_000_000
+    static let retention: TimeInterval=7*24*3600
+    static var directory: URL { Paths.log.deletingLastPathComponent() }
+    static func redirect() {
+        let fd=open(Paths.log.path,O_WRONLY|O_CREAT|O_APPEND|O_NOFOLLOW,0o600)
+        if fd >= 0 { dup2(fd,STDERR_FILENO); close(fd) }
     }
-    let fd=open(Paths.log.path,O_WRONLY|O_CREAT|O_APPEND|O_NOFOLLOW,0o600)
-    if fd >= 0 { dup2(fd,STDERR_FILENO); close(fd) }
+    static func rotateIfNeeded() {
+        let fm=FileManager.default
+        guard let size=(try? fm.attributesOfItem(atPath:Paths.log.path)[.size]) as? NSNumber,
+              size.intValue > limit else { return }
+        let stamp=DateFormatter()
+        stamp.locale=Locale(identifier:"en_US_POSIX")
+        stamp.dateFormat="yyyyMMdd-HHmmss"
+        let kept=directory.appendingPathComponent("bridge-\(stamp.string(from:Date())).log")
+        guard (try? fm.moveItem(at:Paths.log,to:kept)) != nil else { return }
+        redirect()
+    }
+    // bridge.log.previous is the single archive older builds kept.
+    static func kept() -> [URL] {
+        let names=(try? FileManager.default.contentsOfDirectory(atPath:directory.path)) ?? []
+        return names.filter {
+            ($0.hasPrefix("bridge-") && $0.hasSuffix(".log")) || $0 == "bridge.log.previous"
+        }.map { directory.appendingPathComponent($0) }
+    }
+    static func prune(now: Date=Date()) {
+        let fm=FileManager.default
+        for url in kept() {
+            guard let modified=(try? fm.attributesOfItem(atPath:url.path))?[.modificationDate] as? Date,
+                  now.timeIntervalSince(modified) > retention else { continue }
+            try? fm.removeItem(at:url)
+        }
+    }
+}
+// Children write through the helper, so their output follows bridge.log
+// across a rotation instead of staying on the file it was renamed to.
+func forwardToLog(_ pipe: Pipe) {
+    let handle=pipe.fileHandleForReading
+    Thread.detachNewThread {
+        while case let chunk=handle.availableData,!chunk.isEmpty {
+            FileHandle.standardError.write(chunk)
+        }
+        try? handle.close()
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -93,6 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var pauseItem: NSMenuItem!
     private var suppressItem: NSMenuItem!
     private var logKeysItem: NSMenuItem!
+    private var pruneLogsItem: NSMenuItem!
+    private var logTimer: Timer?
     private var child: Process?
     private var compiler: Process?
     private var input: FileHandle?
@@ -133,12 +175,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var label="Paused"
     private var suppressShortcuts=UserDefaults.standard.bool(forKey:suppressDefaultsKey)
     private var logKeys=UserDefaults.standard.bool(forKey:logKeysDefaultsKey)
+    private var pruneLogs=UserDefaults.standard.object(forKey:pruneLogsDefaultsKey) as? Bool ?? true
     private var axBusySince: Date?
     private let dryRun=CommandLine.arguments.contains("--dry-run")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         do {
-            try Paths.prepare(); lockFD=try acquireLock(); redirectLog()
+            try Paths.prepare(); lockFD=try acquireLock()
+            LogFiles.rotateIfNeeded(); LogFiles.redirect()
             store=AXStore(journal:try RecoveryJournal(Paths.recovery),relay:relay)
         } catch { fputs("XMonadMac: \(error)\n",stderr); NSApp.terminate(nil); return }
         makeMenu()
@@ -208,7 +252,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             self.sendObject(["type":"ping"]); self.scheduleScan()
         }
-        resume()
+        maintainLogs()
+        logTimer=Timer.scheduledTimer(withTimeInterval:600,repeats:true) { [weak self] _ in
+            self?.maintainLogs()
+        }
+        startSession()
+    }
+    private func maintainLogs() {
+        LogFiles.rotateIfNeeded()
+        if pruneLogs { LogFiles.prune() }
+    }
+    private func startSession() {
+        let install=BundledInstall.app
+        install.recordAppPath()
+        var outcome=BundledInstall.Outcome.current
+        do {
+            outcome=try install.run()
+            if outcome != .current { logMessage("Installed bundled XMonadMac \(install.stamp)") }
+        } catch { logMessage("Installing the bundled engine failed: \(error)") }
+        guard outcome == .upgraded,
+              FileManager.default.fileExists(atPath:Paths.config.path) else { resume(); return }
+        // The installed engine was built against the previous kit and may not
+        // speak this helper's protocol, so it is rebuilt before it runs.
+        compileConfig { [weak self] ok in
+            if !ok { logMessage("Recompile after the upgrade failed; keeping the previous engine") }
+            self?.resume()
+        }
     }
     private func makeMenu() {
         statusItem=NSStatusBar.system.statusItem(withLength:NSStatusItem.variableLength)
@@ -243,13 +312,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suppressItem.state=suppressShortcuts ? .on : .off
         logKeysItem=item("Log key events",#selector(toggleLogKeys))
         logKeysItem.state=logKeys ? .on : .off
-        menu.addItem(submenu("Settings",[suppressItem,logKeysItem]))
+        pruneLogsItem=item("Delete logs older than 7 days",#selector(togglePruneLogs))
+        pruneLogsItem.state=pruneLogs ? .on : .off
+        menu.addItem(submenu("Settings",[suppressItem,logKeysItem,pruneLogsItem]))
         menu.addItem(submenu("Diagnostics",[
           item("Reload compiled xmonad.hs",#selector(reloadEngine)),
           item("Open log",#selector(openLog)),
           item("Write diagnostic snapshot",#selector(dumpSnapshot)),
           item("Run AX self-test",#selector(runSelfTest))]))
         menu.addItem(NSMenuItem.separator())
+        menu.addItem(item("Restart XMonadMac",#selector(restartApp)))
         menu.addItem(item("Quit XMonadMac",#selector(quitApp)))
         statusItem.menu=menu
         setStatus("Paused")
@@ -321,7 +393,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let p=Process(), toEngine=Pipe(), fromEngine=Pipe()
         p.executableURL=Paths.engine
         if dryRun { p.arguments=["--no-startup"] }
-        p.standardInput=toEngine; p.standardOutput=fromEngine; p.standardError=FileHandle.standardError
+        let engineLog=Pipe()
+        p.standardInput=toEngine; p.standardOutput=fromEngine; p.standardError=engineLog
         // Supply an ordinary login-like PATH without interpreting shell startup files.
         var env=ProcessInfo.processInfo.environment
         env["PATH"]="/opt/homebrew/bin:/usr/local/bin:"+(env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin")
@@ -334,6 +407,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         do { try p.run() }
         catch { pause(reason:"Cannot launch Haskell engine: \(error)"); return }
+        forwardToLog(engineLog)
         child=p; input=toEngine.fileHandleForWriting
         configured=false; lastResponse=Date(); sendCheckpoint=true
         setStatus("Starting")
@@ -707,30 +781,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         suppressItem?.state=suppressShortcuts ? .on : .off
         updateKeyState()
     }
+    @objc private func togglePruneLogs() {
+        pruneLogs = !pruneLogs
+        UserDefaults.standard.set(pruneLogs,forKey:pruneLogsDefaultsKey)
+        pruneLogsItem?.state=pruneLogs ? .on : .off
+        if pruneLogs { LogFiles.prune() }
+    }
     @objc private func togglePause() { if running { pause(reason:"Paused; restoring owned windows") } else { resume() } }
     @objc private func reloadEngine() {
         guard !recompiling else { return }
         guard running else { resume(); return }
         stopEngine(); latestSent = -1; launchEngine(); scheduleScan()
     }
-    @objc private func recompileConfig() {
-        guard !recompiling,!quitting else { return }
-        guard FileManager.default.isExecutableFile(atPath:Paths.engine.path) else {
+    @objc private func recompileConfig() { compileConfig(then:nil) }
+    // With a completion the caller decides what happens next; otherwise a
+    // running session reloads into the new engine.
+    private func compileConfig(then done: ((Bool) -> Void)?) {
+        guard !recompiling,!quitting else { done?(false); return }
+        // A release bundle's engine carries the newest CLI, so it drives the
+        // build even when the installed engine predates it.
+        let install=BundledInstall.app
+        let driver=install.hasPayload ? install.bundledEngine : Paths.engine
+        guard FileManager.default.isExecutableFile(atPath:driver.path) else {
             setStatus("Installed engine missing; rerun make install")
-            return
+            done?(false); return
         }
         guard FileManager.default.fileExists(atPath:Paths.config.path) else {
             setStatus("Config missing: \(Paths.config.path)")
-            return
+            done?(false); return
         }
         recompiling=true
         let wasRunning=running
         setStatus("Compiling xmonad.hs")
-        let p=Process()
-        p.executableURL=Paths.engine
+        let p=Process(), output=Pipe()
+        p.executableURL=driver
         p.arguments=["--recompile",Paths.config.path]
-        p.standardOutput=FileHandle.standardError
-        p.standardError=FileHandle.standardError
+        p.standardOutput=output
+        p.standardError=output
         var env=ProcessInfo.processInfo.environment
         env["PATH"]="/opt/homebrew/bin:/usr/local/bin:"+(env["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin")
         p.environment=env
@@ -738,18 +825,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard let self=self,self.compiler === proc else { return }
                 self.compiler=nil; self.recompiling=false
-                if proc.terminationStatus == 0 {
+                let ok=proc.terminationStatus == 0
+                if !ok { self.setStatus("Compile failed; current engine unchanged (see log)") }
+                if let done=done { done(ok); return }
+                if ok {
                     if wasRunning && self.running { self.reloadEngine() }
                     else { self.setStatus("Compiled xmonad.hs; Resume to use it") }
-                } else {
-                    self.setStatus("Compile failed; current engine unchanged (see log)")
                 }
             }
         }
-        do { try p.run(); compiler=p }
+        do { try p.run(); compiler=p; forwardToLog(output) }
         catch {
             recompiling=false; compiler=nil
             setStatus("Cannot start config compiler: \(error)")
+            done?(false)
         }
     }
     @objc private func openConfig() {
@@ -784,6 +873,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func openLog() { NSWorkspace.shared.open(Paths.log) }
     @objc private func quitApp() { NSApp.terminate(nil) }
+    // A detached shell waits for this process to exit, which releases the
+    // lock and restores owned windows, then opens the bundle in the same mode.
+    @objc private func restartApp() {
+        var open=["-g",Bundle.main.bundlePath]
+        if dryRun { open += ["--args","--dry-run"] }
+        let p=Process()
+        p.executableURL=URL(fileURLWithPath:"/bin/sh")
+        p.arguments=["-c","""
+          pid=$1; shift
+          while /bin/kill -0 "$pid" 2>/dev/null; do /bin/sleep 0.1; done
+          exec /usr/bin/open "$@"
+          ""","xmonad-restart",String(getpid())]+open
+        p.standardOutput=FileHandle.nullDevice
+        p.standardError=FileHandle.nullDevice
+        do { try p.run() }
+        catch { setStatus("Cannot restart: \(error)"); return }
+        logMessage("Restarting XMonadMac")
+        NSApp.terminate(nil)
+    }
     @objc private func receivedCommand(_ notification: Notification) {
         guard let command=notification.userInfo?["command"] as? String else { return }
         switch command {
@@ -794,6 +902,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "recover": pause(reason:"Paused; restoring hidden windows")
         case "dump": dumpSnapshot()
         case "quit": NSApp.terminate(nil)
+        case "relaunch": restartApp()
         default: break
         }
     }
@@ -874,7 +983,7 @@ struct XMonadMacMain {
             let data=try! JSONSerialization.data(withJSONObject:info,options:[.prettyPrinted,.sortedKeys])
             FileHandle.standardOutput.write(data); print(""); return
         }
-        let commands=["pause","resume","reload","recompile","recover","dump","quit"]
+        let commands=["pause","resume","reload","recompile","recover","dump","quit","relaunch"]
         if let command=commands.first(where:{ args.contains("--"+$0) }) {
             if command == "recover",let probe=try? acquireLock() {
                 close(probe)

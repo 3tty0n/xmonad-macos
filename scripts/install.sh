@@ -21,10 +21,7 @@ chmod 700 "$SUPPORT" "$HOME/.config/xmonad-mac"
 # Install a self-contained source kit so xmonad.hs can be recompiled after the checkout moves.
 KIT_NEW="$SUPPORT/build-kit.new"
 rm -rf "$KIT_NEW"
-mkdir -p "$KIT_NEW"
-cp -p "$ROOT/xmonad-macos.cabal" "$ROOT/cabal.project" "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/CHANGELOG.md" "$KIT_NEW/"
-for dir in src config docs native scripts tests .github; do cp -Rp "$ROOT/$dir" "$KIT_NEW/"; done
-rm -rf "$KIT_NEW/build" "$KIT_NEW/tests/__pycache__"
+stage_kit "$KIT_NEW"
 if [ -d "$SUPPORT/build-kit/dist-newstyle" ]; then
   cp -Rp "$SUPPORT/build-kit/dist-newstyle" "$KIT_NEW/dist-newstyle"
 fi

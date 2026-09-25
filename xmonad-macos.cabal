@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: xmonad-macos
-version: 0.3.0.0
+version: 1.0.0
 synopsis: Native macOS portability fork of the xmonad policy core
 license: BSD-3-Clause
 license-file: LICENSE
@@ -20,7 +20,7 @@ extra-source-files:
     scripts/*.sh
     tests/*.py
     tests/WireTests.swift
-    .github/workflows/ci.yml
+    .github/workflows/*.yml
 
 common defaults
   default-language: Haskell2010
@@ -115,6 +115,8 @@ library
     XMonad.MacOS.Protocol
     XMonad.MacOS.Engine
     XMonad.MacOS.CLI
+  other-modules: Paths_xmonad_macos
+  autogen-modules: Paths_xmonad_macos
 
 executable xmonad-engine
   import: defaults

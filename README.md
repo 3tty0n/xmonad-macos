@@ -24,24 +24,39 @@ Haskell and drives a signed Swift helper that moves the windows.
 
 ## Install
 
+Download `XMonadMac-<version>-arm64.zip` from
+[Releases](https://github.com/3tty0n/xmonad-macos/releases), unzip it, and
+move `XMonadMac.app` to `/Applications`. Open it, add it under System
+Settings → Privacy & Security → Accessibility, then choose **Restart
+XMonadMac** from its menu. A build that is not notarized is blocked on first
+open; allow it with **Open Anyway** in Privacy & Security.
+
+The first launch installs the engine, writes `~/.config/xmonad-mac/xmonad.hs`
+if you have no config yet, and links `xmonad` into `~/.local/bin`. Opening a
+newer release later recompiles your config for it.
+
+> [!NOTE]
+> Changing `xmonad.hs` means compiling Haskell, so install the toolchain
+> first: `brew install ghc@9.12 cabal-install`.
+
+### From source
+
 ```sh
-git clone <this-repo> xmonad-macos
+git clone https://github.com/3tty0n/xmonad-macos.git
 cd xmonad-macos
 make bootstrap
 ```
 
-Then System Settings → Privacy & Security → Accessibility → add
-`~/Applications/XMonadMac.app`, and restart it.
-
-To update, run `make build && make install`. If the app is running,
+This installs `~/Applications/XMonadMac.app`; grant it Accessibility the same
+way. To update, run `make build && make install`. If the app is running,
 install quits it (restoring its windows), swaps it, and relaunches it in
-the same mode.
+the same mode. `make package` builds the release bundle instead.
 
 ## Prerequisite
 
-- macOS 13+
-- Xcode Command Line Tools
-- Homebrew
+- macOS 13+, Apple silicon for the release bundle
+- Homebrew, GHC 9.12 and cabal to compile a config
+- Xcode Command Line Tools to build from source
 
 ## Run
 
@@ -129,12 +144,14 @@ WM-hidden window back.
 |---|---|
 | `make bootstrap` | Toolchain, build, install |
 | `make build` / `make install` | Build / install |
+| `make package` | Release `XMonadMac.app` and zip |
 | `make run` / `make dry-run` | `xmonad start` / `xmonad start --dry-run` |
 | `make check` | Tests |
 | `xmonad start [--dry-run]` | Launch the installed app |
 | `xmonad --recompile` / `--restart` | Compile the config / run it |
 | `xmonad status` / `log` / `doctor` | What it is doing |
 | `xmonad pause` / `resume` / `recover` | Suspend / resume / unhide |
+| `xmonad relaunch` / `--version` | Restart the app / print the version |
 | `xmonad autostart on` | Start at login |
 
 The menu bar shows `1 [9] · Tall`. `xmonad status` publishes the same as

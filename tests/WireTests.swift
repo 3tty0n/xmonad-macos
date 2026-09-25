@@ -10,6 +10,43 @@ import AppKit
         do { try PlanSafety.validate(plan,active:[1,2,3]); fatalError("FAIL: \(name)") }
         catch { count += 1 }
     }
+    static func bundledInstallChecks() throws {
+        let fm=FileManager.default
+        let root=fm.temporaryDirectory.appendingPathComponent("xmonad-install-\(getpid())")
+        defer { try? fm.removeItem(at:root) }
+        let app=root.appendingPathComponent("XMonadMac.app")
+        let kit=app.appendingPathComponent("Contents/Resources/build-kit")
+        let helpers=app.appendingPathComponent("Contents/Helpers")
+        try fm.createDirectory(at:kit.appendingPathComponent("config"),withIntermediateDirectories:true)
+        try fm.createDirectory(at:helpers,withIntermediateDirectories:true)
+        try "cabal".write(to:kit.appendingPathComponent("xmonad-macos.cabal"),atomically:true,encoding:.utf8)
+        try "main".write(to:kit.appendingPathComponent("config/xmonad.hs"),atomically:true,encoding:.utf8)
+        try "lib".write(to:helpers.appendingPathComponent("libgmp.10.dylib"),atomically:true,encoding:.utf8)
+        let bundled=helpers.appendingPathComponent("xmonad-engine")
+        try "v1".write(to:bundled,atomically:true,encoding:.utf8)
+        try fm.setAttributes([.posixPermissions:0o755],ofItemAtPath:bundled.path)
+        let home=root.appendingPathComponent("home")
+        let support=home.appendingPathComponent("support")
+        var install=BundledInstall(bundle:app,support:support,home:home,stamp:"1")
+        check((try? install.run()) == .installed,"first launch installs the bundle")
+        check((try? install.run()) == .current,"same bundle installs once")
+        check((try? String(contentsOf:install.engine,encoding:.utf8)) == "v1","bundled engine installed")
+        check(fm.fileExists(atPath:support.appendingPathComponent("libgmp.10.dylib").path),
+              "engine libraries installed beside it")
+        check((try? String(contentsOf:home.appendingPathComponent(".config/xmonad-mac/xmonad.hs"),
+                           encoding:.utf8)) == "main","default config written")
+        check((try? fm.destinationOfSymbolicLink(atPath:home.appendingPathComponent(".local/bin/xmonad").path))
+                == install.engine.path,"xmonad links to the engine")
+        let cache=support.appendingPathComponent("build-kit/dist-newstyle")
+        try fm.createDirectory(at:cache,withIntermediateDirectories:true)
+        try "mine".write(to:install.engine,atomically:true,encoding:.utf8)
+        try fm.setAttributes([.posixPermissions:0o755],ofItemAtPath:install.engine.path)
+        install=BundledInstall(bundle:app,support:support,home:home,stamp:"2")
+        check((try? install.run()) == .upgraded,"a newer bundle upgrades")
+        check((try? String(contentsOf:install.engine,encoding:.utf8)) == "mine",
+              "an upgrade leaves the user's engine for the recompile")
+        check(fm.fileExists(atPath:cache.path),"an upgrade keeps the kit's build cache")
+    }
     static func main() throws {
         let primary=Rect(x:0,y:0,width:1512,height:982)
         check(Rect.quartz(appKit:primary,primaryTop:982) == primary,"primary origin")
@@ -259,6 +296,7 @@ import AppKit
                       "coordinate involution")
             }
         }
+        try bundledInstallChecks()
         print("PASS: \(count) portable Swift checks")
     }
 }
