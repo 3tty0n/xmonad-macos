@@ -12,8 +12,10 @@ final class BorderOverlay {
     private(set) var width=0
     private var focusedColor=NSColor.systemRed
     private var normalColor=NSColor(white:0.85,alpha:1)
-    private var focused: NSPanel?
-    private var others: [UInt64:NSPanel]=[:]
+    // Each window keeps its own overlay across focus changes, so moving focus
+    // only recolours two frames instead of swapping panels between windows.
+    private var panels: [UInt64:NSPanel]=[:]
+    private var focusedWid: UInt64?
     private var spare: [NSPanel]=[]
     private static let overlayLevel=Int(CGWindowLevelForKey(.dockWindow)) - 1
 
@@ -34,56 +36,58 @@ final class BorderOverlay {
         let focusedFrame=focused.map {
             BorderOverlay.appKitFrame($0.rect,inset:inset)
         }
-        if let spec=focused, spec.width > 0 {
-            self.focused=place(self.focused,rect:spec.rect,width:spec.width,
-                               color:focusedColor,exclude:nil,front:true)
-        } else { retire(&self.focused) }
-        let skip=focused?.wid
         var next: [UInt64:NSPanel]=[:]
-        for spec in rest where spec.wid != skip && spec.width > 0 {
-            let inset=CGFloat(spec.width)
-            let overlay=BorderOverlay.appKitFrame(spec.rect,inset:inset)
+        if let spec=focused, spec.width > 0 {
+            next[spec.wid]=place(panels.removeValue(forKey:spec.wid),spec:spec,
+                                 color:focusedColor,exclude:nil,front:true)
+        }
+        let skip=focused?.wid
+        for spec in rest where spec.wid != skip && spec.width > 0
+                             && next[spec.wid] == nil {
+            let overlay=BorderOverlay.appKitFrame(spec.rect,inset:CGFloat(spec.width))
             let hole=focusedFrame.flatMap {
                 BorderOverlay.hole(in:overlay,cutting:$0)
             }
-            let existing=others.removeValue(forKey:spec.wid)
-            next[spec.wid]=place(existing,rect:spec.rect,width:spec.width,
+            next[spec.wid]=place(panels.removeValue(forKey:spec.wid),spec:spec,
                                  color:normalColor,exclude:hole,front:false)
         }
-        for p in others.values { retire(p); spare.append(p) }
-        others=next
+        for p in panels.values { retire(p) }
+        panels=next
+        focusedWid=focused.flatMap { next[$0.wid] == nil ? nil : $0.wid }
         // Unfocused frames are placed after the focused overlay, so raise it
         // again: a floating window's content must sit above those white frames.
-        self.focused?.orderFrontRegardless()
+        if let wid=focusedWid { panels[wid]?.orderFrontRegardless() }
     }
     func hide() {
-        retire(&focused)
-        for p in others.values { retire(p); spare.append(p) }
-        others=[:]
-        spare.forEach(retire)
+        for p in panels.values { retire(p) }
+        panels=[:]
+        focusedWid=nil
     }
-    private func place(_ existing: NSPanel?, rect: Rect, width: Int,
-                       color: NSColor, exclude: NSRect?,
-                       front: Bool) -> NSPanel {
+    // The view is updated and drawn before the panel becomes visible or moves,
+    // so the window server never composites a frame with stale content.
+    private func place(_ existing: NSPanel?, spec: BorderSpec, color: NSColor,
+                       exclude: NSRect?, front: Bool) -> NSPanel {
         let p=existing ?? spare.popLast() ?? make()
-        p.setFrame(BorderOverlay.appKitFrame(rect,inset:CGFloat(width)),display:true)
-        p.level=NSWindow.Level(BorderOverlay.overlayLevel - (front ? 0 : 1))
-        let view=p.contentView as? BorderView
-        view?.color=color
-        view?.lineWidth=CGFloat(width)
-        view?.exclude=exclude
-        view?.needsDisplay=true
-        p.alphaValue=1
-        p.orderFrontRegardless()
+        let frame=BorderOverlay.appKitFrame(spec.rect,inset:CGFloat(spec.width))
+        let level=NSWindow.Level(BorderOverlay.overlayLevel - (front ? 0 : 1))
+        let hidden=p.alphaValue == 0
+        if p.level != level { p.level=level }
+        if let view=p.contentView as? BorderView,
+           view.update(color:color,lineWidth:CGFloat(spec.width),exclude:exclude)
+             || p.frame != frame {
+            if p.frame != frame { p.setFrame(frame,display:false) }
+            view.display()
+        }
+        if hidden {
+            p.alphaValue=1
+            p.orderFrontRegardless()
+        }
         return p
-    }
-    private func retire(_ panel: inout NSPanel?) {
-        if let p=panel { retire(p); spare.append(p) }
-        panel=nil
     }
     private func retire(_ p: NSPanel) {
         p.alphaValue=0
         p.setFrame(.zero,display:false)
+        spare.append(p)
     }
     private func make() -> NSPanel {
         let p=NSPanel(contentRect:.zero,styleMask:[.borderless,.nonactivatingPanel],
@@ -127,9 +131,18 @@ final class BorderOverlay {
 }
 
 private final class BorderView: NSView {
-    var color=NSColor.systemRed
-    var lineWidth: CGFloat=1
-    var exclude: NSRect? { didSet { updateMask(); needsDisplay=true } }
+    private var color=NSColor.systemRed
+    private var lineWidth: CGFloat=1
+    private var exclude: NSRect?
+    // Reports whether anything changed, so an unchanged frame is not redrawn.
+    func update(color: NSColor, lineWidth: CGFloat, exclude: NSRect?) -> Bool {
+        guard color != self.color || lineWidth != self.lineWidth
+                || exclude != self.exclude else { return false }
+        self.color=color
+        self.lineWidth=lineWidth
+        if exclude != self.exclude { self.exclude=exclude; updateMask() }
+        return true
+    }
     override init(frame frameRect: NSRect) {
         super.init(frame:frameRect)
         wantsLayer=true
@@ -152,7 +165,10 @@ private final class BorderView: NSView {
         let mask=CAShapeLayer()
         mask.fillRule = .evenOdd
         mask.path=path
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         layer?.mask=mask
+        CATransaction.commit()
     }
     override func draw(_ dirty: NSRect) {
         guard lineWidth > 0 else { return }
