@@ -21,6 +21,14 @@ import AppKit
               "display below primary")
         let usable=Rect.quartz(appKit:Rect(x:0,y:70,width:1512,height:875),primaryTop:982)
         check(usable == Rect(x:0,y:37,width:1512,height:875),"Dock and menu bar reserved in points")
+        // WindowServer handed these back after a display wake; Int(_:) traps on
+        // them, so a bad rectangle must be refused rather than converted.
+        check(Rect(CGRect(x:-1920,y:-98,width:1920,height:1080)) == Rect(x:-1920,y:-98,width:1920,height:1080),
+              "on-screen CG rectangle")
+        check(Rect(CGRect(x:Double.nan,y:0,width:100,height:50)) == nil,"NaN origin refused")
+        check(Rect(CGRect(x:0,y:0,width:Double.infinity,height:50)) == nil,"infinite size refused")
+        check(Rect(CGRect(x:1e30,y:0,width:100,height:50)) == nil,"origin past Int refused")
+        check(Rect(CGRect(x:0,y:0,width:0,height:50)) == nil,"empty rectangle refused")
         let ds=[DisplayInfo(display:1,usable:primary),
                 DisplayInfo(display:2,usable:Rect(x:-1920,y:0,width:1920,height:1080))]
         check(bestDisplay(for:Rect(x:-1600,y:100,width:900,height:700),in:ds) == 2,"left screen")

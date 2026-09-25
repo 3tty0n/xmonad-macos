@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Waking a display can no longer kill the helper. `CGWindowListCopyWindowInfo`
+  occasionally answers with a rectangle that is non-finite or past `Int` in the
+  seconds after a screen comes back, and converting those bounds with `Int(_:)`
+  traps: the process died with a `SIGTRAP` in `cgVisibleFrames()` and, since
+  nothing restarts it, tiling stayed off until it was launched again. Every
+  rectangle read from the window server now goes through `Rect.init?(_:)`,
+  which refuses geometry it cannot represent instead of converting it, and the
+  AX self-test and the display list use the same path instead of checking
+  `valid` only after the conversion had already happened.
+
 - Window borders no longer paint over a revealed Dock. They were placed at
   `kCGOverlayWindowLevel`, above the Dock's own window, so the line along the
   bottom of the screen drew straight across the Dock's icons; they now sit just

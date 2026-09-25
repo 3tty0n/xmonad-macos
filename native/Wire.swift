@@ -20,6 +20,20 @@ struct Rect: Codable, Equatable {
         return Double(w)*Double(h)
     }
 }
+extension Rect {
+    // WindowServer geometry is not always trustworthy: waking a display can
+    // hand back a rectangle that is non-finite or beyond Int, and Int(_:)
+    // traps on those, which took the whole helper down. Anything that is not
+    // a usable rectangle is refused instead.
+    init?(_ r: CGRect) {
+        guard let x=Int(exactly:r.minX.rounded()),let y=Int(exactly:r.minY.rounded()),
+              let width=Int(exactly:r.width.rounded()),
+              let height=Int(exactly:r.height.rounded()) else { return nil }
+        let rect=Rect(x:x,y:y,width:width,height:height)
+        guard rect.valid else { return nil }
+        self=rect
+    }
+}
 struct DisplayInfo: Codable, Equatable { var display: Int; var usable: Rect }
 struct WindowInfo: Codable, Equatable {
     var wid: UInt64, pid: Int32

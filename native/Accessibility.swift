@@ -295,9 +295,9 @@ final class AXStore {
                   cgWindowIsApplicationLayer(layer),
                   let pid=(d[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
                   let bounds=d[kCGWindowBounds as String] as? [String:Any],
-                  let r=CGRect(dictionaryRepresentation:bounds as CFDictionary) else { return nil }
-            return (pid,Rect(x:Int(r.minX.rounded()),y:Int(r.minY.rounded()),
-                       width:Int(r.width.rounded()),height:Int(r.height.rounded())))
+                  let r=CGRect(dictionaryRepresentation:bounds as CFDictionary),
+                  let frame=Rect(r) else { return nil }
+            return (pid,frame)
         }
     }
     // A stale record adopts a replacement element only when the match is
@@ -935,9 +935,9 @@ func runAXSelfTest() -> AXSelfTestReport {
                   cgWindowIsApplicationLayer(layer),
                   (d[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid,
                   let bounds=d[kCGWindowBounds as String] as? [String:Any],
-                  let cg=CGRect(dictionaryRepresentation:bounds as CFDictionary) else { return false }
-            return Rect(x:Int(cg.minX.rounded()),y:Int(cg.minY.rounded()),
-                        width:Int(cg.width.rounded()),height:Int(cg.height.rounded())).near(frame,tolerance:4)
+                  let cg=CGRect(dictionaryRepresentation:bounds as CFDictionary),
+                  let rect=Rect(cg) else { return false }
+            return rect.near(frame,tolerance:4)
         }
     }
     if !report.standardWindow { report.errors.append("Focused element is not a standard AX window") }

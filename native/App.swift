@@ -48,9 +48,10 @@ func displayInfo() -> [DisplayInfo] {
     return screens.compactMap { s -> DisplayInfo? in
         guard let id=(s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue else { return nil }
         let r=s.visibleFrame
-        let rect=Rect(x:Int(r.minX.rounded()),y:Int((top-r.maxY).rounded()),
-                      width:Int(r.width.rounded()),height:Int(r.height.rounded()))
-        return rect.valid ? DisplayInfo(display:id,usable:rect) : nil
+        guard let rect=Rect(CGRect(x:r.minX,y:top-r.maxY,width:r.width,height:r.height)) else {
+            return nil
+        }
+        return DisplayInfo(display:id,usable:rect)
     }.sorted { a,b in
         if a.display == primaryID { return b.display != primaryID }
         if b.display == primaryID { return false }
