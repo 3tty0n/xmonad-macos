@@ -134,13 +134,25 @@ adoptSnapshot snap c previous observed = put base
   , extensibleState = extensibleState previous
   }
   where
-    base | snapEpoch snap /= epoch previous = initialState c (snapDisplays snap)
+    base | snapEpoch snap /= epoch previous =
+             carryLayouts previous (initialState c (snapDisplays snap))
          | otherwise = previous
     live = M.keysSet observed
     (rescreened, affinity) = rescreenWith (snapDisplays snap) (windowset base)
       (M.toList $ displayAffinity base)
     surviving = foldr W.delete rescreened
       [w | w <- W.allWindows rescreened, S.notMember w live]
+
+-- A native Space change adopts a new world, but the user's layout choice for a
+-- workspace is not part of that world. Carry each tag's layout onto the fresh
+-- state so an epoch bump restores the workspace assignments only, instead of
+-- silently resetting a chosen layout or a toggle back to the config's first.
+carryLayouts :: XState -> XState -> XState
+carryLayouts previous fresh = fresh
+  {windowset = W.mapWorkspace adopt (windowset fresh)}
+  where
+    layouts = M.fromList [(W.tag w,W.layout w) | w <- W.workspaces (windowset previous)]
+    adopt w = maybe w (\l -> w {W.layout=l}) (M.lookup (W.tag w) layouts)
 
 -- A checkpoint from the previous engine, replayed once at startup.
 restoreSaved :: Snapshot -> XConfig Layout -> M.Map Window WindowInfo -> X ()

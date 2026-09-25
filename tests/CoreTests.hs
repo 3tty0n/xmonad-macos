@@ -310,6 +310,16 @@ main = do
   (_,noPull) <- runX conf s3 (reconcile lingering)
   check "visible window on a hidden workspace cannot change current tag"
     (W.currentTag (windowset noPull)=="3")
+  -- A native Space epoch bump rebuilds window membership, but a layout the user
+  -- chose per workspace is not part of that world and must survive.
+  (_,chosen) <- runX conf s3 (setLayout (Layout Circle))
+  check "epoch fixture: the current workspace holds the chosen layout"
+    (W.currentTag (windowset chosen)=="3")
+  let bumped=snapshot {snapGeneration=9,snapEpoch=2}
+  (_,carried) <- runX conf chosen (reconcile bumped)
+  check "an epoch bump keeps a workspace's layout"
+    (lookup "3" [(W.tag w,description (W.layout w))
+                | w <- W.workspaces (windowset carried)] == Just "Circle")
   let saved=checkpoint s3
   case restoreCheckpoint cfg 1 displays (windowInfo s3) saved of
     Left e -> ioError $ userError e

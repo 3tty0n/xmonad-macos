@@ -672,6 +672,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline:.now()+2.1) { [weak self] in self?.scheduleScan() }
     }
     private func spaceChanged() {
+        // Waking from sleep re-announces the active Space. Bumping the epoch
+        // then makes the engine rebuild the world from nothing and unparks every
+        // WM-owned window, so a workspace layout the user chose is reset. The
+        // notification is only meaningful once macOS has settled.
+        guard running, Date() >= settledAt else {
+            logMessage("Ignoring a native Space change before the world settles")
+            return
+        }
         currentEpoch += 1; checkpoint=nil; latestSent = -1; fullScreen=false
         borderPin=nil
         let ep=currentEpoch

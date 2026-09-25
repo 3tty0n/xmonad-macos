@@ -33,8 +33,9 @@ them: `SLSMoveWindowsToManagedSpace` ignores another process's window, and
 this port does not inject into Dock.app.
 
 Hiding a window parks it off-screen. Apps that clamp (Finder) are minimized
-instead. `Full` hides nothing. A native Space switch bumps `epoch` and
-rebuilds; tiling pauses while a native full-screen window is frontmost.
+instead. `Full` hides nothing. A native Space switch bumps `epoch` and rebuilds
+window membership; each workspace keeps the layout the user chose. Tiling
+pauses while a native full-screen window is frontmost.
 
 ## Plans, focus, recovery
 
