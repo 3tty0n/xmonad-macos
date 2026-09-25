@@ -51,7 +51,10 @@ intent. `epoch` bumps on a native Space switch; both `generation` and
 all. It is a statement about this plan only, so anything left out is drawn
 at the width from the handshake. The field is additive — a helper that does
 not know it draws the handshake's width everywhere, which is what it did
-before.
+before. An entry may name a window the plan does not place: `smartBorders`
+restates the previous width when a workspace empties, and the width applies
+the next time the window is drawn. A helper ignores a width for a window it
+is not drawing; it must not reject the plan.
 
 `status`, when present, is menu bar text a logHook rendered
 (`macMenuBarPP`); without it the helper builds its own workspace row.

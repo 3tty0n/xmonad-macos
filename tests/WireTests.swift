@@ -79,13 +79,27 @@ import AppKit
         bad=plan; bad.frames[0].frame.x=Int.max; rejects(bad,"coordinate overflow")
         bad=plan; bad.hide=[9]; rejects(bad,"unknown window ID")
         bad=plan; bad.borders=[BorderOverride(wid:9,width:1)]
-        rejects(bad,"border width for a window the plan does not place")
+        try PlanSafety.validate(bad,active:[1,2,3]); count += 1
+        bad=plan; bad.borders=Array(repeating:BorderOverride(wid:1,width:0),count:10_001)
+        rejects(bad,"unreasonable border list")
         bad=plan; bad.borders=[BorderOverride(wid:1,width:-1)]
         rejects(bad,"negative border width")
         bad=plan; bad.borders=[BorderOverride(wid:1,width:65)]
         rejects(bad,"border width above the cap")
         bad=plan; bad.borders=[BorderOverride(wid:1,width:0)]
         try PlanSafety.validate(bad,active:[1,2,3]); count += 1
+        // Moving the last window off a smartBorders workspace empties it while
+        // the layout still states that window's width, so the engine sends an
+        // empty frame list with a border for a hidden window. That must plan.
+        let emptied="""
+        {"type":"plan","generation":9,"epoch":0,
+         "frames":[],"hide":[1,2,3],"focus":null,"action":null,"focusForMs":400,
+         "workspace":"2","layout":"ThreeColMid","screen":1,"checkpoint":null,
+         "borders":[{"wid":1,"width":1}],"workspaces":[]}
+        """
+        let emptiedMessage=try JSONDecoder().decode(EngineMessage.self,from:Data(emptied.utf8))
+        guard case .plan(let emptiedPlan)=emptiedMessage else { fatalError("decode emptied workspace") }
+        try PlanSafety.validate(emptiedPlan,active:[1,2,3]); count += 1
         bad=plan; bad.frames[0].frame.height = -1; rejects(bad,"negative dimension")
         plan.frames[0].frame.x = -1800
         try PlanSafety.validate(plan,active:[1,2,3]); count += 1

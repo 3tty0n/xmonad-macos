@@ -260,9 +260,15 @@ struct PlanSafety {
         if let focus = p.focus, !shown.contains(focus) {
             throw WireError.invalid("Focus target is hidden")
         }
+        // A width may name a window this plan does not place. A layout keeps
+        // its hidden set across passes, so when a workspace empties it states
+        // the previous width again for a window that is now elsewhere; the
+        // helper only reads a width for a window it draws, so the entry is
+        // harmless. Rejecting it paused the session every time the last window
+        // left a smartBorders workspace.
         if let borders = p.borders {
-            guard borders.allSatisfy({ shown.contains($0.wid) }) else {
-                throw WireError.invalid("Border width for an unplaced window")
+            guard borders.count <= 10_000 else {
+                throw WireError.invalid("Unreasonable border list")
             }
             guard borders.allSatisfy({ (0...64).contains($0.width) }) else {
                 throw WireError.invalid("Border width outside 0...64")
