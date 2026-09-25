@@ -29,6 +29,18 @@ import AppKit
         check(Rect(CGRect(x:0,y:0,width:Double.infinity,height:50)) == nil,"infinite size refused")
         check(Rect(CGRect(x:1e30,y:0,width:100,height:50)) == nil,"origin past Int refused")
         check(Rect(CGRect(x:0,y:0,width:0,height:50)) == nil,"empty rectangle refused")
+        // A park has to overlap the screen, or AppKit drags 40x32 of the
+        // window's title bar back on it.
+        check(parkOrigin(screens:[Rect(x:0,y:0,width:3360,height:1890)],
+                         window:Rect(x:5,y:35,width:1670,height:1850))
+              == Rect(x:3359,y:1889,width:1670,height:1850),"park inside the bottom-right corner")
+        check(parkOrigin(screens:[Rect(x:0,y:0,width:1920,height:1080),
+                                 Rect(x:1920,y:0,width:2560,height:1440)],
+                         window:Rect(x:0,y:0,width:800,height:600))
+              == Rect(x:4479,y:1439,width:800,height:600),"park past the widest display")
+        check(parkedOffDisplay(Rect(x:3359,y:1889,width:1670,height:1850),
+                               [DisplayInfo(display:1,usable:Rect(x:0,y:30,width:3360,height:1860))]),
+              "a parked window is off the workspace")
         let ds=[DisplayInfo(display:1,usable:primary),
                 DisplayInfo(display:2,usable:Rect(x:-1920,y:0,width:1920,height:1080))]
         check(bestDisplay(for:Rect(x:-1600,y:100,width:900,height:700),in:ds) == 2,"left screen")

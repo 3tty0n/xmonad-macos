@@ -634,20 +634,14 @@ final class AXStore {
         return records.values.first { axSameWindow($0.element,window) }?.wid
     }
 
-    // A window on another workspace is parked past the right edge of the
-    // display arrangement, keeping its size. Unlike AXMinimized this involves
-    // no Dock, no animation and no app that may refuse, and the window is
-    // brought back by the ordinary placement that follows.
+    // A window on another workspace is parked against the bottom-right corner
+    // of the display arrangement, keeping its size. Unlike AXMinimized this
+    // involves no Dock, no animation and no app that may refuse, and the window
+    // is brought back by the ordinary placement that follows.
     private func parkingSpot(for r: AXRecord) -> Rect {
-        let right=displays.map { $0.usable.x+$0.usable.width }.max() ?? r.frame.x
-        let bottom=displays.map { $0.usable.y+$0.usable.height }.max() ?? r.frame.y
-        return Rect(x:right+64,y:bottom+64,width:r.frame.width,height:r.frame.height)
+        parkOrigin(screens:displays.compactMap { Rect(CGDisplayBounds(CGDirectDisplayID($0.display))) },
+                   window:r.frame)
     }
-    // AppKit will not let a window leave the screen completely: it keeps about
-    // 40 points of it in view. Parked into the bottom-right corner both limits
-    // apply at once and roughly 40x32 points remain, so anything under a
-    // 64-point square counts as hidden. Beyond that a window would show a
-    // visible strip over the workspace and has to be minimized instead.
     private func onAnyDisplay(_ rect: Rect) -> Bool { !parkedOffDisplay(rect,displays) }
     private func show(_ r: AXRecord) {
         guard r.token != nil else { return }  // Never restore a user's hiding.

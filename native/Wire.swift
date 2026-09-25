@@ -89,8 +89,22 @@ func cgWindowIsApplicationLayer(_ layer: Int) -> Bool {
 func bundleOmitsOnScreenCGWindows(_ bundle: String) -> Bool {
     bundle.hasPrefix("com.google.Chrome")
 }
-// AppKit keeps ~40 points of a parked window on screen. That sliver is a
-// successful hide; a window still at its original on-display frame is not.
+// AppKit keeps a window whose whole frame is off the screen partly on it, and
+// what it puts back is the window's top-left 40x32: the left end of the title
+// bar, standing in the workspace like a window that never left. A frame that
+// still overlaps the screen by a point is left where it was asked to go, so a
+// park aims one point inside the bottom-right corner of the display
+// arrangement and leaves a single point of the window's corner instead. Screen
+// bounds, not the usable rect: with a Dock on the right or bottom, the usable
+// corner is on the display and the window would park that far inside it.
+func parkOrigin(screens: [Rect], window: Rect) -> Rect {
+    let right=screens.map { $0.x+$0.width }.max() ?? window.x
+    let bottom=screens.map { $0.y+$0.height }.max() ?? window.y
+    return Rect(x:right-1,y:bottom-1,width:window.width,height:window.height)
+}
+// An app that clamps its own frame back leaves more than that point, and a hide
+// that could not move the window at all leaves all of it. Under a 64-point
+// square is off the workspace; over it the helper minimizes instead.
 func parkedOffDisplay(_ rect: Rect, _ displays: [DisplayInfo]) -> Bool {
     displays.map { $0.usable.intersectionArea(rect) }.reduce(0,+) <= 4096
 }
