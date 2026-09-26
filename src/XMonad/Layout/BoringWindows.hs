@@ -68,13 +68,13 @@ instance LayoutModifier BoringWindows Window where
         windows $ W.modify' (skipBoringSwapUp (boring bs))
         pure Nothing
     | Just SwapDown <- fromMessage mess = do
-        windows $ W.modify' (reverseS . skipBoringSwapUp (boring bs) . reverseS)
+        windows $ W.modify' (W.reverseStack . skipBoringSwapUp (boring bs) . W.reverseStack)
         pure Nothing
     | Just SiftUp <- fromMessage mess = do
         windows $ W.modify' (siftUpSkipping (boring bs))
         pure Nothing
     | Just SiftDown <- fromMessage mess = do
-        windows $ W.modify' (reverseS . siftUpSkipping (boring bs) . reverseS)
+        windows $ W.modify' (W.reverseStack . siftUpSkipping (boring bs) . W.reverseStack)
         pure Nothing
     | Just (IsBoring w) <- fromMessage mess =
         pure $ if w `elem` chosenBoring bs
@@ -115,9 +115,6 @@ siftUpSkipping bs (W.Stack t ls rs)
   | (skips, r:rs') <- span (`elem` bs) (reverse rs) =
       W.Stack t (rs' ++ r : ls) (reverse skips)
   | otherwise = W.Stack t ls rs
-
-reverseS :: W.Stack a -> W.Stack a
-reverseS (W.Stack t ls rs) = W.Stack t rs ls
 
 focusMaster' :: W.Stack a -> W.Stack a
 focusMaster' c = case c of

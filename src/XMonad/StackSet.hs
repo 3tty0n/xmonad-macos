@@ -10,7 +10,7 @@ module XMonad.StackSet
   , focusUp, focusDown, focusUp', focusDown', focusMaster, focusWindow
   , tagMember, renameTag, ensureTags, member, findTag, mapWorkspace, mapLayout
   , insertUp, delete, delete', filter, swapUp, swapDown, swapUp', swapDown'
-  , swapMaster, shiftMaster
+  , reverseStack, swapMaster, shiftMaster
   , modify, modify', float, sink, shift, shiftWin, abort
   ) where
 

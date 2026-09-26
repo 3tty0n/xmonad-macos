@@ -1,7 +1,8 @@
 -- Adapted from xmonad-contrib XMonad.Actions.RotSlaves (BSD-3-Clause),
 -- Copyright (c) Hans Philipp Annen, Mischa Dieterle and the Xmonad Community.
 module XMonad.Actions.RotSlaves
-  (rotSlaves', rotSlavesUp, rotSlavesDown, rotAll', rotAllUp, rotAllDown) where
+  (rotSlaves', rotSlavesUp, rotSlavesDown, rotAll', rotAllUp, rotAllDown
+  ,rotUp, rotDown) where
 import XMonad.Core
 import XMonad.Operations (windows)
 import qualified XMonad.StackSet as W
@@ -26,6 +27,7 @@ rotAll' :: ([a] -> [a]) -> W.Stack a -> W.Stack a
 rotAll' f s = W.Stack focus' (reverse revls) rs
   where (revls,focus':rs) = splitAt (length $ W.up s) (f (W.integrate s))
 
+-- The one list rotation both this module and CycleWindows rotate with.
 rotUp, rotDown :: [a] -> [a]
 rotUp [] = []
 rotUp (x:xs) = xs ++ [x]

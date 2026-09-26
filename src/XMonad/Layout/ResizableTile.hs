@@ -4,7 +4,7 @@
 -- Copyright (c) Lukas Mai and the Xmonad Community.
 module XMonad.Layout.ResizableTile (ResizableTall(..), MirrorResize(..)) where
 import XMonad.Core
-import XMonad.Layout (Resize(..), IncMasterN(..), splitHorizontallyBy, mirrorRect)
+import XMonad.Layout (Resize(..), IncMasterN(..), splitHorizontallyBy)
 import qualified XMonad.StackSet as W
 import Control.Monad (msum)
 

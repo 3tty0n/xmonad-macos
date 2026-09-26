@@ -7,7 +7,7 @@ module XMonad.Actions.CycleWindows
   , rotUnfocused', rotUnfocusedUp, rotUnfocusedDown
   , rotUp, rotDown
   ) where
-import XMonad.Actions.RotSlaves (rotSlaves')
+import XMonad.Actions.RotSlaves (rotSlaves', rotUp, rotDown)
 import XMonad.Core
 import XMonad.Operations (windows)
 import qualified XMonad.StackSet as W
@@ -49,9 +49,3 @@ rotUnfocused' f s@(W.Stack _ [] _) = rotSlaves' f s
 rotUnfocused' f (W.Stack t ls@(l:ll) rs) = W.Stack t (reverse revls') rs'
   where master:revls = reverse (l:ll)
         (revls',rs') = splitAt (length ls) (f $ master:revls ++ rs)
-
-rotUp, rotDown :: [a] -> [a]
-rotUp [] = []
-rotUp (x:xs) = xs ++ [x]
-rotDown [] = []
-rotDown xs = last xs : init xs

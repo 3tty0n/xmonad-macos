@@ -18,14 +18,13 @@ onWorkspaces = PerWorkspace
 
 instance (LayoutClass l1 a, LayoutClass l2 a)
     => LayoutClass (PerWorkspace l1 l2) a where
-  runLayout (W.Workspace t p@(PerWorkspace ts l1 l2) s) r
+  runLayout (W.Workspace t (PerWorkspace ts l1 l2) s) r
     | t `elem` ts = do
         (rects,changed) <- runLayout (W.Workspace t l1 s) r
         pure (rects, (\l -> PerWorkspace ts l l2) <$> changed)
     | otherwise = do
         (rects,changed) <- runLayout (W.Workspace t l2 s) r
         pure (rects, PerWorkspace ts l1 <$> changed)
-    where _ = p
   -- A message goes to both, so the layout that is not showing keeps up.
   handleMessage (PerWorkspace ts l1 l2) m = do
     m1 <- handleMessage l1 m

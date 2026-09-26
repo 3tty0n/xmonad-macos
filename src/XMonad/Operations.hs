@@ -5,7 +5,7 @@ module XMonad.Operations
   , focus, kill, killWindow, refresh, spawn
   , float, floatLocation, floatWithRect, isClient
   , sendMessage, sendMessageWithNoRefresh, broadcastMessage, setLayout
-  , screenWorkspace, containedIn, pointWithin, scaleRationalRect
+  , screenWorkspace, pointWithin, scaleRationalRect
   , setWindowBorderWidth, bordersFor
   ) where
 import XMonad.Core
@@ -86,10 +86,6 @@ rectOnScreen (Rectangle sx sy sw sh) (Rectangle x y ww hh)
   | otherwise = Just $ W.RationalRect
       (toRational (x-sx) / toRational sw) (toRational (y-sy) / toRational sh)
       (toRational ww / toRational sw) (toRational hh / toRational sh)
-
-containedIn :: Rectangle -> Rectangle -> Bool
-containedIn (Rectangle x y w h) (Rectangle x' y' w' h') =
-  x >= x' && y >= y' && x+w <= x'+w' && y+h <= y'+h'
 
 pointWithin :: Position -> Position -> Rectangle -> Bool
 pointWithin x y (Rectangle rx ry rw rh) =

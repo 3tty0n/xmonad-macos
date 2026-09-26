@@ -2,92 +2,99 @@ import Foundation
 
 // Protocol and safety logic have no AppKit dependency and are tested on Linux.
 struct Rect: Codable, Equatable {
-    var x: Int, y: Int, width: Int, height: Int
-    func near(_ other: Rect, tolerance: Int = 2) -> Bool {
-        abs(x-other.x) <= tolerance && abs(y-other.y) <= tolerance &&
-        abs(width-other.width) <= tolerance && abs(height-other.height) <= tolerance
-    }
-    var valid: Bool {
-        abs(Double(x)) < 1_000_000 && abs(Double(y)) < 1_000_000 &&
-        width > 0 && height > 0 && width < 100_000 && height < 100_000
-    }
-    static func quartz(appKit r: Rect, primaryTop: Int) -> Rect {
-        Rect(x: r.x, y: primaryTop-r.y-r.height, width: r.width, height: r.height)
-    }
-    func intersectionArea(_ other: Rect) -> Double {
-        let w = max(0, min(x+width,other.x+other.width)-max(x,other.x))
-        let h = max(0, min(y+height,other.y+other.height)-max(y,other.y))
-        return Double(w)*Double(h)
-    }
+  var x: Int, y: Int, width: Int, height: Int
+  func near(_ other: Rect, tolerance: Int = 2) -> Bool {
+    abs(x - other.x) <= tolerance && abs(y - other.y) <= tolerance
+      && abs(width - other.width) <= tolerance && abs(height - other.height) <= tolerance
+  }
+  var valid: Bool {
+    abs(Double(x)) < 1_000_000 && abs(Double(y)) < 1_000_000 && width > 0 && height > 0
+      && width < 100_000 && height < 100_000
+  }
+  static func quartz(appKit r: Rect, primaryTop: Int) -> Rect {
+    Rect(x: r.x, y: primaryTop - r.y - r.height, width: r.width, height: r.height)
+  }
+  func intersectionArea(_ other: Rect) -> Double {
+    let w = max(0, min(x + width, other.x + other.width) - max(x, other.x))
+    let h = max(0, min(y + height, other.y + other.height) - max(y, other.y))
+    return Double(w) * Double(h)
+  }
 }
 extension Rect {
-    // WindowServer geometry is not always trustworthy: waking a display can
-    // hand back a rectangle that is non-finite or beyond Int, and Int(_:)
-    // traps on those, which took the whole helper down. Anything that is not
-    // a usable rectangle is refused instead.
-    init?(_ r: CGRect) {
-        guard let x=Int(exactly:r.minX.rounded()),let y=Int(exactly:r.minY.rounded()),
-              let width=Int(exactly:r.width.rounded()),
-              let height=Int(exactly:r.height.rounded()) else { return nil }
-        let rect=Rect(x:x,y:y,width:width,height:height)
-        guard rect.valid else { return nil }
-        self=rect
-    }
+  // WindowServer geometry is not always trustworthy: waking a display can
+  // hand back a rectangle that is non-finite or beyond Int, and Int(_:)
+  // traps on those, which took the whole helper down. Anything that is not
+  // a usable rectangle is refused instead.
+  init?(_ r: CGRect) {
+    guard let x = Int(exactly: r.minX.rounded()), let y = Int(exactly: r.minY.rounded()),
+      let width = Int(exactly: r.width.rounded()),
+      let height = Int(exactly: r.height.rounded())
+    else { return nil }
+    let rect = Rect(x: x, y: y, width: width, height: height)
+    guard rect.valid else { return nil }
+    self = rect
+  }
 }
-struct DisplayInfo: Codable, Equatable { var display: Int; var usable: Rect }
+struct DisplayInfo: Codable, Equatable {
+  var display: Int
+  var usable: Rect
+}
 struct WindowInfo: Codable, Equatable {
-    var wid: UInt64, pid: Int32
-    var app: String, bundle: String, titleText: String
-    var onDisplay: Int, frame: Rect
-    var minimized: Bool, ownedHidden: Bool
-    // AX subrole. Standard windows are AXStandardWindow; dialogs and
-    // floating panels use the popup subroles below. Missing in old tests.
-    var subrole: String = "AXStandardWindow"
+  var wid: UInt64, pid: Int32
+  var app: String, bundle: String, titleText: String
+  var onDisplay: Int, frame: Rect
+  var minimized: Bool, ownedHidden: Bool
+  // AX subrole. Standard windows are AXStandardWindow; dialogs and
+  // floating panels use the popup subroles below. Missing in old tests.
+  var subrole: String = "AXStandardWindow"
 }
 // Dialogs and floating panels the helper will manage as windows. Sheets and
 // unknown subroles stay unmanaged: a sheet is tied to its parent.
 func isManagedPopupSubrole(_ subrole: String) -> Bool {
-    switch subrole {
-    case "AXDialog", "AXSystemDialog", "AXFloatingWindow", "AXSystemFloatingWindow":
-        return true
-    default:
-        return false
-    }
+  switch subrole {
+  case "AXDialog", "AXSystemDialog", "AXFloatingWindow", "AXSystemFloatingWindow":
+    return true
+  default:
+    return false
+  }
 }
 // AXWindows lists real frames. GNU NS Emacs reports those frames as
 // AXTextField; emacs-mac is usually AXWindow. Either is a window if it
 // appears in that list.
 func reportsAsWindowRole(_ role: String) -> Bool {
-    role == "AXWindow" || role == "AXTextField" || role == "AXTextArea"
+  role == "AXWindow" || role == "AXTextField" || role == "AXTextArea"
 }
 // Tiling admission. Minimized need not be settable: emacs-mac undecorated
 // frames often have no AXMinimized. Empty subrole is a standard window that
 // has not filled the attribute in yet.
-func windowRoleIsEligible(role: String, subrole: String, fullScreen: Bool,
-                          positionSettable: Bool, sizeSettable: Bool) -> Bool {
-    guard reportsAsWindowRole(role), !fullScreen, positionSettable else { return false }
-    if isManagedPopupSubrole(subrole) { return true }
-    let standard = subrole == "AXStandardWindow" || subrole.isEmpty
-      || role == "AXTextField" || role == "AXTextArea"
-    return standard && sizeSettable
+func windowRoleIsEligible(
+  role: String, subrole: String, fullScreen: Bool,
+  positionSettable: Bool, sizeSettable: Bool
+) -> Bool {
+  guard reportsAsWindowRole(role), !fullScreen, positionSettable else { return false }
+  if isManagedPopupSubrole(subrole) { return true }
+  let standard =
+    subrole == "AXStandardWindow" || subrole.isEmpty
+    || role == "AXTextField" || role == "AXTextArea"
+  return standard && sizeSettable
 }
 // AX and CG disagree by a titlebar on emacs-mac and similar NS ports.
 func cgMatchesAXFrame(_ ax: Rect, _ cg: Rect, originSlop: Int = 24) -> Bool {
-    if ax.near(cg, tolerance: originSlop) { return true }
-    let area=ax.intersectionArea(cg)
-    let smaller=Double(min(ax.width*ax.height, cg.width*cg.height))
-    return smaller > 0 && area >= 0.72 * smaller
+  if ax.near(cg, tolerance: originSlop) { return true }
+  let area = ax.intersectionArea(cg)
+  let smaller = Double(min(ax.width * ax.height, cg.width * cg.height))
+  return smaller > 0 && area >= 0.72 * smaller
 }
 // Normal (0), floating (3), modal panel (8) and utility (19). Dock is 20
 // and the menu bar is 24; those are not application windows.
 func cgWindowIsApplicationLayer(_ layer: Int) -> Bool {
-    (0...19).contains(layer)
+  (0...19).contains(layer)
 }
 // Chrome withholds on-screen CGWindow metadata unless Screen Recording is
 // granted. PID+frame correlation would then drop every window. AX already
 // omits that app's windows on inactive Spaces, so trusting AX is safe here.
 func bundleOmitsOnScreenCGWindows(_ bundle: String) -> Bool {
-    bundle.hasPrefix("com.google.Chrome")
+  bundle.hasPrefix("com.google.Chrome")
 }
 // AppKit keeps a window whose whole frame is off the screen partly on it, and
 // what it puts back is the window's top-left 40x32: the left end of the title
@@ -98,34 +105,39 @@ func bundleOmitsOnScreenCGWindows(_ bundle: String) -> Bool {
 // bounds, not the usable rect: with a Dock on the right or bottom, the usable
 // corner is on the display and the window would park that far inside it.
 func parkOrigin(screens: [Rect], window: Rect) -> Rect {
-    let right=screens.map { $0.x+$0.width }.max() ?? window.x
-    let bottom=screens.map { $0.y+$0.height }.max() ?? window.y
-    return Rect(x:right-1,y:bottom-1,width:window.width,height:window.height)
+  let right = screens.map { $0.x + $0.width }.max() ?? window.x
+  let bottom = screens.map { $0.y + $0.height }.max() ?? window.y
+  return Rect(x: right - 1, y: bottom - 1, width: window.width, height: window.height)
 }
 // An app that clamps its own frame back leaves more than that point, and a hide
 // that could not move the window at all leaves all of it. Under a 64-point
 // square is off the workspace; over it the helper minimizes instead.
 func parkedOffDisplay(_ rect: Rect, _ displays: [DisplayInfo]) -> Bool {
-    displays.map { $0.usable.intersectionArea(rect) }.reduce(0,+) <= 4096
+  displays.map { $0.usable.intersectionArea(rect) }.reduce(0, +) <= 4096
 }
 // The overlay follows a window that is already on a display. A restore keeps
 // ownedHidden true until a later scan agrees; only a pinned focus request may
 // trace through that interval. An owned-hidden window that is still painted
 // is the outgoing workspace, not the focused one.
-func tracesFocusBorder(_ window: WindowInfo, displays: [DisplayInfo], pinned: Bool = false) -> Bool {
-    !window.minimized && !parkedOffDisplay(window.frame,displays) && (pinned || !window.ownedHidden)
+func tracesFocusBorder(_ window: WindowInfo, displays: [DisplayInfo], pinned: Bool = false) -> Bool
+{
+  !window.minimized && !parkedOffDisplay(window.frame, displays) && (pinned || !window.ownedHidden)
 }
-func cgHasWindow(pid: Int32, near rect: Rect, in windows: [(Int32,Rect)], tolerance: Int = 8) -> Bool {
-    windows.contains { $0.0 == pid && $0.1.near(rect,tolerance:tolerance) }
+func cgHasWindow(pid: Int32, near rect: Rect, in windows: [(Int32, Rect)], tolerance: Int = 8)
+  -> Bool
+{
+  windows.contains { $0.0 == pid && $0.1.near(rect, tolerance: tolerance) }
 }
-func cgShowsOriginal(pid: Int32, original: Rect, windows: [(Int32,Rect)], displays: [DisplayInfo]) -> Bool {
-    !parkedOffDisplay(original,displays) && cgHasWindow(pid:pid,near:original,in:windows)
+func cgShowsOriginal(pid: Int32, original: Rect, windows: [(Int32, Rect)], displays: [DisplayInfo])
+  -> Bool
+{
+  !parkedOffDisplay(original, displays) && cgHasWindow(pid: pid, near: original, in: windows)
 }
 // Finder ignores a position-only park (the set succeeds, the frame does not
 // change) and size-position-size clamps a large visible panel into the
 // corner. Minimizing is the public hide that actually leaves the screen.
 func parksByMinimizing(_ bundle: String) -> Bool {
-    bundle == "com.apple.finder"
+  bundle == "com.apple.finder"
 }
 // A hide is journaled with the process instance it belongs to, so PID reuse
 // cannot make a later process look like the owner of a minimized window.
@@ -134,279 +146,338 @@ func parksByMinimizing(_ bundle: String) -> Bool {
 // refused, which is why Finder stayed on every workspace. The BSD start
 // time is public and identifies the instance just as well.
 func processStartTime(_ pid: Int32) -> Double {
-    var info=kinfo_proc()
-    var size=MemoryLayout<kinfo_proc>.stride
-    var mib: [Int32]=[CTL_KERN,KERN_PROC,KERN_PROC_PID,pid]
-    guard sysctl(&mib,u_int(mib.count),&info,&size,nil,0) == 0,size > 0 else { return 0 }
-    let started=info.kp_proc.p_starttime
-    return Double(started.tv_sec)+Double(started.tv_usec)/1_000_000
+  var info = kinfo_proc()
+  var size = MemoryLayout<kinfo_proc>.stride
+  var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+  guard sysctl(&mib, u_int(mib.count), &info, &size, nil, 0) == 0, size > 0 else { return 0 }
+  let started = info.kp_proc.p_starttime
+  return Double(started.tv_sec) + Double(started.tv_usec) / 1_000_000
 }
 struct Snapshot: Encodable {
-    let type = "snapshot"
-    var generation: Int, epoch: Int, screens: [DisplayInfo], windows: [WindowInfo]
-    var focused: UInt64?
-    var restore: JSONValue?
+  let type = "snapshot"
+  var generation: Int, epoch: Int, screens: [DisplayInfo], windows: [WindowInfo]
+  var focused: UInt64?
+  var restore: JSONValue?
 }
-struct KeyBinding: Codable, Hashable { var mask: Int; var sym: Int }
-struct Placement: Codable { var wid: UInt64; var frame: Rect }
+struct KeyBinding: Codable, Hashable {
+  var mask: Int
+  var sym: Int
+}
+struct Placement: Codable {
+  var wid: UInt64
+  var frame: Rect
+}
 // A border width the plan asks for by name. Zero means the window is drawn
 // with no border at all; a window the plan does not name keeps the configured
 // width.
-struct BorderOverride: Codable { var wid: UInt64; var width: Int }
+struct BorderOverride: Codable {
+  var wid: UInt64
+  var width: Int
+}
 struct WorkspaceInfo: Codable, Equatable {
-    var tag: String, windows: Int, current: Bool, visible: Bool
+  var tag: String, windows: Int, current: Bool, visible: Bool
 }
 struct Plan: Decodable {
-    var generation: Int, epoch: Int, frames: [Placement], hide: [UInt64]
-    var focus: UInt64?, workspace: String, layout: String, checkpoint: JSONValue
-    // Additive and optional: a signed helper that predates this field draws
-    // the configured width for every window.
-    var borders: [BorderOverride]?
-    var workspaces: [WorkspaceInfo]?
-    // Menu bar text rendered by a logHook's PP; nil keeps workspaceRow.
-    var status: String?
-    var screen: Int?
-    var action: Int?
-    var focusForMs: Int?
+  var generation: Int, epoch: Int, frames: [Placement], hide: [UInt64]
+  var focus: UInt64?, workspace: String, layout: String, checkpoint: JSONValue
+  // Additive and optional: a signed helper that predates this field draws
+  // the configured width for every window.
+  var borders: [BorderOverride]?
+  var workspaces: [WorkspaceInfo]?
+  // Menu bar text rendered by a logHook's PP; nil keeps workspaceRow.
+  var status: String?
+  var screen: Int?
+  var action: Int?
+  var focusForMs: Int?
 }
 // xmobar-style row: every workspace that holds windows, plus the current one.
 // "[2]" is current, a bare tag has windows, so an empty desktop stays quiet.
 func workspaceRow(_ all: [WorkspaceInfo]) -> String {
-    let shown = all.filter { $0.windows > 0 || $0.current || $0.visible }
-    return shown.map { w in
-        w.current ? "[\(w.tag)]" : (w.visible ? "(\(w.tag))" : w.tag)
-    }.joined(separator: " ")
+  let shown = all.filter { $0.windows > 0 || $0.current || $0.visible }
+  return shown.map { w in
+    w.current ? "[\(w.tag)]" : (w.visible ? "(\(w.tag))" : w.tag)
+  }.joined(separator: " ")
 }
 enum JSONValue: Codable {
-    case object([String:JSONValue]), array([JSONValue]), string(String)
-    case number(Double), bool(Bool), null
-    init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        if c.decodeNil() { self = .null }
-        else if let b = try? c.decode(Bool.self) { self = .bool(b) }
-        else if let n = try? c.decode(Double.self) { self = .number(n) }
-        else if let s = try? c.decode(String.self) { self = .string(s) }
-        else if let a = try? c.decode([JSONValue].self) { self = .array(a) }
-        else { self = .object(try c.decode([String:JSONValue].self)) }
+  case object([String: JSONValue])
+  case array([JSONValue])
+  case string(String)
+  case number(Double)
+  case bool(Bool)
+  case null
+  init(from decoder: Decoder) throws {
+    let c = try decoder.singleValueContainer()
+    if c.decodeNil() {
+      self = .null
+    } else if let b = try? c.decode(Bool.self) {
+      self = .bool(b)
+    } else if let n = try? c.decode(Double.self) {
+      self = .number(n)
+    } else if let s = try? c.decode(String.self) {
+      self = .string(s)
+    } else if let a = try? c.decode([JSONValue].self) {
+      self = .array(a)
+    } else {
+      self = .object(try c.decode([String: JSONValue].self))
     }
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
-        switch self {
-        case .null: try c.encodeNil()
-        case .bool(let b): try c.encode(b)
-        case .number(let n): try c.encode(n)
-        case .string(let s): try c.encode(s)
-        case .array(let a): try c.encode(a)
-        case .object(let o): try c.encode(o)
-        }
+  }
+  func encode(to encoder: Encoder) throws {
+    var c = encoder.singleValueContainer()
+    switch self {
+    case .null: try c.encodeNil()
+    case .bool(let b): try c.encode(b)
+    case .number(let n): try c.encode(n)
+    case .string(let s): try c.encode(s)
+    case .array(let a): try c.encode(a)
+    case .object(let o): try c.encode(o)
     }
+  }
 }
 enum WireError: Error, CustomStringConvertible {
-    case invalid(String)
-    var description: String { if case .invalid(let s) = self { return s }; return "invalid" }
+  case invalid(String)
+  var description: String {
+    if case .invalid(let s) = self { return s }
+    return "invalid"
+  }
 }
 // Appearance and pointer policy, decided by the config and applied by the helper.
 struct Appearance {
-    var borderWidth=0
-    var borderColor="#ff0000"
-    var normalBorderColor="#dddddd"
-    var focusFollowsMouse=false
-    var mouse: [MouseBind]=[]
+  var borderWidth = 0
+  var borderColor = "#ff0000"
+  var normalBorderColor = "#dddddd"
+  var focusFollowsMouse = false
+  var mouse: [MouseBind] = []
 }
 enum PointerMode: String, Codable { case move, resize, raise }
 struct MouseBind: Codable, Equatable {
-    var mask: Int, button: Int, action: PointerMode
+  var mask: Int, button: Int, action: PointerMode
 }
 enum EngineMessage: Decodable {
-    case configure(Int, [KeyBinding], [MouseBind], Appearance), plan(Plan)
-    case command(String, UInt64?), pong
-    private enum CodingKeys: String, CodingKey {
-        case type, `protocol`, keys, mouseMask, mouse, name, wid
-        case borderWidth, borderColor, normalBorderColor, focusFollowsMouse
-        case mask, button, action
+  case configure(Int, [KeyBinding], [MouseBind], Appearance)
+  case plan(Plan)
+  case command(String, UInt64?)
+  case pong
+  private enum CodingKeys: String, CodingKey {
+    case type, `protocol`, keys, mouseMask, mouse, name, wid
+    case borderWidth, borderColor, normalBorderColor, focusFollowsMouse
+    case mask, button, action
+  }
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    switch try c.decode(String.self, forKey: .type) {
+    case "configure":
+      let mouse = try EngineMessage.decodeMouse(c)
+      let look = Appearance(
+        borderWidth: try c.decodeIfPresent(Int.self, forKey: .borderWidth) ?? 0,
+        borderColor: try c.decodeIfPresent(String.self, forKey: .borderColor) ?? "#ff0000",
+        normalBorderColor: try c.decodeIfPresent(String.self, forKey: .normalBorderColor)
+          ?? "#dddddd",
+        focusFollowsMouse: try c.decodeIfPresent(Bool.self, forKey: .focusFollowsMouse) ?? false,
+        mouse: mouse)
+      self = .configure(
+        try c.decode(Int.self, forKey: .protocol),
+        try c.decode([KeyBinding].self, forKey: .keys),
+        mouse, look)
+    case "plan": self = .plan(try Plan(from: decoder))
+    case "command":
+      self = .command(
+        try c.decode(String.self, forKey: .name),
+        try c.decodeIfPresent(UInt64.self, forKey: .wid))
+    case "pong": self = .pong
+    default: throw WireError.invalid("Unknown engine message")
     }
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        switch try c.decode(String.self, forKey: .type) {
-        case "configure":
-            let mouse=try EngineMessage.decodeMouse(c)
-            let look=Appearance(
-              borderWidth: try c.decodeIfPresent(Int.self,forKey:.borderWidth) ?? 0,
-              borderColor: try c.decodeIfPresent(String.self,forKey:.borderColor) ?? "#ff0000",
-              normalBorderColor: try c.decodeIfPresent(String.self,forKey:.normalBorderColor) ?? "#dddddd",
-              focusFollowsMouse: try c.decodeIfPresent(Bool.self,forKey:.focusFollowsMouse) ?? false,
-              mouse:mouse)
-            self = .configure(try c.decode(Int.self,forKey:.protocol),
-                              try c.decode([KeyBinding].self,forKey:.keys),
-                              mouse,look)
-        case "plan": self = .plan(try Plan(from: decoder))
-        case "command": self = .command(try c.decode(String.self,forKey:.name),
-                                         try c.decodeIfPresent(UInt64.self,forKey:.wid))
-        case "pong": self = .pong
-        default: throw WireError.invalid("Unknown engine message")
-        }
+  }
+  private static func decodeMouse(_ c: KeyedDecodingContainer<CodingKeys>) throws -> [MouseBind] {
+    if let mouse = try c.decodeIfPresent([MouseBind].self, forKey: .mouse), !mouse.isEmpty {
+      return mouse
     }
-    private static func decodeMouse(_ c: KeyedDecodingContainer<CodingKeys>) throws -> [MouseBind] {
-        if let mouse=try c.decodeIfPresent([MouseBind].self,forKey:.mouse),!mouse.isEmpty { return mouse }
-        let mask=try c.decodeIfPresent(Int.self,forKey:.mouseMask) ?? 0
-        return [MouseBind(mask:mask,button:1,action:.move),
-                MouseBind(mask:mask,button:3,action:.resize)]
-    }
+    let mask = try c.decodeIfPresent(Int.self, forKey: .mouseMask) ?? 0
+    return [
+      MouseBind(mask: mask, button: 1, action: .move),
+      MouseBind(mask: mask, button: 3, action: .resize),
+    ]
+  }
 }
 struct PlanSafety {
-    static func validate(_ p: Plan, active: Set<UInt64>) throws {
-        let shown = p.frames.map(\.wid)
-        guard shown.count <= 10_000, p.hide.count <= 10_000 else {
-            throw WireError.invalid("Unreasonable plan size")
-        }
-        guard Set(shown).count == shown.count, Set(p.hide).count == p.hide.count else {
-            throw WireError.invalid("Duplicate window IDs in plan")
-        }
-        guard Set(shown).isDisjoint(with: Set(p.hide)) else {
-            throw WireError.invalid("A window cannot be shown and hidden simultaneously")
-        }
-        guard Set(shown+p.hide).isSubset(of: active) else {
-            throw WireError.invalid("Plan refers to windows outside the current snapshot")
-        }
-        guard p.frames.allSatisfy({ $0.frame.valid }) else {
-            throw WireError.invalid("Invalid rectangle in plan")
-        }
-        if let focus = p.focus, !shown.contains(focus) {
-            throw WireError.invalid("Focus target is hidden")
-        }
-        // A width may name a window this plan does not place. A layout keeps
-        // its hidden set across passes, so when a workspace empties it states
-        // the previous width again for a window that is now elsewhere; the
-        // helper only reads a width for a window it draws, so the entry is
-        // harmless. Rejecting it paused the session every time the last window
-        // left a smartBorders workspace.
-        if let borders = p.borders {
-            guard borders.count <= 10_000 else {
-                throw WireError.invalid("Unreasonable border list")
-            }
-            guard borders.allSatisfy({ (0...64).contains($0.width) }) else {
-                throw WireError.invalid("Border width outside 0...64")
-            }
-        }
+  static func validate(_ p: Plan, active: Set<UInt64>) throws {
+    let shown = p.frames.map(\.wid)
+    guard shown.count <= 10_000, p.hide.count <= 10_000 else {
+      throw WireError.invalid("Unreasonable plan size")
     }
+    guard Set(shown).count == shown.count, Set(p.hide).count == p.hide.count else {
+      throw WireError.invalid("Duplicate window IDs in plan")
+    }
+    guard Set(shown).isDisjoint(with: Set(p.hide)) else {
+      throw WireError.invalid("A window cannot be shown and hidden simultaneously")
+    }
+    guard Set(shown + p.hide).isSubset(of: active) else {
+      throw WireError.invalid("Plan refers to windows outside the current snapshot")
+    }
+    guard p.frames.allSatisfy({ $0.frame.valid }) else {
+      throw WireError.invalid("Invalid rectangle in plan")
+    }
+    if let focus = p.focus, !shown.contains(focus) {
+      throw WireError.invalid("Focus target is hidden")
+    }
+    // A width may name a window this plan does not place. A layout keeps
+    // its hidden set across passes, so when a workspace empties it states
+    // the previous width again for a window that is now elsewhere; the
+    // helper only reads a width for a window it draws, so the entry is
+    // harmless. Rejecting it paused the session every time the last window
+    // left a smartBorders workspace.
+    if let borders = p.borders {
+      guard borders.count <= 10_000 else {
+        throw WireError.invalid("Unreasonable border list")
+      }
+      guard borders.allSatisfy({ (0...64).contains($0.width) }) else {
+        throw WireError.invalid("Border width outside 0...64")
+      }
+    }
+  }
 }
 func bestDisplay(for rect: Rect, in displays: [DisplayInfo]) -> Int {
-    guard let first = displays.first else { return 0 }
-    var best = first, area = -1.0, distance = Double.greatestFiniteMagnitude
-    for d in displays {
-        let a = rect.intersectionArea(d.usable)
-        let dx = Double(rect.x)+Double(rect.width)/2-Double(d.usable.x)-Double(d.usable.width)/2
-        let dy = Double(rect.y)+Double(rect.height)/2-Double(d.usable.y)-Double(d.usable.height)/2
-        let dist = dx*dx+dy*dy
-        if a > area || (a == area && dist < distance) { best=d; area=a; distance=dist }
+  guard let first = displays.first else { return 0 }
+  var best = first
+  var area = -1.0
+  var distance = Double.greatestFiniteMagnitude
+  for d in displays {
+    let a = rect.intersectionArea(d.usable)
+    let dx =
+      Double(rect.x) + Double(rect.width) / 2 - Double(d.usable.x) - Double(d.usable.width) / 2
+    let dy =
+      Double(rect.y) + Double(rect.height) / 2 - Double(d.usable.y) - Double(d.usable.height) / 2
+    let dist = dx * dx + dy * dy
+    if a > area || (a == area && dist < distance) {
+      best = d
+      area = a
+      distance = dist
     }
-    return best.display
+  }
+  return best.display
 }
 
 // Keysyms are translated to physical ANSI/JIS letter-key positions, not text.
 // This avoids Option-generated characters and preserves modifier-release behavior.
-let keyCodeForSym: [Int:UInt16] = {
-    let pairs: [(Character,UInt16)] = [
-        ("a",0),("s",1),("d",2),("f",3),("h",4),("g",5),("z",6),("x",7),
-        ("c",8),("v",9),("b",11),("q",12),("w",13),("e",14),("r",15),
-        ("y",16),("t",17),("1",18),("2",19),("3",20),("4",21),("6",22),
-        ("5",23),("=",24),("9",25),("7",26),("-",27),("8",28),("0",29),
-        ("]",30),("o",31),("u",32),("[",33),("i",34),("p",35),("l",37),
-        ("j",38),("'",39),("k",40),(";",41),("\\",42),(",",43),("/",44),
-        ("n",45),("m",46),(".",47),(" ",49),("`",50)]
-    var map = Dictionary(uniqueKeysWithValues: pairs.map { (Int($0.0.asciiValue!),$0.1) })
-    for (s,k) in [(0xff0d,36),(0xff09,48),(0xff08,51),(0xff1b,53),
-                   (0xffff,117),(0xff51,123),(0xff52,126),(0xff53,124),(0xff54,125),
-                   (0xff50,115),(0xff57,119),(0xff55,116),(0xff56,121)] {
-        map[s] = UInt16(k)
-    }
-    let fs: [UInt16] = [122,120,99,118,96,97,98,100,101,109,103,111,105,107,113,106,64,79,80,90]
-    for (i,k) in fs.enumerated() { map[0xffbe+i] = k }
-    return map
+let keyCodeForSym: [Int: UInt16] = {
+  let pairs: [(Character, UInt16)] = [
+    ("a", 0), ("s", 1), ("d", 2), ("f", 3), ("h", 4), ("g", 5), ("z", 6), ("x", 7),
+    ("c", 8), ("v", 9), ("b", 11), ("q", 12), ("w", 13), ("e", 14), ("r", 15),
+    ("y", 16), ("t", 17), ("1", 18), ("2", 19), ("3", 20), ("4", 21), ("6", 22),
+    ("5", 23), ("=", 24), ("9", 25), ("7", 26), ("-", 27), ("8", 28), ("0", 29),
+    ("]", 30), ("o", 31), ("u", 32), ("[", 33), ("i", 34), ("p", 35), ("l", 37),
+    ("j", 38), ("'", 39), ("k", 40), (";", 41), ("\\", 42), (",", 43), ("/", 44),
+    ("n", 45), ("m", 46), (".", 47), (" ", 49), ("`", 50),
+  ]
+  var map = Dictionary(uniqueKeysWithValues: pairs.map { (Int($0.0.asciiValue!), $0.1) })
+  for (s, k) in [
+    (0xff0d, 36), (0xff09, 48), (0xff08, 51), (0xff1b, 53),
+    (0xffff, 117), (0xff51, 123), (0xff52, 126), (0xff53, 124), (0xff54, 125),
+    (0xff50, 115), (0xff57, 119), (0xff55, 116), (0xff56, 121),
+  ] {
+    map[s] = UInt16(k)
+  }
+  let fs: [UInt16] = [
+    122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111, 105, 107, 113, 106, 64, 79, 80, 90,
+  ]
+  for (i, k) in fs.enumerated() { map[0xffbe + i] = k }
+  return map
 }()
-let symForKeyCode = Dictionary(uniqueKeysWithValues: keyCodeForSym.map { ($0.value,$0.key) })
+let symForKeyCode = Dictionary(uniqueKeysWithValues: keyCodeForSym.map { ($0.value, $0.key) })
 func validateModifierMask(_ mask: Int) throws {
-    guard mask >= 0, mask & ~(1|4|8|64) == 0 else {
-        throw WireError.invalid("Unsupported modifier mask=\(mask)")
-    }
+  guard mask >= 0, mask & ~(1 | 4 | 8 | 64) == 0 else {
+    throw WireError.invalid("Unsupported modifier mask=\(mask)")
+  }
 }
 func validatePointerMask(_ mask: Int) throws {
-    try validateModifierMask(mask)
-    guard mask != 0 else { throw WireError.invalid("Pointer modifier mask must not be zero") }
+  try validateModifierMask(mask)
+  guard mask != 0 else { throw WireError.invalid("Pointer modifier mask must not be zero") }
 }
 func validateMouseBindings(_ binds: [MouseBind]) throws {
-    guard !binds.isEmpty else { throw WireError.invalid("No mouse bindings") }
-    var seen=Set<String>()
-    for b in binds {
-        try validatePointerMask(b.mask)
-        guard (1...32).contains(b.button) else { throw WireError.invalid("Unsupported mouse button \(b.button)") }
-        let key="\(b.mask):\(b.button)"
-        guard seen.insert(key).inserted else { throw WireError.invalid("Duplicate mouse binding \(key)") }
+  guard !binds.isEmpty else { throw WireError.invalid("No mouse bindings") }
+  var seen = Set<String>()
+  for b in binds {
+    try validatePointerMask(b.mask)
+    guard (1...32).contains(b.button) else {
+      throw WireError.invalid("Unsupported mouse button \(b.button)")
     }
+    let key = "\(b.mask):\(b.button)"
+    guard seen.insert(key).inserted else {
+      throw WireError.invalid("Duplicate mouse binding \(key)")
+    }
+  }
 }
 func validateBinding(_ key: KeyBinding) throws {
-    try validateModifierMask(key.mask)
-    guard keyCodeForSym[key.sym] != nil else {
-        throw WireError.invalid("Unsupported key binding mask=\(key.mask) sym=\(key.sym)")
-    }
-    guard key.mask != 0 || key.sym >= 0xff00 else {
-        throw WireError.invalid("Unmodified printable global shortcuts are disabled")
-    }
+  try validateModifierMask(key.mask)
+  guard keyCodeForSym[key.sym] != nil else {
+    throw WireError.invalid("Unsupported key binding mask=\(key.mask) sym=\(key.sym)")
+  }
+  guard key.mask != 0 || key.sym >= 0xff00 else {
+    throw WireError.invalid("Unmodified printable global shortcuts are disabled")
+  }
 }
 struct WindowPrint: Codable, Equatable {
-    var wid: UInt64, pid: Int32, launch: Double, bundle: String
-    var identifier: String, title: String, frame: Rect
+  var wid: UInt64, pid: Int32, launch: Double, bundle: String
+  var identifier: String, title: String, frame: Rect
 }
-func matchWindowPrints(old: [WindowPrint], new: [WindowPrint]) -> [UInt64:UInt64] {
-    var map: [UInt64:UInt64]=[:], taken=Set<UInt64>()
-    func unique(_ pred: (WindowPrint,WindowPrint) -> Bool) {
-        for o in old where map[o.wid] == nil {
-            let hits=new.filter { pred(o,$0) && !taken.contains($0.wid) }
-            if hits.count == 1,let n=hits.first { map[o.wid]=n.wid; taken.insert(n.wid) }
-        }
+func matchWindowPrints(old: [WindowPrint], new: [WindowPrint]) -> [UInt64: UInt64] {
+  var map: [UInt64: UInt64] = [:]
+  var taken = Set<UInt64>()
+  func unique(_ pred: (WindowPrint, WindowPrint) -> Bool) {
+    for o in old where map[o.wid] == nil {
+      let hits = new.filter { pred(o, $0) && !taken.contains($0.wid) }
+      if hits.count == 1, let n = hits.first {
+        map[o.wid] = n.wid
+        taken.insert(n.wid)
+      }
     }
-    unique { !$0.identifier.isEmpty && $0.bundle==$1.bundle && $0.identifier==$1.identifier }
-    unique { $0.bundle==$1.bundle && $0.title==$1.title && $0.frame.near($1.frame,tolerance:8) }
-    return map
+  }
+  unique { !$0.identifier.isEmpty && $0.bundle == $1.bundle && $0.identifier == $1.identifier }
+  unique { $0.bundle == $1.bundle && $0.title == $1.title && $0.frame.near($1.frame, tolerance: 8) }
+  return map
 }
-func remapCheckpoint(_ value: JSONValue, map: [UInt64:UInt64], epoch: Int) -> JSONValue {
-    func mapId(_ v: JSONValue) -> JSONValue {
-        if case .number(let n)=v,let w=map[UInt64(n)] { return .number(Double(w)) }
-        return .null
+func remapCheckpoint(_ value: JSONValue, map: [UInt64: UInt64], epoch: Int) -> JSONValue {
+  func mapId(_ v: JSONValue) -> JSONValue {
+    if case .number(let n) = v, let w = map[UInt64(n)] { return .number(Double(w)) }
+    return .null
+  }
+  func mapIds(_ v: JSONValue) -> JSONValue {
+    guard case .array(let a) = v else { return v }
+    return .array(
+      a.compactMap {
+        if case .number(let n) = $0, let w = map[UInt64(n)] { return JSONValue.number(Double(w)) }
+        return nil
+      })
+  }
+  func walk(_ v: JSONValue) -> JSONValue {
+    switch v {
+    case .object(let o):
+      var n = o
+      if let w = o["savedWindows"] { n["savedWindows"] = mapIds(w) }
+      if let f = o["savedFocus"] { n["savedFocus"] = mapId(f) }
+      if let fl = o["savedFloats"], case .array(let rows) = fl {
+        n["savedFloats"] = .array(
+          rows.compactMap { row -> JSONValue? in
+            guard case .array(let cols) = row, let first = cols.first,
+              case .number(let n0) = first, let w = map[UInt64(n0)]
+            else { return nil }
+            var c = cols
+            c[0] = .number(Double(w))
+            return .array(c)
+          })
+      }
+      if o["savedEpoch"] != nil { n["savedEpoch"] = .number(Double(epoch)) }
+      if let ws = o["savedWorkspaces"] { n["savedWorkspaces"] = walk(ws) }
+      return .object(n)
+    case .array(let a): return .array(a.map(walk))
+    default: return v
     }
-    func mapIds(_ v: JSONValue) -> JSONValue {
-        guard case .array(let a)=v else { return v }
-        return .array(a.compactMap {
-            if case .number(let n)=$0,let w=map[UInt64(n)] { return JSONValue.number(Double(w)) }
-            return nil
-        })
-    }
-    func walk(_ v: JSONValue) -> JSONValue {
-        switch v {
-        case .object(let o):
-            var n=o
-            if let w=o["savedWindows"] { n["savedWindows"]=mapIds(w) }
-            if o["savedFocus"] != nil { n["savedFocus"]=mapId(o["savedFocus"]!) }
-            if let fl=o["savedFloats"],case .array(let rows)=fl {
-                n["savedFloats"] = .array(rows.compactMap { row -> JSONValue? in
-                    guard case .array(let cols)=row,let first=cols.first,
-                          case .number(let n0)=first,let w=map[UInt64(n0)] else { return nil }
-                    var c=cols; c[0] = .number(Double(w)); return .array(c)
-                })
-            }
-            if o["savedEpoch"] != nil { n["savedEpoch"] = .number(Double(epoch)) }
-            if let ws=o["savedWorkspaces"] { n["savedWorkspaces"]=walk(ws) }
-            return .object(n)
-        case .array(let a): return .array(a.map(walk))
-        default: return v
-        }
-    }
-    return walk(value)
+  }
+  return walk(value)
 }
 struct SessionFile: Codable {
-    var checkpoint: JSONValue
-    var prints: [WindowPrint]
+  var checkpoint: JSONValue
+  var prints: [WindowPrint]
 }
-func resizeFloor(_ minSize: (Int,Int)?) -> (Int,Int) {
-    (max(1,minSize?.0 ?? 80), max(1,minSize?.1 ?? 60))
+func resizeFloor(_ minSize: (Int, Int)?) -> (Int, Int) {
+  (max(1, minSize?.0 ?? 80), max(1, minSize?.1 ?? 60))
 }

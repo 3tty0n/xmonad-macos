@@ -8,6 +8,10 @@ def check(value, message):
     global checks
     assert value, message
     checks += 1
+def at(pattern, text):
+    """Offset of a pattern, or -1. Formatting-independent, unlike `in`."""
+    m=re.search(pattern,text)
+    return m.start() if m else -1
 for path in (root/'src').rglob('*.hs'):
     src=path.read_text()
     for module in re.findall(r'^import\s+(?:qualified\s+)?(XMonad(?:\.[A-Za-z0-9_]+)*)',src,re.M):
@@ -39,7 +43,9 @@ app=(root/'native/App.swift').read_text()
 for literal in ['--no-startup','--dry-run','--validate-config','--self-test','runToken','checkpoint','O_NOFOLLOW','recompileConfig','--recompile','Open xmonad.hs','PointerTap','mouseFloat']:
     check(literal in app, f'Missing native contract {literal}')
 ax=(root/'native/Accessibility.swift').read_text()
-check(ax.index('try journal.add(entry)') < ax.index('r.hideRequestedAt=Date()'),'Journal must precede hiding')
+# Ordering, not text: -1 on a missing side fails the comparison too.
+check(0 <= at(r'try journal\.add\(entry\)',ax) < at(r'r\.hideRequestedAt\s*=\s*Date\(\)',ax),
+      'Journal must precede hiding')
 check('parkingSpot' in ax and 'onAnyDisplay' in ax,'Off-screen parking missing')
 wire=(root/'native/Wire.swift').read_text()
 check('workspaceRow' in wire,'Workspace indicator missing')
@@ -55,7 +61,8 @@ check('hole(in' in border and 'evenOdd' in border,
       'Unfocused borders must clip out the focused window so a float is not covered')
 check('animationBehavior' in border and 'alphaValue' in border,
       'Focus border must not orderOut and fade back in after a workspace switch')
-check('panels: [UInt64:NSPanel]' in border and 'private var focused: NSPanel?' not in border,
+check(at(r'panels\s*:\s*\[\s*UInt64\s*:\s*NSPanel\s*\]',border) >= 0
+      and at(r'private var focused\s*:\s*NSPanel\?',border) < 0,
       'Each window keeps its own border panel so a focus change does not swap panels')
 check('tracesFocusBorder' in wire and 'tracesFocusBorder' in app,
       'Focus border visibility is decided by a portable helper')
