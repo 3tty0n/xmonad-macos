@@ -9,11 +9,13 @@ module XMonad.Hooks.StatusBar.PP
   , filterOutWsPP, getSortByIndex, getSortByTag
   ) where
 import Data.Char (isSpace)
-import Data.List (intercalate, isPrefixOf, sortOn)
+import Data.List (intercalate, isPrefixOf)
 import qualified Data.Map.Strict as M
 import System.IO (hPutStrLn, stderr)
 import XMonad.Core
 import XMonad.Config (Default(..))
+import XMonad.Util.WorkspaceCompare
+  (getSortByIndex, getSortByTag, filterOutWs)
 import qualified XMonad.StackSet as W
 
 data PP = PP
@@ -59,19 +61,8 @@ pprWindowSet sort' pp ws = sepBy (ppWsSep pp) . map fmt . sort' $
           | Just _ <- W.stack w = ppHidden pp (W.tag w)
           | otherwise = ppHiddenNoWindows pp (W.tag w)
 
--- Config order, with generated tags (e.g. "NSP") after it.
-getSortByIndex :: X ([WindowSpace] -> [WindowSpace])
-getSortByIndex = do
-  tags <- asks (workspaces . config)
-  let rank t = maybe (length tags) id (lookup t (zip tags [0 :: Int ..]))
-  pure (sortOn (rank . W.tag))
-
-getSortByTag :: X ([WindowSpace] -> [WindowSpace])
-getSortByTag = pure (sortOn W.tag)
-
 filterOutWsPP :: [WorkspaceId] -> PP -> PP
-filterOutWsPP tags pp =
-  pp {ppSort = (. filter ((`notElem` tags) . W.tag)) <$> ppSort pp}
+filterOutWsPP tags pp = pp {ppSort = (. filterOutWs tags) <$> ppSort pp}
 
 sepBy :: String -> [String] -> String
 sepBy sep = intercalate sep . filter (not . null)

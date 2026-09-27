@@ -38,7 +38,10 @@ the same names.
 | `Layout.BoringWindows` | |
 | `Layout.MultiToggle` / `MultiToggle.Instances` | `REFLECTX` / `REFLECTY` live in `Layout.Reflect` |
 | `Layout.NoBorders` | No `OnlyLayoutFloatBelow` / `OtherIndicated`, no deprecated `borderEventHook` |
-| `Actions.CycleWS` | No predicate / `WSType` API |
+| `Actions.CycleWS` | `WSType` predicates and `doTo` / `findWorkspace`; no screen cycling (`nextScreen`, `swapNextScreen`), which `PhysicalScreens` and `OnScreen` cover by naming a display |
+| `Actions.Navigation2D` | `lineNavigation` / `centerNavigation` / `sideNavigation` and `windowGo` / `windowSwap` / `screenGo` / `screenSwap` / `windowToScreen` / `switchLayer`. Rectangles come from the helper's observation, so a window is navigable exactly while it is reported and no layout modifier is needed. No `layoutNavigation` rectangles for unmapped windows, no Prompt-based `navigation2DP` variants beyond the EZConfig strings, and `XMonad.Layout.WindowNavigation` is not ported |
+| `Util.WorkspaceCompare` | `WorkspaceCompare` / `WorkspaceSort`, `filterOutWs`, `getSortByIndex`, `getSortByTag`, `getSortByXineramaRule`. No `ScreenComparator` or the physical-rule variants: the xinerama rule orders displays by where they sit, since a macOS display id is not a position |
+| `Util.Loggers` | The XMonad loggers, the per-display ones and the formatting utilities. No urgency-aware variants (`logTitles'`, `TitlesFormat`), and no `aumixVolume` / `battery` / `loadAvg`, which are Linux tools: `logCmd` covers them, e.g. `logCmd "pmset -g batt"`. `Align` lives in `Util.Types` rather than the X11-only `Util.Font` |
 | `Actions.CycleWindows` | No `cycleRecentWindows` |
 | `Actions.WithAll` / `SinkAll` / `RotSlaves` | |
 | `Actions.SwapWorkspaces` / `DwmPromote` / `Promote` | |
@@ -49,7 +52,7 @@ the same names.
 | `Actions.Submap` | No `visualSubmap`; the grab lapses after 5 s |
 | `Hooks.ManageHelpers` / `InsertPosition` | No X11 property queries |
 | `Hooks.WorkspaceHistory` | History survives a restart |
-| `Hooks.StatusBar.PP` | No `ppUrgent` (no urgency hints); default `ppOutput` is stderr, since stdout is the protocol |
+| `Hooks.StatusBar.PP` | No `ppUrgent` (no urgency hints); default `ppOutput` is stderr, since stdout is the protocol. `ppExtras` takes any `Util.Loggers` logger; `getSortByIndex` / `getSortByTag` are re-exported from `Util.WorkspaceCompare` |
 | `Hooks.StatusBar` | `withSB`, `statusBarGeneric`, `statusBarPipe`; adds `statusBarFile`, `statusBarSpawn`, `macMenuBarPP`. No `statusBarProp` / `withEasySB` / `sbCleanupHook` (X11 properties, struts) |
 | `Hooks.DynamicLog` | Re-exports `StatusBar.PP` plus `dynamicLog`; no xmobar/dzen launchers |
 | `Util.EZConfig` / `Types` / `CustomKeys` | `checkKeymap` logs to stderr, not xmessage |
@@ -58,7 +61,16 @@ the same names.
 | `Util.Run` | No dzen / `runInTerm` |
 | `Util.NamedScratchpad` | `NSP` is created on demand and shows in the status list; a checkpoint restore drops it |
 
-Not ported: Tabbed, Decoration, Prompt, EWMH.
+Not ported: Tabbed, Decoration, Prompt, EWMH, `Layout.WindowNavigation`.
+
+Directional navigation is the one place where an upstream layout modifier has
+no counterpart here. Upstream asks the layout for its rectangles, so
+`Navigation2D` needs `WindowNavigation` in the `layoutHook`; this port already
+knows every window's frame from the helper's last observation, so `windowGo`
+and `windowSwap` work with any layout, including a pure one, and no state has
+to live in the layout. A config that imports `WindowNavigation` will not
+compile; drop the import and the `windowNavigation` call, and keep the
+`Navigation2D` bindings.
 Named scratchpad exclusives, dynamic scratchpads and `nsHideOnFocusLoss` are
 not provided. `cycleRecentWindows` needs a grab that holds until the modifier
 is released, which the helper does not report.

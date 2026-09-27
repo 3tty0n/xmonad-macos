@@ -114,6 +114,8 @@ and floating panels are floated automatically.
 |---|---|
 | `M-j` / `M-k` | Focus next / previous |
 | `M-S-j` / `M-S-k` | Move window down / up the stack |
+| `M-←` / `M-→` / `M-↑` / `M-↓` | Focus the window in that direction |
+| `M-S-←` / `M-S-→` / `M-S-↑` / `M-S-↓` | Move the window in that direction |
 | `M-Return` | Make the focused window master |
 | `M-S-Return` | Launch the terminal |
 | `M-h` / `M-l` | Shrink / expand the master area |
@@ -122,6 +124,7 @@ and floating panels are floated automatically.
 | `M-1…0` | Go to that **virtual** workspace |
 | `M-S-1…0` | Send the window to that workspace |
 | `M-f` / `M-t` | Float / unfloat |
+| `M-C-Space` | Switch between the tiled and floating layer |
 | `M` + drag | Move (left) or resize (right) |
 | `M-S-c` | Close the window |
 | `M-q` / `M-S-q` | Recompile / quit |

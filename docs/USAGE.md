@@ -14,6 +14,8 @@ keys. AZERTY/QWERTZ and chords are not implemented.
 | `M-j` / `M-k` / `M-Tab` | Focus next / previous / next |
 | `M-m` | Focus master |
 | `M-S-j` / `M-S-k` | Swap in the stack |
+| `M-←` / `M-→` / `M-↑` / `M-↓` | Focus the window in that direction |
+| `M-S-←` / `M-S-→` / `M-S-↑` / `M-S-↓` | Move the window in that direction |
 | `M-Return` / `M-S-Return` | Swap with master / launch terminal |
 | `M-h` / `M-l` | Shrink / expand master |
 | `M-,` / `M-.` | More / fewer masters |
@@ -23,6 +25,7 @@ keys. AZERTY/QWERTZ and chords are not implemented.
 | `M-w` / `M-e` / `M-r` | Focus screen 0 / 1 / 2 |
 | `M-S-w` / `M-S-e` / `M-S-r` | Send to that screen's workspace |
 | `M-f` / `M-t` | Float / sink |
+| `M-C-Space` | Switch between the tiled and floating layer |
 | `M-S-c` | Close (never force-quit) |
 | `M-q` / `M-S-q` | Recompile / quit |
 | `M-S-p` | Pause and restore hidden windows |

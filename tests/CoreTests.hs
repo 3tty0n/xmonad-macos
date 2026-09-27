@@ -11,6 +11,11 @@ import XMonad.Layout.Grid
 import XMonad.Layout.Simplest
 import XMonad.Layout.ResizableTile
 import XMonad.Actions.CycleWS
+import XMonad.Actions.Navigation2D
+import XMonad.Util.Loggers
+import XMonad.Util.WorkspaceCompare
+import XMonad.Operations (windows)
+import Data.Bits ((.|.))
 import XMonad.Actions.WithAll
 import XMonad.Actions.RotSlaves
 import XMonad.Actions.SwapWorkspaces
@@ -561,11 +566,217 @@ main = do
   (planDiff,_) <- runX conf
     (fullFloat (borderState (lessBorders (Combine Difference OnlyFloat Screen) tallW) ws3)) makePlan
   check "Combine Difference subtracts the second rule" (widthOf 2 planDiff==Nothing)
+  testDirectionalNavigation
+  testNavigation2DBindings
+  testLoggers
+  testWorkspacePredicates
   testAtomicRecompile
-  putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, extensible state, magnifier, boring windows, scratchpads, no borders, key parser, protocol and atomic recompile"
+  putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, extensible state, magnifier, boring windows, scratchpads, no borders, key parser, protocol, directional navigation, loggers, workspace predicates and atomic recompile"
 
--- Fake ghc/cabal/helper on PATH: a successful swap, then a failed cabal build
--- that must leave the previous engine byte-for-byte.
+-- Three tiles side by side on the first display, as Tall with three would
+-- place them. Navigation reads these from the helper's observation, so the
+-- layout is never consulted.
+navTiles :: XState
+navTiles = base {windowInfo = info, windowset = tiled}
+  where
+    base = initialState cfg [head displays]
+    info = M.fromList
+      [ (w, (wi w 10) {frame = r})
+      | (w,r) <- [ (1, Rectangle 0 24 320 800)
+                 , (2, Rectangle 340 24 320 800)
+                 , (3, Rectangle 680 24 320 800) ] ]
+    tiled = W.focusWindow 1 (foldl (flip W.insertUp) (windowset base) [1,2,3])
+
+-- The same, with the last window floating over the bottom left, so the two
+-- layers can be told apart and "nearest" has one answer.
+navFloating :: XState
+navFloating = navTiles
+  { windowset = W.float 3 (W.RationalRect 0 (3/4) (1/3) (1/4)) (windowset navTiles)
+  , windowInfo = M.adjust (\i -> i {frame = Rectangle 0 600 320 200}) 3
+                         (windowInfo navTiles) }
+
+tiledOrder :: XState -> [Window]
+tiledOrder = W.integrate' . W.stack . W.workspace . W.current . windowset
+
+focusedWindow :: XState -> Maybe Window
+focusedWindow = W.peek . windowset
+
+testDirectionalNavigation :: IO ()
+testDirectionalNavigation = do
+  (_,twoScreens) <- runX conf initial (reconcile snapshot)
+  (_,far) <- runX conf navTiles (windowGo R False >> windowGo R False)
+  check "windowGo walks to the far tile" (focusedWindow far==Just 3)
+  (_,stopped) <- runX conf navTiles (windowGo L False)
+  check "windowGo stops at the edge unless wrapping" (focusedWindow stopped==Just 1)
+  (_,wrapped) <- runX conf navTiles (windowGo L True)
+  check "windowGo wraps when asked" (focusedWindow wrapped==Just 3)
+  (_,vertical) <- runX conf navTiles (windowGo U False)
+  check "windowGo U finds nothing above a full-height row" (focusedWindow vertical==Just 1)
+  -- Swap: 1 and 2 trade places, and nothing else moves.
+  (_,moved) <- runX conf navTiles (windowGo R False)
+  check "windowGo R focuses the tile to the right" (focusedWindow moved==Just 2)
+  (_,swapped) <- runX conf moved (windowSwap L False)
+  let exchange w | w == 1 = 2
+                 | w == 2 = 1
+                 | otherwise = w
+  check "windowSwap exchanges the two windows and leaves the rest alone"
+    (tiledOrder swapped==map exchange (tiledOrder moved))
+  check "windowSwap keeps focus on the window that moved" (focusedWindow swapped==Just 2)
+  -- The float layer is navigated separately, and switchLayer crosses over.
+  (_,crossed) <- runX conf navFloating switchLayer
+  check "switchLayer crosses to the float layer" (focusedWindow crossed==Just 3)
+  (_,back) <- runX conf navFloating (switchLayer >> switchLayer)
+  check "switchLayer returns to the nearest window on the tiled layer"
+    (focusedWindow back==Just 1)
+  (_,noFloat) <- runX conf navTiles switchLayer
+  check "switchLayer does nothing when nothing is floating" (focusedWindow noFloat==Just 1)
+  -- Screens: display 20 sits to the left of display 10.
+  (_,screen) <- runX conf initial (screenGo L False)
+  check "screenGo L shows the workspace on the display to the left"
+    (W.currentTag (windowset screen)=="2")
+  (_,nothing) <- runX conf initial (screenGo R False)
+  check "screenGo R finds no display to the right" (W.currentTag (windowset nothing)=="1")
+  (_,sent) <- runX conf twoScreens (windowToScreen L False)
+  check "windowToScreen moves the window to that display"
+    (W.findTag 1 (windowset sent)==Just "2")
+  -- A window the helper stopped reporting is off the navigation graph.
+  let gone = navTiles {windowInfo = M.delete 3 (windowInfo navTiles)}
+  (_,unreported) <- runX conf gone (windowGo R False >> windowGo R False)
+  check "a window the helper stopped reporting drops off the navigation graph"
+    (focusedWindow unreported==Just 2)
+
+testLoggers :: IO ()
+testLoggers = do
+  (name,_) <- runX conf navTiles logCurrent
+  check "logCurrent is the workspace tag" (name==Just "1")
+  (title,_) <- runX conf navTiles logTitle
+  check "logTitle is the observed window title" (title==Just "1")
+  (layoutName,_) <- runX conf navTiles logLayout
+  check "logLayout describes the current layout" (layoutName==Just "Tall")
+  (classname,_) <- runX conf navTiles logClassname
+  check "logClassname is the application" (classname==Just "Terminal")
+  -- Stack order runs from the master, so the focused window is last here.
+  (titles,_) <- runX conf navTiles (logTitles (\s -> "[" ++ s ++ "]") id)
+  check "logTitles marks the focused window" (titles==Just "3 2 [1]")
+  (classes,_) <- runX conf navTiles (logClassnames id id)
+  check "logClassnames lists every window" (classes==Just "Terminal Terminal Terminal")
+  (absent,_) <- runX conf navTiles (logConst "x" .| logConst "y")
+  check "logConst ignores the fallback" (absent==Just "x")
+  (fallback,_) <- runX conf initial (logDefault logTitle (logConst "none"))
+  check "logDefault falls back when a logger has nothing" (fallback==Just "none")
+  (spaced,_) <- runX conf navTiles (logSp 3)
+  check "logSp makes a spacer" (spaced==Just "   ")
+  (wrapped,_) <- runX conf navTiles (wrapL "<" ">" logCurrent)
+  check "wrapL delimits a logger" (wrapped==Just "<1>")
+  (cut,_) <- runX conf navTiles (shortenL 1 (logConst "abcdef"))
+  check "shortenL truncates with an ellipsis" (cut==Just "...")
+  (wide,_) <- runX conf navTiles (fixedWidthL AlignLeft "." 5 (logConst "ab"))
+  check "fixedWidthL pads to a fixed width" (wide==Just "ab...")
+  (centred,_) <- runX conf navTiles (fixedWidthL AlignCenter "." 6 (logConst "ab"))
+  check "fixedWidthL centres" (centred==Just "..ab..")
+  (rightAligned,_) <- runX conf navTiles (fixedWidthL AlignRight "." 5 (logConst "ab"))
+  check "fixedWidthL right-aligns" (rightAligned==Just "...ab")
+  (missingScreen,_) <- runX conf navTiles (logCurrentOnScreen 99)
+  check "a logger for a display that is not attached says nothing" (missingScreen==Nothing)
+  (onScreen,_) <- runX conf navTiles (logCurrentOnScreen 0)
+  check "logCurrentOnScreen reads that display" (onScreen==Just "1")
+  (active,_) <- runX conf navTiles (logWhenActive 0 (logConst "*"))
+  check "logWhenActive shows only on its own display" (active==Just "*")
+  (inactive,_) <- runX conf navTiles (logWhenActive 1 (logConst "*"))
+  check "logWhenActive hides on another display" (inactive==Nothing)
+  (command,_) <- runX conf navTiles (logCmd "echo hello")
+  check "logCmd reads the first line of a command" (command==Just "hello")
+  (failed,_) <- runX conf navTiles (logCmd "exit 1")
+  check "a command that prints nothing is not an error" (failed==Nothing)
+
+testWorkspacePredicates :: IO ()
+testWorkspacePredicates = do
+  (_,twoScreens) <- runX conf initial (reconcile snapshot)
+  -- Windows 1 and 2 on "1"; the focused one is sent to the hidden "5", so the
+  -- predicates have workspaces that agree and disagree about.
+  (_,spread) <- runX conf navTiles (windows (W.shift "5"))
+  check "the window left the visible workspace"
+    (W.findTag 1 (windowset spread)==Just "5")
+  -- s1 shows "1" and "2", so the next hidden workspace after "1" is "3".
+  (_,hidden) <- runX conf twoScreens (moveTo Next hiddenWS)
+  check "moveTo hiddenWS lands on a workspace that is not shown"
+    (W.currentTag (windowset hidden)=="3")
+  (_,empty) <- runX conf spread (moveTo Next emptyWS)
+  check "moveTo emptyWS lands on a workspace with no windows"
+    (W.currentTag (windowset empty)=="2")
+  (_,nonEmpty) <- runX conf spread (moveTo Next (Not emptyWS))
+  check "Not inverts a predicate" (W.currentTag (windowset nonEmpty)=="5")
+  (union,_) <- runX conf spread
+    (findWorkspace getSortByIndex Next (onlyTag "4" :|: onlyTag "7") 2)
+  check "the :|: combinator accepts either predicate" (union=="7")
+  (intersect,_) <- runX conf spread
+    (findWorkspace getSortByIndex Next (onlyTag "5" :&: hiddenWS) 1)
+  check "the :&: combinator requires both" (intersect=="5")
+  (neither,_) <- runX conf spread
+    (findWorkspace getSortByIndex Next (onlyTag "5" :&: emptyWS) 1)
+  check "a WSType no workspace satisfies stays put" (neither=="1")
+  (_,skipped) <- runX conf spread (moveTo Next (ignoringWSs ["2","3","4"]))
+  check "ignoringWSs steps over every tag it names"
+    (W.currentTag (windowset skipped)=="5")
+  -- A group is everything up to the first separator.
+  let grouped = cfg {workspaces = ["web-1","web-2","mail-1"]}
+      groupedState = initialState grouped [head displays]
+  (_,group) <- runX (XConf grouped) groupedState (moveTo Next (wsTagGroup '-'))
+  check "wsTagGroup stays inside the group" (W.currentTag (windowset group)=="web-2")
+  -- The sort given to doTo decides the order, not the config.
+  (_,byTag) <- runX conf twoScreens
+    (doTo Next anyWS (mkWsSort (pure (flip compare))) (windows . W.view))
+  check "doTo cycles in the order its sort gives" (W.currentTag (windowset byTag)=="0")
+  (places,_) <- runX conf twoScreens (findWorkspace getSortByIndex Next anyWS 2)
+  check "findWorkspace counts places, not steps" (places=="3")
+  (_,viewed) <- runX conf twoScreens (toggleOrView "5")
+  check "toggleOrView views a workspace that is not current"
+    (W.currentTag (windowset viewed)=="5")
+  (_,toggled) <- runX conf twoScreens (toggleOrView "1")
+  check "toggleOrView leaves the workspace showing on the other display"
+    (W.currentTag (windowset toggled) `notElem` ["1","2"])
+  let shown = map W.tag (W.hidden (windowset twoScreens))
+      configOrder = workspaces cfg
+  check "skipTags drops the named tags"
+    (map W.tag (skipTags (W.hidden (windowset twoScreens)) ["3","4"])
+      ==filter (`notElem` ["3","4"]) shown)
+  (sortByIndex,_) <- runX conf twoScreens getSortByIndex
+  check "getSortByIndex keeps the config order"
+    (map W.tag (sortByIndex (W.hidden (windowset twoScreens)))
+      ==drop 2 configOrder)
+  (xinerama,_) <- runX conf twoScreens getSortByXineramaRule
+  check "the xinerama rule puts the shown workspaces first, in display order"
+    (map W.tag (xinerama (W.workspaces (windowset twoScreens)))
+      ==["2","1","0","3","4","5","6","7","8","9"])
+  check "filterOutWs drops the named tags"
+    (map W.tag (filterOutWs ["3"] (W.hidden (windowset twoScreens)))
+      ==filter (/= "3") shown)
+  (compareByIndex,_) <- runX conf twoScreens getWsCompare
+  check "getWsCompare puts a tag the config does not name last"
+    (compareByIndex "1" "_screen_1"==LT && compareByIndex "_screen_1" "1"==GT)
+
+testNavigation2DBindings :: IO ()
+testNavigation2DBindings = do
+  let custom = def {defaultTiledNavigation = centerNavigation}
+      paired = navigation2DP custom ("k","h","j","l")
+                 [("M-", windowGo), ("M-S-", windowSwap)] True cfg
+      bound = M.keys (keys paired paired)
+      directions = [xK_k, xK_h, xK_j, xK_l]
+  check "additionalNav2DKeysP binds all four directions for each modifier"
+    (all (`elem` bound) ([(mod1Mask,d) | d <- directions]
+                       ++ [(mod1Mask .|. shiftMask, d) | d <- directions]))
+  (stored,_) <- runX conf navTiles
+    (startupHook (withNavigation2DConfig custom cfg) >> XS.gets defaultTiledNavigation)
+  check "withNavigation2DConfig stores the strategy the actions read"
+    (stored==centerNavigation)
+  (_,moved) <- runX conf navTiles (windowGo R True)
+  check "the default configuration navigates without being stored first"
+    (focusedWindow moved==Just 2)
+
+-- A predicate that accepts exactly one tag.
+onlyTag :: WorkspaceId -> WSType
+onlyTag t = WSIs (pure (\w -> W.tag w == t))
+
 testAtomicRecompile :: IO ()
 testAtomicRecompile = do
   tmpRoot <- getTemporaryDirectory

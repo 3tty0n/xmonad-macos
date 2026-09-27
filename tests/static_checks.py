@@ -148,6 +148,30 @@ check('focusedAXWindow' in ax and 'frontmostApplication' in ax,'Chromium focus f
 check('AXEnhancedUserInterface' in ax and 'withImmediateAXGeometry' in ax,'Chromium geometry write fallback missing')
 check('AXDialog' in wire and 'AXSystemDialog' in wire,'Popup subroles missing')
 check('isDialog' in (root/'src/XMonad/Hooks/ManageHelpers.hs').read_text(),'isDialog helper missing')
+nav=(root/'src/XMonad/Actions/Navigation2D.hs').read_text()
+check('lineNavigation' in nav and 'centerNavigation' in nav and 'sideNavigation' in nav,
+      'Directional navigation strategies missing')
+check('windowGo' in nav and 'windowSwap' in nav and 'screenGo' in nav and 'screenSwap' in nav,
+      'Directional navigation actions missing')
+check('withNavigation2DConfig' in nav and 'additionalNav2DKeysP' in nav,
+      'Directional navigation config plumbing missing')
+check('addWrapping' in nav and 'wrapOffsets' in nav,
+      'Wrap-around navigation missing')
+check('windowInfo' in nav,'Navigation must read the observation, not the layout')
+loggers=(root/'src/XMonad/Util/Loggers.hs').read_text()
+check('logCurrent' in loggers and 'logTitles' in loggers and 'logClassnames' in loggers,
+      'XMonad loggers missing')
+check('fixedWidthL' in loggers and 'onLogger' in loggers,'Logger formatting missing')
+check('date' in loggers and 'logCmd' in loggers,'System loggers missing')
+wc=(root/'src/XMonad/Util/WorkspaceCompare.hs').read_text()
+check('WorkspaceSort' in wc and 'getSortByXineramaRule' in wc and 'filterOutWs' in wc,
+      'Workspace comparison helpers missing')
+pp=(root/'src/XMonad/Hooks/StatusBar/PP.hs').read_text()
+check('XMonad.Util.WorkspaceCompare' in pp and 'getSortByIndex =' not in pp,
+      'The workspace sorts belong in XMonad.Util.WorkspaceCompare, not PP')
+cws=(root/'src/XMonad/Actions/CycleWS.hs').read_text()
+check('wsTypeToPred' in cws and 'moveTo :: Direction1D -> WSType -> X ()' in cws,
+      'CycleWS must cycle by workspace type, not only by config order')
 for path in (root/'scripts').glob('*.sh'):
     check(path.read_text().startswith('#!/bin/bash'), f'Wrong shell: {path}')
     check(path.stat().st_mode & 0o111, f'Not executable: {path}')

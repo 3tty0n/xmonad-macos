@@ -35,6 +35,7 @@ common defaults
     , process >=1.6 && <1.7
     , directory >=1.3 && <1.4
     , filepath >=1.4 && <1.6
+    , time >=1.9 && <1.15
 
 library
   import: defaults
@@ -49,6 +50,8 @@ library
     XMonad.Config
     XMonad.Util.EZConfig
     XMonad.Util.Types
+    XMonad.Util.WorkspaceCompare
+    XMonad.Util.Loggers
     XMonad.Util.SpawnOnce
     XMonad.Util.ExtensibleState
     XMonad.Hooks.WorkspaceHistory
@@ -91,6 +94,7 @@ library
     XMonad.Layout.NoBorders
     XMonad.Actions.CycleWS
     XMonad.Actions.CycleWindows
+    XMonad.Actions.Navigation2D
     XMonad.Actions.WithAll
     XMonad.Actions.SinkAll
     XMonad.Actions.RotSlaves
