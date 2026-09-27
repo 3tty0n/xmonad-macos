@@ -10,7 +10,18 @@ import XMonad.Actions.Submap (submap)
 import XMonad.Layout.Grid
 import XMonad.Layout.Simplest
 import XMonad.Layout.ResizableTile
+import XMonad.Layout.BinarySpacePartition
 import XMonad.Actions.CycleWS
+import XMonad.Actions.CycleRecentWS
+import XMonad.Actions.DynamicWorkspaces
+import XMonad.Actions.GroupNavigation
+import XMonad.Layout.Mosaic
+import XMonad.Layout.ResizableThreeCol
+import CycleRecentWSTests (runCycleRecentWSTests)
+import DynamicWorkspacesTests (runDynamicWorkspacesTests)
+import GroupNavigationTests (runGroupNavigationTests)
+import MosaicTests (runMosaicTests)
+import ResizableThreeColTests (runResizableThreeColTests)
 import XMonad.Actions.Navigation2D
 import XMonad.Util.Loggers
 import XMonad.Util.WorkspaceCompare
@@ -161,6 +172,44 @@ main = do
     (maybe False ((>0) . length . resizableSlaves) resized)
   check "MirrorExpand leaves the other weights alone"
     (maybe False (all (==1) . drop 1 . resizableSlaves) resized)
+  -- BinarySpacePartition: new windows split the focused window in half and the
+  -- leaves tile the frame. It is stateful, so it is driven through runLayout.
+  let bsp = emptyBSP :: BinarySpacePartition Window
+      bspStack = W.Stack (3::Window) [] [2,1]
+      bspState = initial
+        {windowset=W.insertUp 3 $ W.insertUp 2 $ W.insertUp 1 (windowset initial)}
+  (bspPlan,_) <- runX conf bspState $
+    runLayout (W.Workspace "1" bsp (Just bspStack)) frame3
+  let bspRects = map snd (fst bspPlan)
+  check "BSP places every window" (length bspRects==3)
+  check "BSP tiles the frame without gaps"
+    (sum [rect_width r*rect_height r | r<-bspRects]
+     == rect_width frame3*rect_height frame3)
+  check "BSP keeps every rectangle inside the frame"
+    (all (\r -> rect_x r>=rect_x frame3 && rect_y r>=rect_y frame3
+             && rect_x r+rect_width r<=rect_x frame3+rect_width frame3
+             && rect_y r+rect_height r<=rect_y frame3+rect_height frame3) bspRects)
+  check "BSP survives Show and Read"
+    (maybe False (\b -> read (show b) == b) (snd bspPlan))
+  -- A message rewrites the tree; run the layout again to see the geometry move.
+  let bspAfter msg = do
+        (r1,m1) <- runLayout (W.Workspace "1" bsp (Just bspStack)) frame3
+        case m1 of
+          Nothing -> pure (map snd r1, [])
+          Just b -> do
+            mb <- handleMessage b (SomeMessage msg)
+            case mb of
+              Nothing -> pure (map snd r1, [])
+              Just b' -> do
+                (r2,_) <- runLayout (W.Workspace "1" b' (Just bspStack)) frame3
+                pure (map snd r1, map snd r2)
+  (bsExpand,_) <- runX conf bspState (bspAfter (ExpandTowards R))
+  check "BSP ExpandTowards widens the focused side, shrinking the other"
+    (length (fst bsExpand) == 3 && length (snd bsExpand) == 3
+     && rect_width (snd bsExpand !! 0) > rect_width (fst bsExpand !! 0)
+     && rect_width (snd bsExpand !! 2) < rect_width (fst bsExpand !! 2))
+  (bsRotate,_) <- runX conf bspState (bspAfter Rotate)
+  check "BSP Rotate turns the focused split" (fst bsRotate /= snd bsRotate)
   (_,s1) <- runX conf initial (reconcile snapshot)
   check "initial display assignment" (W.findTag 3 (windowset s1)==Just "2")
   check "observed focus" (W.peek (windowset s1)==Just 1)
@@ -571,6 +620,11 @@ main = do
   testLoggers
   testWorkspacePredicates
   testAtomicRecompile
+  runGroupNavigationTests
+  runDynamicWorkspacesTests
+  runCycleRecentWSTests
+  runMosaicTests
+  runResizableThreeColTests
   putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, extensible state, magnifier, boring windows, scratchpads, no borders, key parser, protocol, directional navigation, loggers, workspace predicates and atomic recompile"
 
 -- Three tiles side by side on the first display, as Tall with three would

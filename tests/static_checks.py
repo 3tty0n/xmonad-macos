@@ -172,6 +172,36 @@ check('XMonad.Util.WorkspaceCompare' in pp and 'getSortByIndex =' not in pp,
 cws=(root/'src/XMonad/Actions/CycleWS.hs').read_text()
 check('wsTypeToPred' in cws and 'moveTo :: Direction1D -> WSType -> X ()' in cws,
       'CycleWS must cycle by workspace type, not only by config order')
+bsp=(root/'src/XMonad/Layout/BinarySpacePartition.hs').read_text()
+check('emptyBSP' in bsp and 'ResizeDirectional' in bsp and 'SplitShiftDirectional' in bsp,
+      'BinarySpacePartition resize messages missing')
+check('TreeBalance' in bsp and 'FocusParent' in bsp and 'SelectMoveNode' in bsp,
+      'BinarySpacePartition tree messages missing')
+check('import XMonad.Util.XUtils' not in bsp and 'import XMonad.Layout.WindowArranger' not in bsp,
+      'BSP must not depend on the unported X11 drawing modules')
+gn=(root/'src/XMonad/Actions/GroupNavigation.hs').read_text()
+for api in ['nextMatch','nextMatchOrDo','nextMatchWithThis','historyHook','isOnAnyVisibleWS']:
+    check(api in gn, f'GroupNavigation is missing {api}')
+check('import Graphics.X11' not in gn and 'import Control.DeepSeq' not in gn,
+      'GroupNavigation must stay free of X11 and deepseq')
+dw=(root/'src/XMonad/Actions/DynamicWorkspaces.hs').read_text()
+check('DynamicWorkspaceState' in dw and 'getSortByIndex' in dw,
+      'DynamicWorkspaces must keep the index map and the ported sort')
+check('import XMonad.Prompt' not in dw and 'mkXPrompt' not in dw,
+      'DynamicWorkspaces must not import the Prompt package')
+crws=(root/'src/XMonad/Actions/CycleRecentWS.hs').read_text()
+check('recentWS' in crws and 'toggleRecentWS' in crws and 'unView' in crws,
+      'CycleRecentWS must keep the portable recency, toggle and unView policy')
+check('repeatableSt' not in crws and 'grabKeyboard' not in crws,
+      'CycleRecentWS must not pull in the unported keyboard-grab cyclers')
+mosaic=(root/'src/XMonad/Layout/Mosaic.hs').read_text()
+check('Aspect' in mosaic and 'SlopeMod' in mosaic and '"Mosaic"' in mosaic,
+      'Mosaic layout missing its aspect messages or description')
+rtc=(root/'src/XMonad/Layout/ResizableThreeCol.hs').read_text()
+check('ResizableThreeColMid' in rtc and 'MirrorResize' in rtc,
+      'ResizableThreeCol must define both variants and re-export MirrorResize')
+check('import XMonad.Layout.ResizableTile (MirrorResize(..))' in rtc,
+      'ResizableThreeCol must reuse the ported ResizableTile helper')
 for path in (root/'scripts').glob('*.sh'):
     check(path.read_text().startswith('#!/bin/bash'), f'Wrong shell: {path}')
     check(path.stat().st_mode & 0o111, f'Not executable: {path}')

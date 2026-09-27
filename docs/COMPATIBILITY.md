@@ -27,7 +27,9 @@ the same names.
 | `Layout.LayoutModifier` / `LayoutCombinators` | No Combo/DragPane |
 | `Layout.ThreeColumns` / `Circle` / `Grid` / `Simplest` | |
 | `Layout.SimplestFloat` / `ResizableTile` | Snapshot frames, not X11 |
+| `Layout.ResizableThreeCol` | `ResizableThreeCol` / `ResizableThreeColMid`; master fraction via `Shrink` / `Expand`, per-window slave heights via `MirrorResize`; re-exports `MirrorResize` from `ResizableTile` |
 | `Layout.Column` / `Spiral` / `Dwindle` / `OneBig` | |
+| `Layout.Mosaic` | `mosaic` / `Aspect` (`Taller` / `Wider` / `Reset` / `SlopeMod`), `changeMaster` / `changeFocused`; pure geometry, no `MosaicAlt` (a separate upstream module) |
 | `Layout.MultiColumns` / `StackTile` / `Dishes` | |
 | `Layout.CenteredIfSingle` / `Roledex` / `ToggleLayouts` | |
 | `Layout.IfMax` / `Gaps` / `PerScreen` / `Named` | |
@@ -36,10 +38,14 @@ the same names.
 | `Layout.TwoPane` / `Accordion` / `Spacing` | |
 | `Layout.Magnifier` | Magnified window is listed last, not first |
 | `Layout.BoringWindows` | |
+| `Layout.BinarySpacePartition` | `emptyBSP`, the `Rotate` / `Swap` / `ResizeDirectional` (`ExpandTowards` / `ShrinkFrom` / `MoveSplit`) / `TreeRotate` / `TreeBalance` / `SplitShiftDirectional` messages and `FocusParent` / `SelectNode` / `MoveNode`. No `SetGeometry` mouse resize, which needs `Layout.WindowArranger`, and the selected node is not highlighted, which upstream draws through `Util.XUtils`; the tree operations themselves are unchanged |
 | `Layout.MultiToggle` / `MultiToggle.Instances` | `REFLECTX` / `REFLECTY` live in `Layout.Reflect` |
 | `Layout.NoBorders` | No `OnlyLayoutFloatBelow` / `OtherIndicated`, no deprecated `borderEventHook` |
 | `Actions.CycleWS` | `WSType` predicates and `doTo` / `findWorkspace`; no screen cycling (`nextScreen`, `swapNextScreen`), which `PhysicalScreens` and `OnScreen` cover by naming a display |
+| `Actions.CycleRecentWS` | `recentWS` / `unView` / `toggleRecentWS` / `toggleRecentNonEmptyWS` / `toggleWindowSets`; no held-modifier `cycleRecentWS` / `cycleRecentNonEmptyWS` / `cycleWindowSets`, which need a keyboard grab that reports the invoking modifier's release |
+| `Actions.DynamicWorkspaces` | Add / append / remove / rename workspaces and the workspace index map. `withWorkspace`, `selectWorkspace`, `renameWorkspace`, `addWorkspacePrompt` and `appendWorkspacePrompt` are not ported (no Prompt package) |
 | `Actions.Navigation2D` | `lineNavigation` / `centerNavigation` / `sideNavigation` and `windowGo` / `windowSwap` / `screenGo` / `screenSwap` / `windowToScreen` / `switchLayer`. Rectangles come from the helper's observation, so a window is navigable exactly while it is reported and no layout modifier is needed. No `layoutNavigation` rectangles for unmapped windows, no Prompt-based `navigation2DP` variants beyond the EZConfig strings, and `XMonad.Layout.WindowNavigation` is not ported |
+| `Actions.GroupNavigation` | `Direction` / `nextMatch` / `nextMatchOrDo` / `nextMatchWithThis` / `historyHook` / `isOnAnyVisibleWS`; focus history is kept in `ExtensibleState` and survives a restart, but `historyHook` stores the raw `HistoryDB` rather than a `deepseq`-forced value |
 | `Util.WorkspaceCompare` | `WorkspaceCompare` / `WorkspaceSort`, `filterOutWs`, `getSortByIndex`, `getSortByTag`, `getSortByXineramaRule`. No `ScreenComparator` or the physical-rule variants: the xinerama rule orders displays by where they sit, since a macOS display id is not a position |
 | `Util.Loggers` | The XMonad loggers, the per-display ones and the formatting utilities. No urgency-aware variants (`logTitles'`, `TitlesFormat`), and no `aumixVolume` / `battery` / `loadAvg`, which are Linux tools: `logCmd` covers them, e.g. `logCmd "pmset -g batt"`. `Align` lives in `Util.Types` rather than the X11-only `Util.Font` |
 | `Actions.CycleWindows` | No `cycleRecentWindows` |

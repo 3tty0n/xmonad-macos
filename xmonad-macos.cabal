@@ -60,6 +60,7 @@ library
     XMonad.Util.NamedScratchpad
     XMonad.Layout.LayoutModifier
     XMonad.Layout.LayoutCombinators
+    XMonad.Layout.BinarySpacePartition
     XMonad.Layout.Spacing
     XMonad.Layout.ThreeColumns
     XMonad.Layout.Circle
@@ -67,6 +68,7 @@ library
     XMonad.Layout.Simplest
     XMonad.Layout.SimplestFloat
     XMonad.Layout.ResizableTile
+    XMonad.Layout.ResizableThreeCol
     XMonad.Layout.Renamed
     XMonad.Layout.Named
     XMonad.Layout.Reflect
@@ -78,6 +80,7 @@ library
     XMonad.Layout.Accordion
     XMonad.Layout.Column
     XMonad.Layout.Spiral
+    XMonad.Layout.Mosaic
     XMonad.Layout.Dwindle
     XMonad.Layout.OneBig
     XMonad.Layout.MultiColumns
@@ -93,8 +96,10 @@ library
     XMonad.Layout.Magnifier
     XMonad.Layout.NoBorders
     XMonad.Actions.CycleWS
+    XMonad.Actions.CycleRecentWS
     XMonad.Actions.CycleWindows
     XMonad.Actions.Navigation2D
+    XMonad.Actions.GroupNavigation
     XMonad.Actions.WithAll
     XMonad.Actions.SinkAll
     XMonad.Actions.RotSlaves
@@ -104,6 +109,7 @@ library
     XMonad.Actions.Submap
     XMonad.Actions.PhysicalScreens
     XMonad.Actions.CopyWindow
+    XMonad.Actions.DynamicWorkspaces
     XMonad.Actions.FocusNth
     XMonad.Actions.OnScreen
     XMonad.Actions.FindEmptyWorkspace
@@ -134,4 +140,10 @@ test-suite core-tests
   type: exitcode-stdio-1.0
   hs-source-dirs: tests
   main-is: CoreTests.hs
+  other-modules:
+    CycleRecentWSTests
+    DynamicWorkspacesTests
+    GroupNavigationTests
+    MosaicTests
+    ResizableThreeColTests
   build-depends: xmonad-macos

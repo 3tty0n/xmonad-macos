@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+A few more xmonad-contrib modules are ported: directional navigation
+(`Actions.Navigation2D`), the `BinarySpacePartition` and `Mosaic` layouts, the
+resizable three-column layout, `Actions.GroupNavigation`,
+`Actions.CycleRecentWS`, `Actions.DynamicWorkspaces`, the `Util.Loggers` and
+`Util.WorkspaceCompare` helpers, and the `WSType` predicates in
+`Actions.CycleWS`. The bundled config
+turns on directional navigation on the arrow keys, which the default keymap
+leaves free. The shared native event tap extracted from the keyboard and
+pointer taps is now in the repository, so a clean checkout builds again.
+
+Full notes are written here when a version tag is cut.
+
 ## 1.0.0 - 2026-09-25
 
 - XMonadMac is released as a downloadable `XMonadMac.app`. The bundle carries
