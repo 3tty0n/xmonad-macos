@@ -101,7 +101,7 @@ struct BundledInstall {
     try fm.createDirectory(
       at: config.deletingLastPathComponent(), withIntermediateDirectories: true,
       attributes: [.posixPermissions: 0o700])
-    try fm.copyItem(at: bundledKit.appendingPathComponent("config/xmonad.hs"), to: config)
+    try fm.copyItem(at: bundledKit.appendingPathComponent("example/xmonad.hs"), to: config)
   }
   // Both command names are the engine itself. A file the user put there
   // instead of a link is left alone.

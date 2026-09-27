@@ -24,7 +24,7 @@ def run(engine: str) -> None:
         return out
     try:
         hello = read(); assert hello['type'] == 'configure' and hello['protocol'] == 1
-        mod = hello['mouseMask']  # Follows config/xmonad.hs instead of a fixed mask.
+        mod = hello['mouseMask']  # Follows example/xmonad.hs instead of a fixed mask.
         def win(wid):
             return dict(wid=wid,pid=123,app='Terminal',bundle='com.apple.Terminal',
                         titleText=f'test {wid}',onDisplay=10,

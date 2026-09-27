@@ -4,7 +4,7 @@ need ghc; need cabal
 CONFIG="$(resolve_config "${1:-}")"
 if [ ! -f "$CONFIG" ]; then
   if [ $# -gt 0 ] || [ -n "${XMONAD_CONFIG:-}" ]; then echo "Config not found: $CONFIG" >&2; exit 1; fi
-  CONFIG="$ROOT/config/xmonad.hs"
+  CONFIG="$ROOT/example/xmonad.hs"
 fi
 # Never edit the user's original config; compile a staged copy.
 mkdir -p "$ROOT/build/config"

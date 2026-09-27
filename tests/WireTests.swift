@@ -21,12 +21,12 @@ import Foundation
     let kit = app.appendingPathComponent("Contents/Resources/build-kit")
     let helpers = app.appendingPathComponent("Contents/Helpers")
     try fm.createDirectory(
-      at: kit.appendingPathComponent("config"), withIntermediateDirectories: true)
+      at: kit.appendingPathComponent("example"), withIntermediateDirectories: true)
     try fm.createDirectory(at: helpers, withIntermediateDirectories: true)
     try "cabal".write(
       to: kit.appendingPathComponent("xmonad-macos.cabal"), atomically: true, encoding: .utf8)
     try "main".write(
-      to: kit.appendingPathComponent("config/xmonad.hs"), atomically: true, encoding: .utf8)
+      to: kit.appendingPathComponent("example/xmonad.hs"), atomically: true, encoding: .utf8)
     try "lib".write(
       to: helpers.appendingPathComponent("libgmp.10.dylib"), atomically: true, encoding: .utf8)
     let bundled = helpers.appendingPathComponent("xmonad-engine")

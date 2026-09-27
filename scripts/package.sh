@@ -11,7 +11,7 @@ VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT
 CABAL_VERSION="$(sed -n 's/^version:[[:space:]]*//p' "$ROOT/xmonad-macos.cabal")"
 [ "$VERSION" = "$CABAL_VERSION" ] || {
   echo "Info.plist says $VERSION but xmonad-macos.cabal says $CABAL_VERSION." >&2; exit 1; }
-"$ROOT/scripts/build.sh" "$ROOT/config/xmonad.hs"
+"$ROOT/scripts/build.sh" "$ROOT/example/xmonad.hs"
 
 OUT="$ROOT/build/release"
 BUNDLE="$OUT/XMonadMac.app"

@@ -30,7 +30,7 @@ stage_kit() {
   local dest="$1" dir
   mkdir -p "$dest"
   cp -p "$ROOT/xmonad-macos.cabal" "$ROOT/cabal.project" "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/CHANGELOG.md" "$dest/"
-  for dir in src config docs native scripts tests .github; do cp -Rp "$ROOT/$dir" "$dest/"; done
+  for dir in src example docs native scripts tests .github; do cp -Rp "$ROOT/$dir" "$dest/"; done
   rm -rf "$dest/build" "$dest/tests/__pycache__"
 }
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $1" >&2; exit 1; }; }

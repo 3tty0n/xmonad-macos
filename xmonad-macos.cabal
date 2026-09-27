@@ -10,7 +10,7 @@ extra-source-files:
     README.md
     CHANGELOG.md
     docs/*.md
-    config/xmonad.hs
+    example/xmonad.hs
     native/*.swift
     native/Info.plist
     native/icon.svg

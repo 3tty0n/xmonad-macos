@@ -1,12 +1,16 @@
 # Building lives here. Everything you do to a running XMonadMac lives in the
 # `xmonad` command that `make install` puts on your PATH.
-CONFIG ?= config/xmonad.hs
+#
+# CONFIG is left empty so build-engine.sh resolves the config the same way the
+# running engine does: ~/.xmonad/xmonad.hs, then ~/.config/xmonad-mac/xmonad.hs,
+# then the shipped example/xmonad.hs. Override with `make build CONFIG=<path>`.
+CONFIG ?=
 
 .PHONY: help bootstrap build install package run dry-run check icon clean
 
 help:
 	@echo "make bootstrap   install the toolchain, build, and install"
-	@echo "make build       build the engine and the native app (CONFIG=$(CONFIG))"
+	@echo "make build       build the engine and the native app (config: ~/.xmonad/xmonad.hs or example/xmonad.hs; CONFIG=<path> overrides)"
 	@echo "make install     install the app, the engine, and the xmonad command"
 	@echo "make package     build the release XMonadMac.app and its zip"
 	@echo "make run         launch XMonadMac (xmonad start)"

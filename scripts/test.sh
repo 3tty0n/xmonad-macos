@@ -4,7 +4,7 @@ need ghc; need cabal; need python3
 mkdir -p "$ROOT/build/config/lib"
 rm -rf "$ROOT/build/config/lib"
 mkdir -p "$ROOT/build/config/lib"
-cp "$ROOT/config/xmonad.hs" "$ROOT/build/config/Main.hs"
+cp "$ROOT/example/xmonad.hs" "$ROOT/build/config/Main.hs"
 printf '%s\n' "$ROOT/config/xmonad.hs" > "$ROOT/build/config-source.txt"
 cd "$ROOT"
 cabal test core-tests --test-show-details=direct

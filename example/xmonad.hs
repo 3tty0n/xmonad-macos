@@ -6,6 +6,7 @@ import XMonad.Layout.NoBorders
 import XMonad.Layout.Spacing
 import XMonad.Layout.MultiToggle
 import XMonad.Layout.Reflect
+import XMonad.Layout.Mosaic
 import XMonad.Layout.ThreeColumns()
 import XMonad.MacOS
 
@@ -39,6 +40,7 @@ main = xmonad
             ||| ThreeColMid 1 (3/100) (1/2)     -- ThreeColMid for a centred master
             ||| Circle
             ||| Mirror (Tall 1 (3/100) (1/2))
+            ||| mosaic (3/100) [1,1,1]           -- Mosaic varies the split shares
             ||| Full
         , manageHook = composeAll
             [ bundleId =? "com.apple.systempreferences" --> doFloat
