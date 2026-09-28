@@ -22,6 +22,7 @@ import DynamicWorkspacesTests (runDynamicWorkspacesTests)
 import GroupNavigationTests (runGroupNavigationTests)
 import MosaicTests (runMosaicTests)
 import ResizableThreeColTests (runResizableThreeColTests)
+import XMonad.Actions.UpdatePointer (updatePointer)
 import XMonad.Actions.Navigation2D
 import XMonad.Util.Loggers
 import XMonad.Util.WorkspaceCompare
@@ -625,6 +626,7 @@ main = do
   runCycleRecentWSTests
   runMosaicTests
   runResizableThreeColTests
+  testUpdatePointer
   putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, extensible state, magnifier, boring windows, scratchpads, no borders, key parser, protocol, directional navigation, loggers, workspace predicates and atomic recompile"
 
 -- Three tiles side by side on the first display, as Tall with three would
@@ -826,6 +828,27 @@ testNavigation2DBindings = do
   (_,moved) <- runX conf navTiles (windowGo R True)
   check "the default configuration navigates without being stored first"
     (focusedWindow moved==Just 2)
+
+-- UpdatePointer: the pointer follows the focused window through a
+-- MovePointer command, and is not re-issued while the focus is unchanged.
+testUpdatePointer :: IO ()
+testUpdatePointer = do
+  let info = M.fromList [(1, (wi 1 10) {frame = Rectangle 100 100 200 200})]
+      st = initial {windowInfo = info, windowset = W.insertUp 1 (windowset initial)}
+  (_, after) <- runX conf st (updatePointer (0.5, 0.5) (0, 0))
+  check "updatePointer moves the pointer to the focused window's centre"
+    (case commands after of
+       [MovePointer (Rectangle x y w h) rect'] ->
+         (x, y, w, h) == (200, 200, 1, 1) && rect' == Rectangle 100 100 200 200
+       _ -> False)
+  (_, again) <- runX conf (after {commands=[]}) (updatePointer (0.5, 0.5) (0, 0))
+  check "updatePointer does not move again while the focus is unchanged"
+    (null (commands again))
+  (_, corner) <- runX conf st (updatePointer (0, 0) (0, 0))
+  check "updatePointer honours the reference point"
+    (case commands corner of
+       [MovePointer (Rectangle x y _ _) _] -> (x, y) == (100, 100)
+       _ -> False)
 
 -- A predicate that accepts exactly one tag.
 onlyTag :: WorkspaceId -> WSType

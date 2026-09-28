@@ -58,6 +58,12 @@ final class PointerTap {
     hoverEnabled = value
     lock.unlock()
   }
+  // A bound mod-drag is in progress; policy should not move the pointer then.
+  var isDragging: Bool {
+    lock.lock()
+    defer { lock.unlock() }
+    return activeMode != nil
+  }
   func start() {
     tap.onReady = { [weak self] in self?.onReady?() }
     tap.onFailure = { [weak self] problem in self?.onFailure?(problem) }

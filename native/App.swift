@@ -2,6 +2,7 @@
 import Foundation
 import AppKit
 import ApplicationServices
+import CoreGraphics
 import Darwin
 
 struct Paths {
@@ -695,6 +696,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       case "pause": pause(reason: "Paused by xmonad.hs")
       default: pause(reason: "Unknown engine command: \(name)")
       }
+    case .movePointer(let bounds, let focus):
+      if dryRun {
+        logMessage("DRY-RUN ignored movePointer")
+      } else {
+        warpPointer(into: bounds, unlessInside: focus)
+      }
     case .pong: break
     }
   }
@@ -822,6 +829,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // for it, and policy decides whether the window may take focus.
   private func sendPointerFocus(_ wid: UInt64) {
     sendObject(["type": "pointerFocus", "wid": wid])
+  }
+  // Policy decides where the pointer should end up; the helper only clips it
+  // into that box, and never moves it while the user is mod-dragging a window
+  // or when it is already on the focused window.
+  private func warpPointer(into bounds: Rect, unlessInside focus: Rect) {
+    guard !pointer.isDragging, let here = CGEvent(source: nil)?.location else { return }
+    let focused = CGRect(
+      x: CGFloat(focus.x), y: CGFloat(focus.y),
+      width: CGFloat(focus.width), height: CGFloat(focus.height))
+    guard !focused.contains(here) else { return }
+    let x = min(max(here.x, CGFloat(bounds.x)), CGFloat(bounds.x + bounds.width))
+    let y = min(max(here.y, CGFloat(bounds.y)), CGFloat(bounds.y + bounds.height))
+    CGWarpMouseCursorPosition(CGPoint(x: x, y: y))
   }
   private func handleHover(_ point: CGPoint) {
     guard running, configured, !dryRun, !fullScreen else { return }

@@ -66,9 +66,16 @@ On helper restart, wids are rewritten from public fingerprints.
 
 ## Control
 
-`ping`/`exit` helper→engine; `pong`/`command` engine→helper.
+`ping`/`exit` helper→engine; `pong`/`command`/`movePointer` engine→helper.
 Commands: `close`, `reload`, `recompile`, `pause`, `quit`, `grab`. JSON is
 never executed as a shell command.
+
+`movePointer` carries `bounds` (the box the pointer is clipped into) and
+`focus` (the focused window). The helper moves the pointer with the public
+`CGWarpMouseCursorPosition` only when it is outside `focus` and no mod-drag is
+in progress, so a logHook may call it on every focus change without fighting
+the user or the mouse. A helper older than this engine does not know the
+message and rejects the line; reinstall the app after recompiling.
 
 `grab` is a submap waiting for its next stroke: the helper swallows the next
 key press, whatever it is, and sends it back `grabbed`. The grab covers one

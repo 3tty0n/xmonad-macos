@@ -59,6 +59,7 @@ data XConfig l = XConfig
 data XConf = XConf { config :: XConfig Layout }
 
 data NativeCommand = Close Window | Reload | Recompile | Quit | TogglePause | GrabKeyboard
+  | MovePointer Rectangle Rectangle  -- ^ clip the pointer into this box, unless it is on this window
   deriving (Eq, Show)
 -- Everything policy knows: the window set, the last observation of the world,
 -- and what the helper still has to be told.

@@ -41,7 +41,9 @@ and popovers are unmanaged.
 
 Borders: `borderWidth`, `focusedBorderColor`, `normalBorderColor` (0 turns
 them off). They are click-through overlays. `focusFollowsMouse` is on by
-default.
+default. `XMonad.Actions.UpdatePointer`'s `updatePointer` in the `logHook`
+moves the pointer to the focused window; the helper skips it when the pointer
+is already there or a mod-drag is in progress.
 
 ## Displays
 

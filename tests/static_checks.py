@@ -202,6 +202,13 @@ check('ResizableThreeColMid' in rtc and 'MirrorResize' in rtc,
       'ResizableThreeCol must define both variants and re-export MirrorResize')
 check('import XMonad.Layout.ResizableTile (MirrorResize(..))' in rtc,
       'ResizableThreeCol must reuse the ported ResizableTile helper')
+uptr=(root/'src/XMonad/Actions/UpdatePointer.hs').read_text()
+check('updatePointer' in uptr and 'MovePointer' in uptr,
+      'UpdatePointer must move the pointer through a native command')
+check('movePointer' in (root/'src/XMonad/MacOS/Protocol.hs').read_text(),
+      'movePointer protocol missing')
+check('CGWarpMouseCursorPosition' in app and 'isDragging' in app,
+      'Pointer warp must be a public CGWarpMouseCursorPosition that skips a drag')
 for path in (root/'scripts').glob('*.sh'):
     check(path.read_text().startswith('#!/bin/bash'), f'Wrong shell: {path}')
     check(path.stat().st_mode & 0o111, f'Not executable: {path}')

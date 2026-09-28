@@ -160,6 +160,20 @@ import Foundation
     guard case .plan(let none) = emsg else { fatalError("empty borders") }
     check(none.borders?.isEmpty == true, "an empty border list is not nil")
     check(none.status == "[1] : Tall", "a logHook's PP status decodes")
+    let mjson = """
+      {"type":"movePointer","bounds":{"x":200,"y":200,"width":1,"height":1},
+       "focus":{"x":100,"y":100,"width":200,"height":200}}
+      """
+    let mmsg = try JSONDecoder().decode(EngineMessage.self, from: Data(mjson.utf8))
+    guard case .movePointer(let mbounds, let mfocus) = mmsg else {
+      fatalError("decode movePointer")
+    }
+    check(
+      mbounds == Rect(x: 200, y: 200, width: 1, height: 1),
+      "movePointer bounds decode")
+    check(
+      mfocus == Rect(x: 100, y: 100, width: 200, height: 200),
+      "movePointer focus decode")
     var bad = plan
     bad.hide = [1]
     rejects(bad, "show/hide conflict")

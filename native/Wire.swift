@@ -257,10 +257,11 @@ enum EngineMessage: Decodable {
   case plan(Plan)
   case command(String, UInt64?)
   case pong
+  case movePointer(Rect, Rect)
   private enum CodingKeys: String, CodingKey {
     case type, `protocol`, keys, mouseMask, mouse, name, wid
     case borderWidth, borderColor, normalBorderColor, focusFollowsMouse
-    case mask, button, action
+    case mask, button, action, bounds, focus
   }
   init(from decoder: Decoder) throws {
     let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -283,6 +284,10 @@ enum EngineMessage: Decodable {
       self = .command(
         try c.decode(String.self, forKey: .name),
         try c.decodeIfPresent(UInt64.self, forKey: .wid))
+    case "movePointer":
+      self = .movePointer(
+        try c.decode(Rect.self, forKey: .bounds),
+        try c.decode(Rect.self, forKey: .focus))
     case "pong": self = .pong
     default: throw WireError.invalid("Unknown engine message")
     }

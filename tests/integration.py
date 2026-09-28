@@ -6,13 +6,19 @@ def run(engine: str) -> None:
     p = subprocess.Popen([engine, '--no-startup'], stdin=subprocess.PIPE,
                          stdout=subprocess.PIPE, stderr=None, text=True, encoding='utf-8', bufsize=1)
     def read():
-        ready, _, _ = select.select([p.stdout], [], [], 10)
-        if not ready:
-            raise AssertionError('Engine response timeout')
-        line = p.stdout.readline()
-        if not line:
-            raise AssertionError(f'Engine exited with {p.poll()}')
-        return json.loads(line)
+        while True:
+            ready, _, _ = select.select([p.stdout], [], [], 10)
+            if not ready:
+                raise AssertionError('Engine response timeout')
+            line = p.stdout.readline()
+            if not line:
+                raise AssertionError(f'Engine exited with {p.poll()}')
+            obj = json.loads(line)
+            # The example's logHook moves the pointer on a focus change; that
+            # line is a command, not the plan the test is waiting for.
+            if obj.get('type') == 'movePointer':
+                continue
+            return obj
     def send(obj):
         p.stdin.write(json.dumps(obj, ensure_ascii=False) + '\n'); p.stdin.flush()
         return read()

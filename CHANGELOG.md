@@ -9,7 +9,9 @@ resizable three-column layout, `Actions.GroupNavigation`,
 `Util.WorkspaceCompare` helpers, and the `WSType` predicates in
 `Actions.CycleWS`. The bundled config
 turns on directional navigation on the arrow keys, which the default keymap
-leaves free. The shipped config moved from `config/xmonad.hs` to
+leaves free, and couples focus-follows-mouse with `Actions.UpdatePointer` so
+the pointer follows a keyboard focus change. The shipped config moved from
+`config/xmonad.hs` to
 `example/xmonad.hs`, and `make build` now compiles `~/.xmonad/xmonad.hs` when
 one exists, falling back to the example. The shared native event tap extracted
 from the keyboard and pointer taps is now in the repository, so a clean

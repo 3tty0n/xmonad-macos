@@ -2,6 +2,7 @@ import XMonad
 import qualified XMonad.StackSet as W
 import XMonad.Util.EZConfig
 import XMonad.Actions.Navigation2D
+import XMonad.Actions.UpdatePointer
 import XMonad.Layout.NoBorders
 import XMonad.Layout.Spacing
 import XMonad.Layout.MultiToggle
@@ -32,7 +33,11 @@ main = xmonad
         , borderWidth = 1                -- 0 disables this
         , focusedBorderColor = "#ff0000" -- "#61afef"
         , normalBorderColor = "#dddddd"
-        , focusFollowsMouse = False      -- Default: True
+        -- Focus follows the mouse, and the pointer follows the focus: moving
+        -- onto a window focuses it, and a keyboard focus change brings the
+        -- pointer to the centre of the window it landed on.
+        , focusFollowsMouse = True
+        , logHook = updatePointer (0.5, 0.5) (0, 0)
         -- smartBorders drops the border when a lone window fills the tile.
         -- M-r flips the current layout left to right.
         , layoutHook = smartBorders $ spacing 5 $ mkToggle (single REFLECTX) $

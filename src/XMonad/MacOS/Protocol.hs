@@ -86,4 +86,6 @@ commandJSON c = case c of
   Quit -> named "quit"
   TogglePause -> named "pause"
   GrabKeyboard -> named "grab"
+  MovePointer bounds focus ->
+    object ["type" .= ("movePointer" :: String), "bounds" .= bounds, "focus" .= focus]
   where named n = object ["type" .= ("command" :: String),"name" .= (n :: String)]
