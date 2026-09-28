@@ -50,13 +50,18 @@ jobs:
           NOTARY_TEAM_ID: ${{ secrets.NOTARY_TEAM_ID }}
           NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
         run: ./scripts/package.sh
-      - name: Release notes from the changelog
+      - name: Release notes
         run: |
+          set -euo pipefail
           version="${GITHUB_REF_NAME#v}"
-          awk -v v="$version" '
-            $0 ~ "^## " v "( |$)" { on=1; next }
-            on && /^## / { exit }
-            on { print }' CHANGELOG.md > build/release/notes.md
+          if [ -f CHANGELOG.md ]; then
+            awk -v v="$version" '
+              $0 ~ "^## " v "( |$)" { on=1; next }
+              on && /^## / { exit }
+              on { print }' CHANGELOG.md > build/release/notes.md
+          fi
+          [ -s build/release/notes.md ] ||
+            git log --no-merges --format='- %s' -20 > build/release/notes.md
       - uses: actions/upload-artifact@v4
         with:
           name: XMonadMac

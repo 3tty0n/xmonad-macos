@@ -29,7 +29,7 @@ resolve_config() {
 stage_kit() {
   local dest="$1" dir
   mkdir -p "$dest"
-  cp -p "$ROOT/xmonad-macos.cabal" "$ROOT/cabal.project" "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/CHANGELOG.md" "$dest/"
+  cp -p "$ROOT/xmonad-macos.cabal" "$ROOT/cabal.project" "$ROOT/LICENSE" "$ROOT/README.md" "$dest/"
   for dir in src example docs native scripts tests .github; do cp -Rp "$ROOT/$dir" "$dest/"; done
   rm -rf "$dest/build" "$dest/tests/__pycache__"
 }

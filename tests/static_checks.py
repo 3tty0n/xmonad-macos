@@ -17,7 +17,7 @@ for path in (root/'src').rglob('*.hs'):
     for module in re.findall(r'^import\s+(?:qualified\s+)?(XMonad(?:\.[A-Za-z0-9_]+)*)',src,re.M):
         check((root/'src'/(module.replace('.','/')+'.hs')).is_file(),f'{path}: missing {module}')
     check('import Graphics.X11' not in src, f'X11 dependency leaked into {path}')
-for name in ['README.md','LICENSE','CHANGELOG.md','docs/DESIGN.md','docs/COMPATIBILITY.md','docs/PROTOCOL.md','docs/TESTING.md','docs/UPSTREAM.md','native/Pointer.swift']:
+for name in ['README.md','LICENSE','docs/DESIGN.md','docs/COMPATIBILITY.md','docs/PROTOCOL.md','docs/TESTING.md','docs/UPSTREAM.md','native/Pointer.swift']:
     check((root/name).is_file(), f'Missing deliverable {name}')
 icon=(root/'native/icon.svg').read_text()
 check('m15.478 65.584' not in icon and 'm17.44 70.017' not in icon,
@@ -34,8 +34,10 @@ check(info['LSMinimumSystemVersion']=='13.0','Deployment targets disagree')
 cabal_version=re.search(r'^version:\s*(\S+)',(root/'xmonad-macos.cabal').read_text(),re.M).group(1)
 check(info['CFBundleShortVersionString']==cabal_version,
       'Info.plist and xmonad-macos.cabal must carry the same version')
-check(re.search(rf'^## {re.escape(cabal_version)} - \d{{4}}-\d{{2}}-\d{{2}}$',
-                (root/'CHANGELOG.md').read_text(),re.M),
+changelog=root/'CHANGELOG.md'
+check(not changelog.is_file()
+      or re.search(rf'^## {re.escape(cabal_version)} - \d{{4}}-\d{{2}}-\d{{2}}$',
+                   changelog.read_text(),re.M),
       f'CHANGELOG.md has no dated section for {cabal_version}')
 check('Paths_xmonad_macos' in (root/'xmonad-macos.cabal').read_text(),
       'xmonad --version needs the generated Paths module')
