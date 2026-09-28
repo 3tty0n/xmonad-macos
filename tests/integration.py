@@ -68,7 +68,10 @@ def run(engine: str) -> None:
         row = [(w['tag'], w['windows'], w['current']) for w in plan['workspaces']]
         assert ('2', 1, True) in row and ('1', 1, False) in row, plan['workspaces']
         assert [w['tag'] for w in plan['workspaces']][:3] == ['1', '2', '3'], plan
-        plan = send({'type':'pointerFocus','wid':1}); assert plan['focus'] == 1, plan
+        # A pointer focus is followed only for a window on a screen. Window 1
+        # is parked on workspace 1, so the view must stay on 2.
+        plan = send({'type':'pointerFocus','wid':1})
+        assert plan['workspace'] == '2', plan
         plan = send({'type':'pointerFocus','wid':2}); assert plan['focus'] == 2, plan
         # M-w / M-e follow the physical screens on a multi-display setup.
         two = dict(type='snapshot',generation=2,epoch=1,
@@ -77,6 +80,9 @@ def run(engine: str) -> None:
                    windows=[win(1),win(2)],focused=1)
         plan = send(two)
         assert plan['screen'] == 10, plan
+        # Both windows are on a screen here, so the pointer is followed.
+        plan = send({'type':'pointerFocus','wid':2})
+        assert plan['focus'] == 2, plan
         plan = key(ord('e')); assert plan['screen'] == 20, plan
         plan = key(ord('w')); assert plan['screen'] == 10, plan
         popup = dict(wid=3,pid=123,app='Terminal',bundle='com.apple.Terminal',

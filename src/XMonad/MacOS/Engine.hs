@@ -217,9 +217,7 @@ followObservedFocus snap observed = whenJust (snapFocused snap) $ \w -> do
       visible = maybe False (\wi -> not (minimized wi) && not (ownedHidden wi))
         (M.lookup w observed)
       ours = maybe True ((==w) . snd) (pendingFocus s)
-      mapped = map (W.tag . W.workspace) (W.screens $ windowset s)
-      here = maybe False (`elem` mapped) (W.findTag w (windowset s))
-  when (known && visible && ours && here) $ put s
+  when (known && visible && ours && onScreenWorkspace w (windowset s)) $ put s
     {windowset=W.focusWindow w (windowset s),pendingFocus=Nothing}
 
 -- Layouts that track windows need to hear about the ones that closed.
@@ -230,6 +228,13 @@ announceRemovals previous live = forM_ gone (broadcastMessage . WindowRemoved)
 screenFor :: WindowInfo -> WindowSet -> Maybe WindowScreen
 screenFor wi ws =
   find ((==onDisplay wi) . displayID . W.screenDetail) (W.screens ws)
+
+-- A window is on screen when its workspace is one of the screens. W.focusWindow
+-- calls view, so following a window the helper reports parked on another
+-- workspace would drag the current workspace along with it.
+onScreenWorkspace :: Window -> WindowSet -> Bool
+onScreenWorkspace w ws = maybe False (`elem` onScreens) (W.findTag w ws)
+  where onScreens = map (W.tag . W.workspace) (W.screens ws)
 
 fromRationalRect :: Rectangle -> W.RationalRect -> Rectangle
 fromRationalRect (Rectangle x y w h) (W.RationalRect rx ry rw rh) = Rectangle
@@ -511,7 +516,8 @@ handleEvent keymap event = case event of
   -- Focus follows the mouse only when the helper is configured to report it.
   PointerFocusEvent w -> do
     known <- gets (W.member w . windowset)
-    when known $ windows (W.focusWindow w)
+    onScreen <- gets (onScreenWorkspace w . windowset)
+    when (known && onScreen) $ windows (W.focusWindow w)
   -- A bound key is the one thing that may ask the helper to change focus.
   KeyEvent m k grabbed -> do
     pending <- gets keyGrab
@@ -526,8 +532,10 @@ handleEvent keymap event = case event of
         -- A stale AX observation of the window we just left is not a takeover.
         -- Only a different, non-expired focused window is the user clicking away.
         case (expired, focused) of
-          (False, Just w) | w /= wanted, W.member w (windowset s) ->
-            modify $ \st -> st {windowset=W.focusWindow w (windowset st)}
+          (False, Just w)
+            | w /= wanted, W.member w (windowset s)
+            , onScreenWorkspace w (windowset s) ->
+              modify $ \st -> st {windowset=W.focusWindow w (windowset st)}
           _ -> pure ()
       _ -> pure ()
   _ -> pure ()

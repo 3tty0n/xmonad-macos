@@ -627,6 +627,7 @@ main = do
   runMosaicTests
   runResizableThreeColTests
   testUpdatePointer
+  testShiftKeepsView
   putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, extensible state, magnifier, boring windows, scratchpads, no borders, key parser, protocol, directional navigation, loggers, workspace predicates and atomic recompile"
 
 -- Three tiles side by side on the first display, as Tall with three would
@@ -849,6 +850,29 @@ testUpdatePointer = do
     (case commands corner of
        [MovePointer (Rectangle x y _ _) _] -> (x, y) == (100, 100)
        _ -> False)
+
+-- Shifting a window must not drag the view along. W.focusWindow calls view, so
+-- an ack or a pointer focus the helper reports for the parked window is
+-- ignored while that window is on a workspace that is not on a screen.
+testShiftKeepsView :: IO ()
+testShiftKeepsView = do
+  let single = initialState cfg [head displays]
+      info = M.fromList [(1, wi 1 10), (2, wi 2 10)]
+      started = single
+        { windowInfo = info
+        , windowset = W.focusWindow 1 (W.insertUp 2 (W.insertUp 1 (windowset single))) }
+      shifted = started {windowset = W.shift "2" (windowset started)}
+      keymap = M.empty :: M.Map (KeyMask,KeySym) (X ())
+  check "shift leaves the view on the current workspace"
+    (W.currentTag (windowset shifted) == "1"
+     && W.findTag 1 (windowset shifted) == Just "2")
+  (_, acked) <- runX conf (shifted {pendingFocus = Just (7, 2)})
+    (handleEvent keymap (AckEvent 7 (Just 1) False))
+  check "an ack for the parked window does not switch the view"
+    (W.currentTag (windowset acked) == "1")
+  (_, hovered) <- runX conf shifted (handleEvent keymap (PointerFocusEvent 1))
+  check "a pointer focus for the parked window does not switch the view"
+    (W.currentTag (windowset hovered) == "1")
 
 -- A predicate that accepts exactly one tag.
 onlyTag :: WorkspaceId -> WSType

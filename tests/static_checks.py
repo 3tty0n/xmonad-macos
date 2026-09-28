@@ -83,7 +83,7 @@ check('session.json' in app or 'Paths.session' in app,'Helper-restart session pe
 check('additionalMouseBindings' in (root/'src/XMonad/Util/EZConfig.hs').read_text(),
       'additionalMouseBindings missing')
 check('not (ownedHidden wi)' in engine,'Do not follow WM-owned hide animations')
-check('W.findTag w (windowset s)' in engine and '`elem` mapped' in engine,
+check('onScreenWorkspace' in engine and 'W.findTag w ws' in engine,
       'Observed focus must not switch to a hidden workspace')
 protocol=(root/'src/XMonad/MacOS/Protocol.hs').read_text()
 check('Recompile -> named "recompile"' in protocol,'Recompile command protocol missing')
