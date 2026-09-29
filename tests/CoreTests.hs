@@ -375,6 +375,21 @@ main = do
   check "an epoch bump keeps a workspace's layout"
     (lookup "3" [(W.tag w,description (W.layout w))
                 | w <- W.workspaces (windowset carried)] == Just "Circle")
+  -- Moving a window to a hidden workspace and waking: the helper re-announces
+  -- the active Space, which bumps the epoch and rebuilds the world. The
+  -- rebuild must keep the user's workspace assignment instead of piling every
+  -- window onto the workspace of the display it was seen on.
+  (_,moved) <- runX conf s1 (windows (W.shift "3"))
+  check "wake fixture: window 1 sits on workspace 3"
+    (W.findTag 1 (windowset moved)==Just "3")
+  let wake=snapshot {snapGeneration=42,snapEpoch=7}
+  (_,woken) <- runX conf moved (reconcile wake)
+  check "an epoch rebuild keeps the window's workspace"
+    (W.findTag 1 (windowset woken)==Just "3"
+     && W.findTag 2 (windowset woken)==Just "1"
+     && W.findTag 3 (windowset woken)==Just "2")
+  check "an epoch rebuild keeps the current workspace"
+    (W.currentTag (windowset woken)==W.currentTag (windowset moved))
   let saved=checkpoint s3
   case restoreCheckpoint cfg 1 displays (windowInfo s3) saved of
     Left e -> ioError $ userError e

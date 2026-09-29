@@ -135,7 +135,7 @@ adoptSnapshot snap c previous observed = put base
   }
   where
     base | snapEpoch snap /= epoch previous =
-             carryLayouts previous (initialState c (snapDisplays snap))
+             carryWorlds previous (initialState c (snapDisplays snap))
          | otherwise = previous
     live = M.keysSet observed
     (rescreened, affinity) = rescreenWith (snapDisplays snap) (windowset base)
@@ -143,16 +143,22 @@ adoptSnapshot snap c previous observed = put base
     surviving = foldr W.delete rescreened
       [w | w <- W.allWindows rescreened, S.notMember w live]
 
--- A native Space change adopts a new world, but the user's layout choice for a
--- workspace is not part of that world. Carry each tag's layout onto the fresh
--- state so an epoch bump restores the workspace assignments only, instead of
--- silently resetting a chosen layout or a toggle back to the config's first.
-carryLayouts :: XState -> XState -> XState
-carryLayouts previous fresh = fresh
-  {windowset = W.mapWorkspace adopt (windowset fresh)}
+-- A native Space change or a display wake makes the helper re-announce the
+-- active Space, which bumps the epoch and rebuilds the world. The rebuild sees
+-- only the windows that are on a screen, so re-assigning them by display would
+-- pile every window onto one workspace. Which workspace each window is on, and
+-- which one the user is on, belongs to the user rather than to that world, so
+-- carry them across together with the layout each workspace had.
+carryWorlds :: XState -> XState -> XState
+carryWorlds previous fresh = fresh {windowset = kept}
   where
-    layouts = M.fromList [(W.tag w,W.layout w) | w <- W.workspaces (windowset previous)]
-    adopt w = maybe w (\l -> w {W.layout=l}) (M.lookup (W.tag w) layouts)
+    prior = windowset previous
+    adopted = W.mapWorkspace adopt (windowset fresh)
+    adopt ws = fromMaybe ws (M.lookup (W.tag ws) byTag)
+    byTag = M.fromList [(W.tag w, w) | w <- W.workspaces prior]
+    viewed = W.view (W.currentTag prior) adopted
+    kept = viewed {W.floating = M.filterWithKey (\w _ -> W.member w viewed)
+                                             (W.floating prior)}
 
 -- A checkpoint from the previous engine, replayed once at startup.
 restoreSaved :: Snapshot -> XConfig Layout -> M.Map Window WindowInfo -> X ()
