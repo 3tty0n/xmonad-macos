@@ -29,7 +29,7 @@ the same names.
 | `Layout.SimplestFloat` / `ResizableTile` | Snapshot frames, not X11 |
 | `Layout.ResizableThreeCol` | Both variants; `Shrink` / `Expand` and `MirrorResize` from `ResizableTile` |
 | `Layout.Column` / `Spiral` / `Dwindle` / `OneBig` | |
-| `Layout.Mosaic` | `mosaic`, `Aspect`, `changeMaster`, `changeFocused`; no `MosaicAlt` |
+| `Layout.Mosaic` | `mosaic`, `Aspect`, `changeMaster`, `changeFocused`; adds `SetMosaicResizeFactor` and `MosaicWeights` for factor override and explicit/one-time share repair; no `MosaicAlt` |
 | `Layout.MultiColumns` / `StackTile` / `Dishes` | |
 | `Layout.CenteredIfSingle` / `Roledex` / `ToggleLayouts` | |
 | `Layout.IfMax` / `Gaps` / `PerScreen` / `Named` | |

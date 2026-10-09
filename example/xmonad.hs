@@ -38,6 +38,8 @@ main = xmonad
         -- pointer to the centre of the window it landed on.
         , focusFollowsMouse = True
         , logHook = updatePointer (0.5, 0.5) (0, 0)
+            >> broadcastMessage (SetMosaicResizeFactor (103/100))
+            >> sendMessage RepairMosaicWeights -- one-time repair of old saved shares
         -- smartBorders drops the border when a lone window fills the tile.
         -- M-r flips the current layout left to right.
         , layoutHook = smartBorders $ spacing 5 $ mkToggle (single REFLECTX) $
@@ -45,7 +47,9 @@ main = xmonad
             ||| ThreeColMid 1 (3/100) (1/2)     -- ThreeColMid for a centred master
             ||| Circle
             ||| Mirror (Tall 1 (3/100) (1/2))
-            ||| mosaic (3/100) [1,1,1]           -- Mosaic varies the split shares
+            -- Mosaic multiplies the focused weight by 1.03 on Expand (Shrink divides).
+            -- Its first parameter must be > 1, unlike Tall's additive 3/100 delta.
+            ||| mosaic (103/100) [1,1,1]
             ||| Full
         , manageHook = composeAll
             [ bundleId =? "com.apple.systempreferences" --> doFloat
@@ -57,6 +61,7 @@ main = xmonad
       , ("M-S-p", pause)
       , ("M-S-m", windows W.shiftMaster)
       , ("M-r", sendMessage (Toggle REFLECTX))
+      , ("M-C-m", sendMessage ResetMosaicWeights) -- equalize Mosaic shares only
       -- Arrows stay on one layer, so this crosses to the floating layer and
       -- back. M-C-Space is not bound by default.
       , ("M-C-<Space>", switchLayer)

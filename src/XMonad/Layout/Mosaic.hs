@@ -11,12 +11,15 @@
 -- this module: MosaicAlt is a separate upstream layout
 -- (XMonad.Layout.MosaicAlt), and MosaicMsg is not exported by upstream.
 module XMonad.Layout.Mosaic
-  ( Aspect(..), mosaic, changeMaster, changeFocused, Mosaic(..)
+  ( Aspect(..), mosaic, changeMaster, changeFocused, Mosaic(..), SetMosaicResizeFactor(..)
+  , MosaicWeights(..)
   ) where
 import XMonad.Core
 import XMonad.Layout (Resize(..), splitHorizontallyBy, splitVerticallyBy)
 import XMonad.Operations (sendMessage, withWindowSet)
 import qualified XMonad.StackSet as W
+import qualified Data.Map.Strict as M
+import qualified XMonad.Util.ExtensibleState as XS
 import Control.Arrow (first, second)
 import Control.Monad (mplus)
 import Data.Function (on)
@@ -31,10 +34,28 @@ data Aspect
 
 instance Message Aspect
 
+-- | Override only the resize multiplier, including in restored layouts.
+-- This port-specific message preserves the current shares and arrangement.
+-- Send with broadcastMessage from logHook to keep a config value authoritative.
+newtype SetMosaicResizeFactor = SetMosaicResizeFactor Rational
+instance Message SetMosaicResizeFactor
+
+-- | Reset shares without resetting the surrounding layouts. Repair applies
+-- once per workspace and persists its completion; Reset is an explicit action.
+data MosaicWeights = RepairMosaicWeights | ResetMosaicWeights
+instance Message MosaicWeights
+newtype RepairedMosaics = RepairedMosaics [WorkspaceId] deriving (Read, Show)
+instance ExtensionClass RepairedMosaics where
+  initialValue = RepairedMosaics []
+  extensionType = PersistentExtension
+
 -- | @mosaic delta sizes@ gives each window a share of the frame set by the
 -- relative magnitudes in @sizes@ (the sign is ignored). The first entry is the
 -- master window; the list is extended with @++ repeat 1@. The first parameter
--- is the factor used for 'Expand' and 'Shrink' on the focused window.
+-- is a multiplicative factor: 'Expand' multiplies the focused weight by it,
+-- and 'Shrink' divides by it. Use a factor greater than 1, e.g. @103/100@
+-- for a 3% weight increase, not 'Tall''s additive @3/100@ resize delta.
+-- The resulting area share is normalized against the other windows' weights.
 mosaic :: Rational -> [Rational] -> Mosaic a
 mosaic = Mosaic Nothing
 
@@ -65,6 +86,18 @@ instance LayoutClass Mosaic a where
       ixMod (SlopeMod f)         = Just $ Mosaic (Just (False, ix, mix)) delta (f ss)
 
   handleMessage l@(Mosaic _ delta _) ms
+    | Just ResetMosaicWeights <- fromMessage ms = pure (Just $ equalShares l)
+    | Just RepairMosaicWeights <- fromMessage ms = do
+        tag <- gets (W.currentTag . windowset)
+        RepairedMosaics repaired <- XS.get
+        if tag `elem` repaired then pure Nothing else do
+          XS.put (RepairedMosaics (tag:repaired))
+          pure (Just $ equalShares l)
+    | Just (SetMosaicResizeFactor factor) <- fromMessage ms =
+        pure $ case l of
+          Mosaic state _ shares | factor > 1 && factor /= delta ->
+            Just (Mosaic state factor shares)
+          _ -> Nothing
     | Just Expand <- fromMessage ms = changeFocused (*delta) >> pure Nothing
     | Just Shrink <- fromMessage ms = changeFocused (/delta) >> pure Nothing
     | otherwise = pure (pureMessage l ms)
@@ -81,6 +114,9 @@ instance LayoutClass Mosaic a where
       state' = fmap (\x@(ov, _, _) -> (ov, nextIx x nls, pred nls)) mstate
                  `mplus` Just (True, fromIntegral nls / 2, pred nls)
       ss' = maybe ss (either (const ss) (const ssExt)) (zipRemain ss ssExt)
+
+equalShares :: Mosaic a -> Mosaic a
+equalShares (Mosaic state factor shares) = Mosaic state factor (map (const 1) shares)
 
 -- The index of the arrangement the aspect state selects; the middle one when
 -- there is no override.
@@ -104,10 +140,15 @@ changeMaster :: (Rational -> Rational) -> X ()
 changeMaster = sendMessage . SlopeMod . onHead
 
 -- | Apply a function to the ratio that represents the focused window.
+-- Match Engine.placeScreen's tiled stack: floats have no Mosaic share.
 changeFocused :: (Rational -> Rational) -> X ()
-changeFocused f = withWindowSet $ sendMessage . SlopeMod
-                    . maybe id (mulIx . length . W.up)
-                    . W.stack . W.workspace . W.current
+changeFocused f = withWindowSet $ \ws ->
+  case W.stack (W.workspace $ W.current ws) of
+    Just s | M.notMember (W.focus s) (W.floating ws) ->
+      case W.filter (`M.notMember` W.floating ws) s of
+        Just tiled -> sendMessage (SlopeMod $ mulIx (length $ W.up tiled))
+        Nothing -> pure ()
+    _ -> pure ()
   where mulIx i = uncurry (++) . second (onHead f) . splitAt i
 
 onHead :: (a -> a) -> [a] -> [a]

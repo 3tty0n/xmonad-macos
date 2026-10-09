@@ -24,6 +24,13 @@ func axElement(_ e: AXUIElement, _ name: String) -> AXUIElement? {
   return unsafeBitCast(raw, to: AXUIElement.self)
 }
 func axBoolean(_ e: AXUIElement, _ name: String) -> Bool? { axCopy(e, name) as? Bool }
+// Unsupported is normal for some dialogs; transport failure is never false.
+func axMinimizedRead(_ e: AXUIElement) -> Bool? {
+  var raw: CFTypeRef?
+  let error = AXUIElementCopyAttributeValue(e, kAXMinimizedAttribute as CFString, &raw)
+  if error == .attributeUnsupported { return false }
+  return error == .success ? raw as? Bool : nil
+}
 func axBool(_ e: AXUIElement, _ name: String) -> Bool { axBoolean(e, name) ?? false }
 func axString(_ e: AXUIElement, _ name: String) -> String { (axCopy(e, name) as? String) ?? "" }
 func axSettable(_ e: AXUIElement, _ name: String) -> Bool {
@@ -137,12 +144,12 @@ func withImmediateAXGeometry<T>(_ pid: pid_t, _ body: () -> T) -> T {
 }
 // The window server's on-screen application windows, front to back. Public
 // metadata only: PID and bounds, no window numbers.
-func cgVisibleFrames() -> [(pid_t, Rect)] {
+func cgVisibleFrames() -> [(pid_t, Rect)]? {
   guard
     let list = CGWindowListCopyWindowInfo(
       [.optionOnScreenOnly, .excludeDesktopElements],
       kCGNullWindowID) as? [[String: Any]]
-  else { return [] }
+  else { return nil }
   return list.compactMap { d in
     guard let layer = (d[kCGWindowLayer as String] as? NSNumber)?.intValue,
       cgWindowIsApplicationLayer(layer),
@@ -200,12 +207,13 @@ final class AXRecord {
   // Last AX-observed minimized state, like `frame`, kept so a failed read
   // does not drop the window from a snapshot.
   var lastMinimized: Bool?
-  // Consecutive scans a known window has failed the on-screen match.
-  var offScreen = 0
+  var screenGrace = VisibilityGrace()
+  var hiddenGrace = VisibilityGrace()
+  var visibilityReason = "unobserved"
+  var hasEnteredSnapshot = false
   // Consecutive scans this window's application was missing from the
   // running-application list, or reported as hidden.
   var appAbsent = 0
-  var appHidden = 0
   var eligible = false
   var subrole = ""
   var absent = 0
@@ -270,6 +278,8 @@ final class AXStore {
   private var observers: [pid_t: AXObserver] = [:]
   private var nextID: UInt64 = 1
   private var active: Set<UInt64> = []
+  // Policy retention is not permission to mutate a window on an uncertain Space.
+  private var actionable: Set<UInt64> = []
   private var latestGeneration = -1
   private var activeEpoch = 0
   private var lastAmbiguityWarning = Date.distantPast
@@ -411,6 +421,7 @@ final class AXStore {
     var seen: Set<UInt64> = []
     var succeeded: Set<pid_t> = []
     var hiddenPIDs: Set<pid_t> = []
+    var readsReady: Set<UInt64> = []
     let budgetEnd = Date().addingTimeInterval(0.45)
     let ownedPIDs = Set(records.values.compactMap { $0.token == nil ? nil : $0.descriptor.pid })
     let ordered = apps.sorted { a, b in
@@ -475,7 +486,6 @@ final class AXStore {
           r.orphanedAt = nil
           r.awaitsReplacement = false
           r.appAbsent = 0
-          r.appHidden = 0
           logMessage("Window \(r.wid) re-identified after its element was recycled")
         } else {
           // The desktop is an AXScrollArea in Finder's window list.
@@ -502,26 +512,15 @@ final class AXStore {
         // forget which workspace owns it.
         if r.token == nil {
           if let subrole = axCopy(e, kAXSubroleAttribute) as? String { r.subrole = subrole }
-          r.eligible = retainingWindowEligibility(previous: r.eligible,
-            observed: windowEligibility(e, subrole: r.subrole))
         }
-        // An owned window is driven to the last requested state until AX
-        // agrees, in both directions. Hidden: if it comes back on its own
-        // (an app that un-minimizes, or the user reopening it from the
-        // Dock), re-assert the minimize rather than releasing ownership,
-        // because releasing flips ownedHidden false and the engine then
-        // re-inserts the window onto the workspace in view. Shown: a
-        // restore that a late in-flight minimize undid is re-asserted,
-        // and ownership is dropped only once the window is really back.
-        if r.token != nil, let mini = axBoolean(e, kAXMinimizedAttribute) {
-          if !r.wantsHidden, Date().timeIntervalSince(r.restoreRequestedAt) > 0.12 {
-            if mini {
-              r.restoreRequestedAt = Date()
-              AXUIElementSetAttributeValue(e, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-            } else if onAnyDisplay(r.frame) {
-              releaseOwnership(r)
-            }
-          }
+        let eligibilityRead = windowEligibility(e, subrole: r.subrole)
+        if r.token == nil {
+          r.eligible = retainingWindowEligibility(previous: r.eligible,
+            observed: eligibilityRead)
+        }
+        if axFrame(e) != nil, eligibilityRead != nil,
+          app.launch > 0, abs(app.launch - r.descriptor.launch) < 0.01 {
+          readsReady.insert(r.wid)
         }
       }
     }
@@ -555,26 +554,17 @@ final class AXStore {
         records.removeValue(forKey: id)
       }
     }
-    let cg = cgVisibleFrames()
-    // Other apps can report a parked AX frame while CG still shows the
-    // original on-display rectangle. Wait a beat so a just-issued park is
-    // not mistaken for that, then minimize if CG still shows the original.
-    // Finder never parks (a corner sliver is not a hide), so retry until
-    // AXMinimized sticks. Re-parking every scan left the clamped strip in
-    // the corner and fought the user's own moves.
-    for r in records.values where r.token != nil && r.wantsHidden {
-      guard Date().timeIntervalSince(r.hideRequestedAt) > 0.5 else { continue }
-      if r.lastMinimized == true { continue }
-      let origin = journal.entries.first(where: { $0.token == r.token })?.frame
-      let stuck =
-        origin.map {
-          cgShowsOriginal(pid: r.descriptor.pid, original: $0, windows: cg, displays: displays)
-        } ?? false
-      if onAnyDisplay(r.frame) || stuck || parksByMinimizing(r.descriptor.bundle) {
-        hide(r, cgStuckAtOrigin: stuck)
+    let cgQuery = cgVisibleFrames()
+    let cg = cgQuery ?? []
+    let now = ProcessInfo.processInfo.systemUptime
+    let all = Array(records.values)
+    var minimizedReads: [UInt64: Bool] = [:]
+    for r in all {
+      if let observed = axMinimizedRead(r.element) {
+        minimizedReads[r.wid] = observed
+        r.lastMinimized = observed
       }
     }
-    let all = Array(records.values)
     let onScreenEligible = all.filter { $0.eligible && $0.lastMinimized != true }
     let byPid = Dictionary(grouping: onScreenEligible, by: { $0.descriptor.pid })
     var peerCount: [UInt64: Int] = [:]
@@ -583,28 +573,29 @@ final class AXStore {
     }
     let cgByPid = Dictionary(grouping: cg, by: { $0.0 })
     var result: [WindowInfo] = []
+    actionable = []
     var ambiguous = 0
     for r in all.sorted(by: { $0.wid < $1.wid }) {
       guard r.eligible else { continue }
       // Cmd-H takes an application's windows out of management, but one
       // observation is not enough: on wake macOS reports applications
       // hidden that are not, and dropping them here costs the workspace.
-      if hiddenPIDs.contains(r.descriptor.pid) { r.appHidden += 1 } else { r.appHidden = 0 }
-      guard r.appHidden < 2 else { continue }
+      let listed = apps.contains {
+        $0.pid == r.descriptor.pid && abs($0.launch - r.descriptor.launch) < 0.01
+      }
+      let hidden: Bool? = listed ? hiddenPIDs.contains(r.descriptor.pid) : nil
+      r.hiddenGrace.observe(hidden.map { !$0 }, at: now)
       // A busy app can fail this read for one scan, typically during its
       // own minimize animation. Dropping the window from the snapshot
       // would make the engine treat it as closed and re-insert it on the
       // workspace in view, so fall back to the last observed state.
       // Dialogs often have no AXMinimized attribute at all; treat that as
       // not minimized rather than skipping the window every scan.
-      if let observed = axBoolean(r.element, kAXMinimizedAttribute) {
-        r.lastMinimized = observed
-      } else if r.lastMinimized == nil {
-        // emacs-mac undecorated frames and many dialogs have no
-        // AXMinimized; that is "not minimized", not "unreadable".
-        r.lastMinimized = false
+      let observedMini = minimizedReads[r.wid]
+      guard let mini = r.lastMinimized else {
+        r.visibilityReason = "ax-minimized-unknown"
+        continue
       }
-      guard let mini = r.lastMinimized else { continue }
       let own = r.token != nil
       // On-screen association uses public PID + bounds only. Ambiguous
       // same-PID/same-frame windows across native Spaces are NOT touched.
@@ -613,10 +604,10 @@ final class AXStore {
         .count
       // visible==0 is normally another Space. Chrome withholds CGWindow
       // metadata instead, and AX already hides its other-Space windows.
-      let onScreen =
-        (visible > 0 && visible >= peers)
-        || (visible == 0 && bundleOmitsOnScreenCGWindows(r.descriptor.bundle))
-      if onScreen || mini { r.offScreen = 0 } else { r.offScreen += 1 }
+      let onScreen = cgOnScreenEvidence(querySucceeded: cgQuery != nil,
+        visible: visible, peers: peers,
+        omitsMetadata: bundleOmitsOnScreenCGWindows(r.descriptor.bundle))
+      r.screenGrace.observe(onScreen, at: now)
       // The on-screen match decides which windows may be *admitted*: an
       // ambiguous one across native Spaces is never touched. Retaining a
       // window already in the snapshot is a different question, and a
@@ -624,15 +615,22 @@ final class AXStore {
       // the window-server list for a scan or two. Dropping it there makes
       // the engine treat it as closed and re-insert it on the workspace in
       // view, which silently migrates windows on every workspace switch.
-      let known = active.contains(r.wid) && r.offScreen < 3
+      let known = active.contains(r.wid)
       // An orphaned record keeps reporting its last state until its
       // replacement element is adopted or the grace runs out. Dropping
       // it from the snapshot would make the engine forget its workspace.
       let orphaned = awaitingReplacement(r)
-      guard own || orphaned || (!mini && (onScreen || known)) else {
+      let decision = windowVisibilityDecision(known: known, owned: own, orphaned: orphaned,
+        minimized: mini, hidden: hidden, onScreen: onScreen,
+        readsReady: readsReady.contains(r.wid) && observedMini != nil,
+        hiddenGrace: r.hiddenGrace, screenGrace: r.screenGrace, now: now,
+        ambiguous: peers > 1 && visible < peers)
+      r.visibilityReason = decision.reason
+      guard decision.retained else {
         if !mini && visible > 0 { ambiguous += 1 }
         continue
       }
+      if decision.actionable { actionable.insert(r.wid) }
       // Keep WM-owned minimized windows; user-minimized windows are excluded.
       result.append(
         WindowInfo(
@@ -656,12 +654,41 @@ final class AXStore {
         logMessage("Window \(id) left the snapshot: closed")
         continue
       }
-      logMessage(
-        "Window \(id) (\(r.descriptor.name)) left the snapshot: "
-          + "eligible=\(r.eligible) owned=\(r.token != nil) "
-          + "minimized=\(r.lastMinimized.map(String.init) ?? "unreadable")")
+      logMessage("Window \(id) left snapshot gen=\(generation) reason=\(r.eligible ? r.visibilityReason : "ineligible") "
+        + "cg=\(cgQuery == nil ? "failed" : "ok") cgFrames=\(cg.count) "
+        + "hiddenReads=\(r.hiddenGrace.negativeReads) hiddenMs=\(Int(r.hiddenGrace.negativeSeconds * 1000)) "
+        + "cgReads=\(r.screenGrace.negativeReads) cgMs=\(Int(r.screenGrace.negativeSeconds * 1000)) "
+        + "owned=\(r.token != nil) minimized=\(r.lastMinimized.map(String.init) ?? "unknown")")
+    }
+    for id in next.subtracting(active) {
+      guard let r = records[id] else { continue }
+      logMessage("Window \(id) \(r.hasEnteredSnapshot ? "reentered" : "entered") snapshot gen=\(generation) "
+        + "reason=\(r.visibilityReason) cg=\(cgQuery == nil ? "failed" : "ok") cgFrames=\(cg.count) "
+        + "hiddenReads=\(r.hiddenGrace.negativeReads) hiddenMs=\(Int(r.hiddenGrace.negativeSeconds * 1000)) "
+        + "cgReads=\(r.screenGrace.negativeReads) cgMs=\(Int(r.screenGrace.negativeSeconds * 1000)) "
+        + "actionable=\(actionable.contains(id))")
+      r.hasEnteredSnapshot = true
     }
     active = next
+    // Reconcile ownership only after this scan establishes safe mutation evidence.
+    for r in records.values where actionable.contains(r.wid) && r.token != nil {
+      guard let currentMini = axMinimizedRead(r.element) else { continue }
+      if !r.wantsHidden, Date().timeIntervalSince(r.restoreRequestedAt) > 0.12 {
+        if currentMini {
+          r.restoreRequestedAt = Date()
+          AXUIElementSetAttributeValue(r.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        } else if onAnyDisplay(r.frame) { releaseOwnership(r) }
+      } else if r.wantsHidden, Date().timeIntervalSince(r.hideRequestedAt) > 0.5,
+        r.lastMinimized != true {
+        let origin = journal.entries.first(where: { $0.token == r.token })?.frame
+        let stuck = origin.map {
+          cgShowsOriginal(pid: r.descriptor.pid, original: $0, windows: cg, displays: displays)
+        } ?? false
+        if onAnyDisplay(r.frame) || stuck || parksByMinimizing(r.descriptor.bundle) {
+          hide(r, cgStuckAtOrigin: stuck)
+        }
+      }
+    }
     var focused: UInt64?
     var fullScreen = false
     if let window = focusedAXWindow() {
@@ -694,7 +721,7 @@ final class AXStore {
     }
     for e in candidates {
       if let r = records.values.first(where: {
-        active.contains($0.wid) && $0.eligible && CFEqual($0.element, e)
+        actionable.contains($0.wid) && $0.eligible && CFEqual($0.element, e)
       }) {
         return r
       }
@@ -705,7 +732,7 @@ final class AXStore {
   }
   func beginPointerDrag(at point: CGPoint, mode: PointerMode) -> UInt64? {
     guard mode != .raise, pointerDrag == nil, let r = windowAt(point),
-      axBoolean(r.element, kAXMinimizedAttribute) != true,
+       axMinimizedRead(r.element) == false,
       let frame = axFrame(r.element)
     else { return nil }
     if let ms = axMinSize(r.element) { r.minSize = ms }
@@ -713,7 +740,7 @@ final class AXStore {
     return r.wid
   }
   func updatePointerDrag(to point: CGPoint) {
-    guard let drag = pointerDrag, let r = records[drag.wid] else {
+    guard let drag = pointerDrag, actionable.contains(drag.wid), let r = records[drag.wid] else {
       pointerDrag = nil
       return
     }
@@ -796,10 +823,11 @@ final class AXStore {
   private func onAnyDisplay(_ rect: Rect) -> Bool { !parkedOffDisplay(rect, displays) }
   private func show(_ r: AXRecord) {
     guard r.token != nil else { return }  // Never restore a user's hiding.
+    guard let mini = axMinimizedRead(r.element) else { return }
     r.wantsHidden = false
     r.restoreRequestedAt = Date()
     // A window we had to minimize because parking was refused.
-    if axBoolean(r.element, kAXMinimizedAttribute) == true {
+    if mini {
       let error = AXUIElementSetAttributeValue(
         r.element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
       if error != .success { logMessage("Restore failed for window \(r.wid): \(error.rawValue)") }
@@ -808,8 +836,8 @@ final class AXStore {
   }
   private func hide(_ r: AXRecord, cgStuckAtOrigin: Bool = false) {
     let minimizeOnly = parksByMinimizing(r.descriptor.bundle)
-    let axMini = axBoolean(r.element, kAXMinimizedAttribute) ?? r.lastMinimized
-    if axMini == true, !cgStuckAtOrigin {
+    guard let axMini = axMinimizedRead(r.element) else { return }
+    if axMini, !cgStuckAtOrigin {
       if r.token == nil { logMessage("Hide skipped for window \(r.wid): user-minimized") }
       return
     }
@@ -860,7 +888,7 @@ final class AXStore {
     }
   }
   private func move(_ r: AXRecord, _ target: Rect) {
-    guard axBoolean(r.element, kAXMinimizedAttribute) != true, let actual = axFrame(r.element)
+    guard axMinimizedRead(r.element) == false, let actual = axFrame(r.element)
     else { return }
     if actual.near(target) { return }
     if r.lastTarget == target, r.lastActual == actual,
@@ -906,7 +934,8 @@ final class AXStore {
     // policy focus requests may activate an app; ordinary scans never do.
     let dragging = pointerDrag?.wid
     for placement in p.frames {
-      guard placement.wid != dragging, let r = records[placement.wid] else { continue }
+      guard placement.wid != dragging, actionable.contains(placement.wid),
+        let r = records[placement.wid] else { continue }
       show(r)
       move(r, placement.frame)
     }
@@ -915,6 +944,7 @@ final class AXStore {
         logMessage("Hide skipped for window \(id): drag")
         continue
       }
+      guard actionable.contains(id) else { continue }
       guard let r = records[id] else {
         logMessage("Hide skipped for window \(id): no record")
         continue
@@ -933,7 +963,8 @@ final class AXStore {
       let limit = Double(max(1, p.focusForMs ?? 400)) / 1000
       let expired = Date().timeIntervalSince(first) >= limit
       let from = actionFrom[action]
-      if let id = p.focus, let r = records[id], axBoolean(r.element, kAXMinimizedAttribute) != true
+      if let id = p.focus, actionable.contains(id), let r = records[id],
+        axMinimizedRead(r.element) == false
       {
         // M-j/k leaves the previous window on screen. AX still naming it
         // is the request in flight, not the user taking over.
@@ -1004,7 +1035,7 @@ final class AXStore {
     return r.wid
   }
   func close(_ id: UInt64) {
-    guard let r = records[id], active.contains(id),
+    guard let r = records[id], actionable.contains(id),
       let button = axElement(r.element, kAXCloseButtonAttribute)
     else { return }
     let e = AXUIElementPerformAction(button, kAXPressAction as CFString)
@@ -1037,6 +1068,7 @@ final class AXStore {
     activeEpoch = epoch
     latestGeneration = -1
     active = []
+    actionable = []
     actionFirstSeen = [:]
     actionFrom = [:]
     pendingAck = nil
@@ -1138,8 +1170,8 @@ func runAXSelfTest() -> AXSelfTestReport {
     }
   }
   if let pid = report.pid {
-    report.onScreenCorrelation = cgVisibleFrames()
-      .contains { $0.0 == pid && $0.1.near(frame, tolerance: 4) }
+    report.onScreenCorrelation = cgVisibleFrames()?
+      .contains { $0.0 == pid && $0.1.near(frame, tolerance: 4) } ?? false
   }
   if !report.standardWindow { report.errors.append("Focused element is not a standard AX window") }
   if !report.positionSettable { report.errors.append("AXPosition is not settable") }

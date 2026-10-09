@@ -21,7 +21,7 @@ Tests use `example/xmonad.hs`, staged in `build/config`, not your personal confi
 - Earlier desktop run: macOS 26.6.2, arm64, GHC 9.12.3, cabal 3.18.1.0,
   Swift 6.2. Handshake, tiling, `M-0`, Finder hide/restore, recompile/restart
   and quit were confirmed.
-- Latest local checks: `make check` and `make build` passed; 249 Swift checks,
+- Latest local checks: `make check` and `make build` passed; 331 Swift checks,
   491 static checks, Haskell tests and NDJSON integration.
 - Recent regressions covered: transient AX eligibility reads, Settings focus
   takeover, popup-role classification and queued-hover invalidation. The log
@@ -31,7 +31,22 @@ Tests use `example/xmonad.hs`, staged in `build/config`, not your personal confi
 **Not desktop-verified:** hotplug, mixed Retina, native Space transitions,
 long AX-queue latency, journal crash recovery, Magnifier, BoringWindows,
 NamedScratchpad, NoBorders, Settings/popup focus fixes and transient-read
-workspace/stack stability. Automated success does not establish these.
+  workspace/stack stability. Automated success does not establish these.
+
+Additional regressions: fake-clock visibility grace, failed versus empty CG
+queries, conservative actionability and owned-window restore; Mosaic's real
+Expand/Shrink path, spacing, signed origins and checkpoint/layout reset.
+Mosaic factor-override tests verify old checkpoint shares are preserved while
+the multiplier changes, subsequent resizing uses it, and invalid overrides
+are rejected.
+One-time share repair is tested for preserving workspace stack, allowing later
+resizes, persisting completion through restart and supporting explicit reset.
+Wrapped Mosaic tests also cover a floating window preceding the tiled focus:
+resize uses the tiled index and ignores focus on a floating window, including
+with REFLECTX enabled.
+CG/hidden uncertainty has bounded retention; positive CG/app visibility can
+retain policy identity during AX timeouts, without permitting AX mutations.
+Sustained snapshot exclusion still loses membership and needs separate work.
 
 ## Desktop checklist
 

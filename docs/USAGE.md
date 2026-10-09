@@ -10,6 +10,14 @@ Override with `make build CONFIG=<path>`; tests and packaging use the example.
 After editing: `xmonad --recompile`, then `xmonad --restart`. Install a matching
 helper with `make build && make install` when native code or the protocol changes.
 
+Mosaic uses a **multiplier**, unlike Tall's additive resize delta:
+`mosaic (103/100) [1,1,1]` grows the focused weight by 3% on Expand.
+The example's `logHook` sets `SetMosaicResizeFactor (103/100)` and sends
+`RepairMosaicWeights`: each workspace's Mosaic shares are equalized once to
+repair old saved weights. Completion persists across restart; subsequent
+resizing is preserved. Workspace membership, stack order, floats and surrounding
+layout settings are unchanged. `M-C-m` explicitly equalizes Mosaic shares again.
+
 ## Keys
 
 `M` is Option (`mod1Mask`), `S` is Shift, `C` is Control; `mod4Mask` is Command.
@@ -25,6 +33,7 @@ The table includes example-config additions.
 | `M-S-←` / `M-S-→` / `M-S-↑` / `M-S-↓` | Move the window in that direction |
 | `M-Return` / `M-S-Return` | Swap with master / launch terminal |
 | `M-h` / `M-l` | Shrink / expand master |
+| `M-C-m` | Equalize Mosaic shares (other layouts unchanged) |
 | `M-,` / `M-.` | More / fewer masters |
 | `M-Space` / `M-S-Space` | Next layout / reset |
 | `M-1…9`, `M-0` | View that **virtual** workspace |

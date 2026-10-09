@@ -73,6 +73,79 @@ func reportsAsWindowRole(_ role: String) -> Bool {
 func retainingWindowEligibility(previous: Bool, observed: Bool?) -> Bool {
   observed ?? previous
 }
+// nil is a failed query, not a successfully observed empty window list.
+func cgOnScreenEvidence(querySucceeded: Bool, visible: Int, peers: Int,
+                        omitsMetadata: Bool) -> Bool? {
+  guard querySucceeded else { return nil }
+  return (visible > 0 && visible >= peers) || (visible == 0 && omitsMetadata && peers <= 1)
+}
+// Monotonic seconds, supplied by the caller (and fake clocks in tests).
+// Negative evidence accrues only between successful negative observations.
+// A visibility-query failure freezes that counter; a separate uncertainty
+// deadline bounds the visibility episode for unowned, non-orphaned windows.
+struct VisibilityGrace {
+  private(set) var negativeSeconds = 0.0
+  private(set) var negativeReads = 0
+  private(set) var uncertainSince: Double?
+  private var previousAt: Double?
+  private var previousNegative = false
+  mutating func observe(_ positive: Bool?, at now: Double) {
+    if positive == true {
+      negativeSeconds = 0
+      negativeReads = 0
+      uncertainSince = nil
+    } else {
+      if uncertainSince == nil { uncertainSince = now }
+      if positive == false {
+        negativeReads += 1
+        if previousNegative, let previousAt = previousAt {
+          negativeSeconds += max(0, now - previousAt)
+        }
+      }
+    }
+    previousAt = now
+    previousNegative = positive == false
+  }
+  func retainsKnown(at now: Double, negativeLimit: Double = 1.5,
+                    uncertaintyLimit: Double = 2.0) -> Bool {
+    negativeSeconds < negativeLimit
+      && uncertainSince.map { max(0, now - $0) < uncertaintyLimit } != false
+  }
+}
+struct VisibilityDecision {
+  var retained: Bool
+  var actionable: Bool
+  var reason: String
+}
+// AX read readiness gates mutations, not policy retention. A known window
+// positively shown by CG in a shown app may retain its policy identity during
+// an arbitrarily long AX timeout, but is never actionable during that timeout.
+// Owned hides retain their identity without CG presence: absence is expected
+// after parking/minimizing. Neither ownership nor retention permits ambiguous
+// PID/frame mutations, or mutations after failed CG/app/critical AX reads.
+func windowVisibilityDecision(known: Bool, owned: Bool, orphaned: Bool,
+                              minimized: Bool, hidden: Bool?, onScreen: Bool?,
+                              readsReady: Bool, hiddenGrace: VisibilityGrace,
+                              screenGrace: VisibilityGrace, now: Double,
+                              ambiguous: Bool = false) -> VisibilityDecision {
+  if minimized && !owned {
+    return VisibilityDecision(retained: false, actionable: false, reason: "user-minimized")
+  }
+  let hiddenOK = hidden == false
+  let visibleOK = onScreen == true
+  let retainedHidden = hiddenOK || (known && hiddenGrace.retainsKnown(at: now))
+  let retainedScreen = visibleOK || (known && screenGrace.retainsKnown(at: now))
+  let retained = retainedHidden && (owned || orphaned || retainedScreen)
+    && (known || (onScreen != nil && readsReady))
+    && (known || !ambiguous)
+  let actionable = retained && hiddenOK && readsReady && onScreen != nil
+    && (owned || visibleOK) && !orphaned && !ambiguous
+  let reason = !hiddenOK ? (hidden == nil ? "app-query-unknown" : "app-hidden")
+    : onScreen == nil ? "cg-query-failed"
+    : ambiguous ? "same-pid-frame-ambiguity"
+    : !visibleOK && !owned ? "cg-mismatch" : !readsReady ? "ax-query-unknown" : "visible"
+  return VisibilityDecision(retained: retained, actionable: actionable, reason: reason)
+}
 // Tiling admission. Minimized need not be settable: emacs-mac undecorated
 // frames often have no AXMinimized. Empty subrole is a standard window that
 // has not filled the attribute in yet.

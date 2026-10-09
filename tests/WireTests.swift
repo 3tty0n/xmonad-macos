@@ -63,6 +63,7 @@ import Foundation
     check(fm.fileExists(atPath: cache.path), "an upgrade keeps the kit's build cache")
   }
   static func main() throws {
+    visibilityChecks()
     let primary = Rect(x: 0, y: 0, width: 1512, height: 982)
     check(Rect.quartz(appKit: primary, primaryTop: 982) == primary, "primary origin")
     check(
@@ -481,5 +482,137 @@ import Foundation
     }
     try bundledInstallChecks()
     print("PASS: \(count) portable Swift checks")
+  }
+  static func visibilityChecks() {
+    check(cgOnScreenEvidence(querySucceeded: false, visible: 0, peers: 1,
+      omitsMetadata: false) == nil, "failed CG query remains unknown")
+    check(cgOnScreenEvidence(querySucceeded: true, visible: 0, peers: 1,
+      omitsMetadata: false) == false, "valid empty CG query is negative evidence")
+    check(cgOnScreenEvidence(querySucceeded: false, visible: 0, peers: 1,
+      omitsMetadata: true) == nil, "Chrome exception does not mask failed query")
+    check(cgOnScreenEvidence(querySucceeded: true, visible: 1, peers: 2,
+      omitsMetadata: false) == false, "same-frame peers remain ambiguous")
+    check(cgOnScreenEvidence(querySucceeded: true, visible: 0, peers: 2,
+      omitsMetadata: true) == false, "metadata exception cannot admit same-frame peers")
+    var screen = VisibilityGrace()
+    var hidden = VisibilityGrace()
+    hidden.observe(true, at: 0)
+    func decide(_ now: Double, known: Bool = true, owned: Bool = false,
+                minimized: Bool = false, isHidden: Bool? = false,
+                visible: Bool? = false, ready: Bool = true,
+                ambiguous: Bool = false) -> VisibilityDecision {
+      windowVisibilityDecision(known: known, owned: owned, orphaned: false,
+        minimized: minimized, hidden: isHidden, onScreen: visible, readsReady: ready,
+        hiddenGrace: hidden, screenGrace: screen, now: now, ambiguous: ambiguous)
+    }
+    for i in 0...12 {
+      let now = Double(i) * 0.08
+      screen.observe(false, at: now)
+      check(decide(now).retained, "rapid negative scans retain policy state")
+      check(!decide(now).actionable, "negative grace never authorizes mutations")
+    }
+    screen.observe(false, at: 1.6)
+    check(!decide(1.6).retained, "sustained mismatch excludes after elapsed grace")
+    screen.observe(true, at: 1.7)
+    check(decide(1.7, visible: true).actionable, "positive visibility resets grace")
+    screen.observe(false, at: 1.8)
+    screen.observe(false, at: 1.9)
+    let elapsed = screen.negativeSeconds
+    let reads = screen.negativeReads
+    screen.observe(nil, at: 2.5)
+    check(screen.negativeReads == reads && screen.negativeSeconds == elapsed,
+      "failed query does not advance negative counters")
+    check(decide(2.5, visible: nil).retained && !decide(2.5, visible: nil).actionable,
+      "failed CG query retains known policy without mutations")
+    check(!decide(2.5, known: false, visible: nil).retained,
+      "failed CG query cannot newly admit a window")
+    check(!decide(2.5, known: false, owned: true, visible: nil).retained,
+      "owned record still needs query evidence for first admission")
+    screen.observe(false, at: 2.6)
+    check(screen.negativeSeconds == elapsed, "negative read after failure excludes failed interval")
+    screen.observe(nil, at: 3.9)
+    check(!decide(3.9, visible: nil).retained, "persistent query failure has bounded retention")
+    screen.observe(true, at: 4)
+    hidden.observe(false, at: 4)
+    hidden.observe(false, at: 4.08)
+    check(decide(4.08, isHidden: true, visible: true).retained,
+      "hidden flicker retains policy state")
+    check(!decide(4.08, isHidden: true, visible: true).actionable,
+      "hidden flicker suppresses mutation immediately")
+    hidden.observe(true, at: 4.16)
+    check(decide(4.16, visible: true).actionable, "application shown resets hidden grace")
+    hidden.observe(false, at: 5)
+    hidden.observe(false, at: 6.6)
+    check(!decide(6.6, isHidden: true, visible: true).retained,
+      "sustained hidden application excluded")
+    hidden.observe(true, at: 7)
+    check(!decide(7, minimized: true, visible: true).retained,
+      "user minimized window excluded without grace")
+    check(decide(7, owned: true, minimized: true, visible: false).retained,
+      "WM owned minimization retains workspace")
+    check(!decide(7, owned: true, visible: nil).actionable,
+      "owned window cannot mutate on failed CG query")
+    check(decide(7, ambiguous: true).retained && !decide(7, ambiguous: true).actionable,
+      "known ambiguous window retained but never actionable")
+    check(!decide(7, owned: true, ambiguous: true).actionable,
+      "ownership does not override same-frame ambiguity")
+    check(!decide(7, known: false, ambiguous: true).retained,
+      "new ambiguous window never admitted")
+    check(!decide(7, known: false, owned: true, ambiguous: true).retained,
+      "owned new record does not override ambiguity admission gate")
+    check(!decide(7, visible: true, ready: false).actionable,
+      "failed critical AX reads suppress native mutations")
+    check(decide(100, visible: true, ready: false).retained
+      && !decide(100, visible: true, ready: false).actionable,
+      "positive CG evidence retains known policy through prolonged AX failure only")
+    check(!decide(100, known: false, visible: true, ready: false).retained,
+      "positive CG evidence cannot admit a new window with unknown AX reads")
+    check(!decide(100, known: false, isHidden: nil, visible: true).retained,
+      "unknown application visibility cannot admit a new window")
+    check(decide(100, owned: true, minimized: true, visible: false).actionable,
+      "owned late minimize can retry restore without an on-screen CG match")
+    check(!decide(100, owned: true, minimized: true, visible: false,
+      ambiguous: true).actionable,
+      "owned late minimize never overrides genuine peer ambiguity")
+    rapidVisibilityRecoveryChecks()
+  }
+  static func rapidVisibilityRecoveryChecks() {
+    // Model only the engine's delete/re-admit boundary: retained snapshot IDs
+    // preserve this policy order. This is not a Haskell StackSet integration test.
+    let original: [UInt64] = [3, 1, 2]
+    var policyOrder = original
+    var active = Set(original)
+    var grace = Dictionary(uniqueKeysWithValues: original.map { ($0, VisibilityGrace()) })
+    var shown = VisibilityGrace()
+    shown.observe(true, at: 0)
+    let observations: [(Double, Bool, Int)] = [
+      (0, true, 1), (0.08, false, 0), (0.16, true, 0),
+      (0.24, true, 0), (0.32, false, 0), (0.40, true, 1),
+    ]
+    for (now, succeeded, visible) in observations {
+      let evidence = cgOnScreenEvidence(querySucceeded: succeeded, visible: visible,
+        peers: 1, omitsMetadata: false)
+      var snapshot: [UInt64] = []
+      for id in [UInt64(1), 2, 3] {
+        grace[id]!.observe(evidence, at: now)
+        let decision = windowVisibilityDecision(known: active.contains(id), owned: false,
+          orphaned: false, minimized: false, hidden: false, onScreen: evidence,
+          readsReady: true, hiddenGrace: shown, screenGrace: grace[id]!, now: now)
+        if decision.retained { snapshot.append(id) }
+        check(decision.actionable == (evidence == true),
+          "rapid recovery actionability requires positive current evidence")
+      }
+      let next = Set(snapshot)
+      policyOrder = policyOrder.filter { next.contains($0) }
+        + snapshot.filter { !policyOrder.contains($0) }
+      active = next
+      check(policyOrder == original, "rapid failed/empty CG scans preserve policy order model")
+      if now == 0.32 {
+        check(grace[1]!.negativeReads == 2,
+          "failed CG recovery scan does not become a third negative read")
+      }
+    }
+    check(grace[1]!.negativeReads == 0 && grace[1]!.uncertainSince == nil,
+      "positive recovery clears counters and deadline")
   }
 }
