@@ -1,69 +1,60 @@
 # Testing
 
 ```sh
-make check
-./scripts/test-portable.sh   # Swift unit tests + static checks
-./scripts/test.sh            # Haskell core + engine integration
+make check                  # all automated checks
+./scripts/test-portable.sh  # Swift unit tests and static checks
+./scripts/test.sh           # Haskell tests and NDJSON integration
+make build                  # native SDK and config compilation
 ```
 
-| Suite | Covers |
+Tests use `example/xmonad.hs`, staged in `build/config`, not your personal config.
+
+| Suite | Coverage |
 |---|---|
-| `tests/WireTests.swift` | Coordinates, protocol, Emacs admission, plan safety, fingerprints |
-| `tests/static_checks.py` | Packaging and contract greps |
-| `tests/CoreTests.hs` | StackSet, layouts, lifecycle, checkpoints, atomic recompile |
-| `tests/integration.py` | Shipped config over NDJSON |
+| `WireTests.swift` | Protocol, geometry, admission, fingerprints, plan safety |
+| `CoreTests.hs` and companion modules | StackSet, layouts, actions, checkpoints, lifecycle, recompile |
+| `integration.py` | Compiled example over NDJSON |
+| `static_checks.py` | Source/packaging guards; **not** compilation or desktop testing |
 
-`test.sh` uses `build/config`, never your personal `xmonad.hs`.
+## Recorded results
 
-## Last recorded run
+- Earlier desktop run: macOS 26.6.2, arm64, GHC 9.12.3, cabal 3.18.1.0,
+  Swift 6.2. Handshake, tiling, `M-0`, Finder hide/restore, recompile/restart
+  and quit were confirmed.
+- Latest local checks: `make check` and `make build` passed; 249 Swift checks,
+  491 static checks, Haskell tests and NDJSON integration.
+- Recent regressions covered: transient AX eligibility reads, Settings focus
+  takeover, popup-role classification and queued-hover invalidation. The log
+  showed a known window briefly leaving with `eligible=false` and returning
+  with the same handle. Desktop reproduction/verification remains outstanding.
 
-macOS 26.6.2, arm64, GHC 9.12.3, cabal-install 3.18.1.0, Apple Swift 6.2.
-`make check` passed; handshake, tiling, `M-0`, Finder hide/restore,
-`xmonad --recompile` / `--restart`, and quit were confirmed on the machine.
+**Not desktop-verified:** hotplug, mixed Retina, native Space transitions,
+long AX-queue latency, journal crash recovery, Magnifier, BoringWindows,
+NamedScratchpad, NoBorders, Settings/popup focus fixes and transient-read
+workspace/stack stability. Automated success does not establish these.
 
-Not yet verified: hotplug, mixed Retina, native Space transitions, long
-AX-queue latency, crash recovery from the journal.
+## Desktop checklist
 
-Magnifier, BoringWindows, NamedScratchpad and NoBorders are covered by
-`CoreTests` (and the Swift side by `WireTests.swift`) only. No desktop run has
-observed a magnified frame, a skipped window, a scratchpad parked on `NSP`, or
-a border the layout dropped.
-
-## Manual matrix
-
-Settings-focus regression: a newly observed, natively focused Settings window
-matched by `doFloat` cancels an older pending focus request. CoreTests covers
-that takeover and verifies stale focus observations still retain the request.
-Queued hover results are discarded if observed focus changed during the
-hit-test. Desktop verification of opening Settings remains outstanding.
-
-Popup-focus regression: `make check` and `make build` passed locally after
-switching hover targeting to AX hit-testing and treating a focused menu or
-unmanaged popup as takeover of an outstanding focus request. Portable tests
-cover transient-role classification only. Still needs desktop verification:
-right-click menus and Chrome extension popups stay open while the pointer
-moves inside them; normal hover focus resumes after closing them.
-
-Shipped config, one native Space per display, Stage Manager off, no unsaved
-work.
+Use saved, sacrificial windows, the example config, one native Space per
+display and Stage Manager off. TCC permission requires interactive consent.
 
 | Test | Expected |
 |---|---|
-| AX permission | Stops until granted |
-| `make dry-run` | Plans logged; nothing moved |
+| AX permission / dry-run | Waits for permission; dry-run moves nothing |
 | `xmonad self-test` | Focused standard window, settable geometry, CG correlation |
-| Three windows | Tiled in the usable area |
-| `M-j` / `M-k` | Focus moves; observation does not steal it |
-| Native tabs | One AX window |
-| `M-Space` to Full | Focused window fills the screen; nothing minimized |
-| `M` + drag | Floats; no snap-back |
-| Save panel | Floated, not tiled |
-| `M-2` then `M-1` | Only WM-hidden windows return |
-| Finder `M-2` / `M-1` | Minimizes, then tiles again |
-| Your `Cmd-M` | Never auto-restored |
+| Three windows / native tabs | Tiles in usable area; tabs appear as one AX window |
+| `M-j` / `M-k` | Focus moves without being stolen back |
+| `M-Space` to Full | All windows remain unminimized; focused window fills screen |
+| `M` + left/right drag | Floats and moves/resizes without snap-back |
+| Save panel / Settings | Floats; newly focused Settings stays in front |
+| Right-click / Chrome extension popup | Stays open; hover resumes after dismissal |
+| `M-2` then `M-1` | Only WM-hidden windows return; Finder minimizes/restores |
+| User `Cmd-M` | Never auto-restored |
 | Bad `M-q` | Old engine keeps running |
-| Kill helper | `xmonad recover` restores owned hides |
-| Native Space switch | Stale-epoch plans dropped |
-| Green-button full-screen | Tiling pauses |
+| Kill helper / `xmonad recover` | Restores WM-owned hides |
+| Space switch / display wake | Rejects stale plans; preserves surviving workspace state |
+| Native full-screen | Suspends tiling |
+| Temporary AX timeout | Does not re-adopt known windows or change their stack/workspace |
 
-`xmonad log` / `doctor` / `dump` for debugging. Redact titles before sharing.
+Debug with `xmonad log`, `doctor` and `dump`. Logs/dumps are private and may
+contain titles; redact them before sharing.

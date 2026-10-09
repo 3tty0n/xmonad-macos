@@ -1,58 +1,43 @@
 # Design
 
-Haskell owns policy (`StackSet`, `LayoutClass`, `xmonad.hs`). The signed
-Swift app owns AX, AppKit, and the event tap. They talk NDJSON over a pipe.
-There is no XQuartz, no X11 proxy, and no private CGS/SLS API.
-
 ```text
-xmonad.hs  →  xmonad-engine (GHC)  ⇄ NDJSON  ⇄  XMonadMac.app  →  native windows
+xmonad.hs → Haskell engine ⇄ NDJSON ⇄ signed Swift helper → macOS windows
 ```
 
-The helper stays signed while you recompile the engine. Layout does not live
-in Swift.
+- **Haskell:** `StackSet`, layouts, messages, hooks and configuration.
+- **Swift:** public AX, AppKit and event taps. AX mutations run on a serial
+  queue, never on the event-tap thread.
+- No XQuartz, X11 proxy, private CGS/SLS APIs or Dock injection.
 
-## Windows
+## Windows and workspaces
 
-A `Window` is a per-session `Word64`, not an XID or `CGWindowID`. AX elements
-are re-identified with `CFEqual`; process identity uses
-`NSRunningApplication.launchDate` or the BSD start time.
+`Window` is a per-session handle, not an XID or CGWindowID. Window identity
+uses AX elements and public fingerprints; process identity includes launch time.
+Admission uses AX roles/capabilities and conservative public PID/frame matching.
+Chrome's missing CG metadata and Emacs's AX roles have explicit handling.
 
-Tiled: `AXStandardWindow` (and Emacs frames listed in `AXWindows` as
-`AXTextField`) with settable position and size. Dialogs and floating panels
-are floated. Sheets, popovers, native full-screen, user-minimized windows,
-and hidden apps are left alone.
+Workspaces are **xmonad tags, not macOS Spaces**. Hidden windows are parked
+off-screen; apps that refuse parking (Finder) are minimized. `Full` hides
+nothing. Dialogs float; sheets, popovers, hidden apps and user-minimized windows
+are left alone. Native full-screen suspends tiling.
 
-On-screen matching is PID + frame against public CG layers. Chrome withholds
-that list, so those windows are admitted from AX. emacs-mac chrome can shift
-AX vs CG by a titlebar; matching allows that slop.
+Epoch rebuilds carry workspace stacks, layouts, current workspace and floats
+for surviving windows. Failed AX eligibility reads retain the last known state.
 
-## Virtual workspaces
+## Safety and recovery
 
-Workspaces are xmonad tags, **not** macOS Spaces. Native Spaces cannot host
-them: `SLSMoveWindowsToManagedSpace` ignores another process's window, and
-this port does not inject into Dock.app.
-
-Hiding a window parks it off-screen. Apps that clamp (Finder) are minimized
-instead. `Full` hides nothing. A native Space switch bumps `epoch` and rebuilds
-window membership; each workspace keeps the layout the user chose. Tiling
-pauses while a native full-screen window is frontmost.
-
-## Plans, focus, recovery
-
-Plans must match `generation` and `epoch`. Focus is requested only from a
-key binding, with an action id and a short deadline; the helper will not
-steal a window the user already raised.
-
-Hides are journaled before mutation. Restore only touches WM-owned windows.
-After a helper restart, workspace and float state come from `session.json`
-fingerprints; ambiguous matches are left unmatched.
-
-AX never runs on the event-tap thread. Emergency stop and `xmonad recover`
-do not go through Haskell.
+- Plans require matching generation and epoch.
+- Explicit focus requests have action IDs and deadlines. User takeover cancels
+  retries; ordinary scans do not activate apps.
+- Hides are journaled **before** mutation. Recovery restores only WM-owned
+  hides, not user-minimized windows; it is not a full geometry rollback.
+- `session.json` restores workspace/float state after helper restart using
+  public fingerprints. Ambiguous matches remain unresolved.
+- Emergency stop and recovery do not depend on the Haskell engine.
 
 ## Recompile
 
-`xmonad --recompile` (and M-q) builds against Application Support
-`build-kit` and swaps the engine only after validation. A failed compile
-leaves the running engine in place. `xmonad autostart on` is a LaunchAgent
-for the signed `.app`.
+The engine lives outside the signed app. `xmonad --recompile` builds against
+the installed `build-kit` and replaces the engine only after validation.
+A failed compile leaves the old engine running. `xmonad autostart on` registers
+the signed app with launchd.

@@ -4,10 +4,17 @@
 
 Search order: explicit path, `$XMONAD_CONFIG`, `~/.xmonad/xmonad.hs`,
 `~/.config/xmonad-mac/xmonad.hs`. A `lib/` next to the config is staged with
-it.
+it. `make build` uses this search order, falling back to `example/xmonad.hs`.
+Override with `make build CONFIG=<path>`; tests and packaging use the example.
 
-`M` is Option (`mod1Mask`); `mod4Mask` is Command. Bindings are physical US
-keys. AZERTY/QWERTZ and chords are not implemented.
+After editing: `xmonad --recompile`, then `xmonad --restart`. Install a matching
+helper with `make build && make install` when native code or the protocol changes.
+
+## Keys
+
+`M` is Option (`mod1Mask`), `S` is Shift, `C` is Control; `mod4Mask` is Command.
+Bindings use physical US keys, not layout-dependent text keysyms.
+The table includes example-config additions.
 
 | Key | Action |
 |---|---|
@@ -22,7 +29,8 @@ keys. AZERTY/QWERTZ and chords are not implemented.
 | `M-Space` / `M-S-Space` | Next layout / reset |
 | `M-1…9`, `M-0` | View that **virtual** workspace |
 | `M-S-1…9`, `M-S-0` | Move focused window there |
-| `M-w` / `M-e` / `M-r` | Focus screen 0 / 1 / 2 |
+| `M-w` / `M-e` | Focus screen 0 / 1 |
+| `M-r` | Reflect layout (overrides default screen-2 focus) |
 | `M-S-w` / `M-S-e` / `M-S-r` | Send to that screen's workspace |
 | `M-f` / `M-t` | Float / sink |
 | `M-C-Space` | Switch between the tiled and floating layer |
@@ -45,7 +53,7 @@ default. `XMonad.Actions.UpdatePointer`'s `updatePointer` in the `logHook`
 moves the pointer to the focused window; the helper skips it when the pointer
 is already there or a mod-drag is in progress.
 
-## Displays
+## Displays and focus
 
 One virtual workspace per display. Screen 0 is the macOS primary. A replug
 with the same display ID reclaims its workspace. Mission Control Desktops
@@ -64,27 +72,10 @@ windows, and starts it again in the same mode.
 **Delete logs older than 7 days** on, which is the default, kept logs past
 that age are removed.
 
-`XMonad.Hooks.StatusBar` renders a `PP` on every state change; each sink
-writes only when the text changed. `ppTitle` is the focused window's
-`AXTitle`. `macMenuBarPP` replaces the menu bar row (and the `status` field
-of `xmonad status`) with the rendered line.
-
-```haskell
-import XMonad
-import XMonad.Hooks.StatusBar
-
-main = do
-  file <- statusBarFile "/tmp/xmonad-status" (pure def)
-  sketchy <- statusBarSpawn
-    (\s -> "sketchybar --trigger xmonad_update INFO=" ++ shellQuote s)
-    (pure def {ppOrder = take 1})
-  xmonad $ withSB (file <> sketchy <> macMenuBarPP (pure def {ppSep = " · "}))
-         $ def
-```
-
-`statusBarPipe "cmd" pp` starts `cmd` at startup and writes each line to its
-stdin. A PP's own `ppOutput` goes to stderr (the bridge log) because the
-engine's stdout is the helper protocol.
+For custom bars, `Hooks.StatusBar` supports `statusBarFile`, `statusBarSpawn`,
+`statusBarPipe` and `macMenuBarPP` through `withSB`. Output updates when text
+changes. `ppTitle` uses AXTitle; `ppOutput` defaults to stderr because stdout
+is reserved for the protocol.
 
 ## Paths
 

@@ -33,9 +33,8 @@ expired. Snapshot:
 {"type":"mouseFloat","wid":1}
 ```
 
-`grabbed` marks the stroke answering a `grab` command; it may be any key,
-unmodified or unbound, and `sym` is 0 for a key with no keysym. A key
-without it is an ordinary binding, and tells the engine no grab is armed.
+`grabbed` answers a `grab`; any key is allowed (`sym=0` if unknown).
+An ordinary key event clears any pending grab.
 
 ## Engine → helper
 
@@ -47,22 +46,16 @@ without it is an ordinary binding, and tells the engine no grab is armed.
 intent. `epoch` bumps on a native Space switch; both `generation` and
 `epoch` must match or the plan is dropped.
 
-`borders` is the width a layout asked for, per window: 0 draws no border at
-all. It is a statement about this plan only, so anything left out is drawn
-at the width from the handshake. The field is additive — a helper that does
-not know it draws the handshake's width everywhere, which is what it did
-before. An entry may name a window the plan does not place: `smartBorders`
-restates the previous width when a workspace empties, and the width applies
-the next time the window is drawn. A helper ignores a width for a window it
-is not drawing; it must not reject the plan.
+`borders` overrides widths for this plan only; 0 disables a border, omitted
+windows use the handshake default. Entries for unplaced windows are ignored,
+not rejected. Older helpers ignore this field.
 
 `status`, when present, is menu bar text a logHook rendered
 (`macMenuBarPP`); without it the helper builds its own workspace row.
 
-`checkpoint` is opaque JSON stored by the helper and returned in `restore`.
-Its `savedExtensions` holds each `PersistentExtension` as a (type, `show`)
-pair; a checkpoint without it restores with no extensible state.
-On helper restart, wids are rewritten from public fingerprints.
+`checkpoint` is stored by the helper and returned in `restore`.
+`savedExtensions` contains persistent (type, `show`) pairs; absent means no
+extensible state. Helper restarts remap handles using public fingerprints.
 
 ## Control
 
@@ -70,16 +63,10 @@ On helper restart, wids are rewritten from public fingerprints.
 Commands: `close`, `reload`, `recompile`, `pause`, `quit`, `grab`. JSON is
 never executed as a shell command.
 
-`movePointer` carries `bounds` (the box the pointer is clipped into) and
-`focus` (the focused window). The helper moves the pointer with the public
-`CGWarpMouseCursorPosition` only when it is outside `focus` and no mod-drag is
-in progress, so a logHook may call it on every focus change without fighting
-the user or the mouse. A helper older than this engine does not know the
-message and rejects the line; reinstall the app after recompiling.
+`movePointer` carries `bounds` (clip box) and `focus` (window rectangle).
+The helper uses `CGWarpMouseCursorPosition` only outside `focus` and without
+an active mod-drag. Older helpers reject this message; install the matching app.
 
-`grab` is a submap waiting for its next stroke: the helper swallows the next
-key press, whatever it is, and sends it back `grabbed`. The grab covers one
-stroke — a nested submap sends `grab` again — and lapses after 5 s, on
-pause, or on a new `configure`. The emergency stop (Ctrl-Opt-Cmd-Esc) is
-never grabbed. There is no `ungrab`: Escape or any unbound stroke reaches
-the engine, which drops the submap as upstream does.
+`grab` captures one stroke for a submap. Nested submaps reissue it. It expires
+after 5 s, on pause or on `configure`; emergency stop is never captured.
+Escape or an unbound stroke cancels in the engine; there is no `ungrab`.

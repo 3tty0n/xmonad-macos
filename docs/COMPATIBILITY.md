@@ -27,9 +27,9 @@ the same names.
 | `Layout.LayoutModifier` / `LayoutCombinators` | No Combo/DragPane |
 | `Layout.ThreeColumns` / `Circle` / `Grid` / `Simplest` | |
 | `Layout.SimplestFloat` / `ResizableTile` | Snapshot frames, not X11 |
-| `Layout.ResizableThreeCol` | `ResizableThreeCol` / `ResizableThreeColMid`; master fraction via `Shrink` / `Expand`, per-window slave heights via `MirrorResize`; re-exports `MirrorResize` from `ResizableTile` |
+| `Layout.ResizableThreeCol` | Both variants; `Shrink` / `Expand` and `MirrorResize` from `ResizableTile` |
 | `Layout.Column` / `Spiral` / `Dwindle` / `OneBig` | |
-| `Layout.Mosaic` | `mosaic` / `Aspect` (`Taller` / `Wider` / `Reset` / `SlopeMod`), `changeMaster` / `changeFocused`; pure geometry, no `MosaicAlt` (a separate upstream module) |
+| `Layout.Mosaic` | `mosaic`, `Aspect`, `changeMaster`, `changeFocused`; no `MosaicAlt` |
 | `Layout.MultiColumns` / `StackTile` / `Dishes` | |
 | `Layout.CenteredIfSingle` / `Roledex` / `ToggleLayouts` | |
 | `Layout.IfMax` / `Gaps` / `PerScreen` / `Named` | |
@@ -38,17 +38,17 @@ the same names.
 | `Layout.TwoPane` / `Accordion` / `Spacing` | |
 | `Layout.Magnifier` | Magnified window is listed last, not first |
 | `Layout.BoringWindows` | |
-| `Layout.BinarySpacePartition` | `emptyBSP`, the `Rotate` / `Swap` / `ResizeDirectional` (`ExpandTowards` / `ShrinkFrom` / `MoveSplit`) / `TreeRotate` / `TreeBalance` / `SplitShiftDirectional` messages and `FocusParent` / `SelectNode` / `MoveNode`. No `SetGeometry` mouse resize, which needs `Layout.WindowArranger`, and the selected node is not highlighted, which upstream draws through `Util.XUtils`; the tree operations themselves are unchanged |
+| `Layout.BinarySpacePartition` | `emptyBSP` and tree/resize/selection messages; no `SetGeometry` mouse resize or selection highlight |
 | `Layout.MultiToggle` / `MultiToggle.Instances` | `REFLECTX` / `REFLECTY` live in `Layout.Reflect` |
 | `Layout.NoBorders` | No `OnlyLayoutFloatBelow` / `OtherIndicated`, no deprecated `borderEventHook` |
-| `Actions.CycleWS` | `WSType` predicates and `doTo` / `findWorkspace`; no screen cycling (`nextScreen`, `swapNextScreen`), which `PhysicalScreens` and `OnScreen` cover by naming a display |
-| `Actions.CycleRecentWS` | `recentWS` / `unView` / `toggleRecentWS` / `toggleRecentNonEmptyWS` / `toggleWindowSets`; no held-modifier `cycleRecentWS` / `cycleRecentNonEmptyWS` / `cycleWindowSets`, which need a keyboard grab that reports the invoking modifier's release |
+| `Actions.CycleWS` | `WSType`, `doTo`, `findWorkspace`; no `nextScreen` / `swapNextScreen`; use `PhysicalScreens` or `OnScreen` |
+| `Actions.CycleRecentWS` | `recentWS`, `unView`, toggle functions; no held-modifier `cycleRecentWS` / `cycleRecentNonEmptyWS` / `cycleWindowSets` |
 | `Actions.DynamicWorkspaces` | Add / append / remove / rename workspaces and the workspace index map. `withWorkspace`, `selectWorkspace`, `renameWorkspace`, `addWorkspacePrompt` and `appendWorkspacePrompt` are not ported (no Prompt package) |
-| `Actions.Navigation2D` | `lineNavigation` / `centerNavigation` / `sideNavigation` and `windowGo` / `windowSwap` / `screenGo` / `screenSwap` / `windowToScreen` / `switchLayer`. Rectangles come from the helper's observation, so a window is navigable exactly while it is reported and no layout modifier is needed. No `layoutNavigation` rectangles for unmapped windows, no Prompt-based `navigation2DP` variants beyond the EZConfig strings, and `XMonad.Layout.WindowNavigation` is not ported |
-| `Actions.GroupNavigation` | `Direction` / `nextMatch` / `nextMatchOrDo` / `nextMatchWithThis` / `historyHook` / `isOnAnyVisibleWS`; focus history is kept in `ExtensibleState` and survives a restart, but `historyHook` stores the raw `HistoryDB` rather than a `deepseq`-forced value |
-| `Actions.UpdatePointer` | `updatePointer` (refPos) (ratio) for the `logHook`: the pointer follows the focused window through a `movePointer` command. The helper warps with the public `CGWarpMouseCursorPosition` and skips when the pointer is already on the focused window or a mod-drag is in progress. The rectangle comes from the helper's observation, not a layout query |
-| `Util.WorkspaceCompare` | `WorkspaceCompare` / `WorkspaceSort`, `filterOutWs`, `getSortByIndex`, `getSortByTag`, `getSortByXineramaRule`. No `ScreenComparator` or the physical-rule variants: the xinerama rule orders displays by where they sit, since a macOS display id is not a position |
-| `Util.Loggers` | The XMonad loggers, the per-display ones and the formatting utilities. No urgency-aware variants (`logTitles'`, `TitlesFormat`), and no `aumixVolume` / `battery` / `loadAvg`, which are Linux tools: `logCmd` covers them, e.g. `logCmd "pmset -g batt"`. `Align` lives in `Util.Types` rather than the X11-only `Util.Font` |
+| `Actions.Navigation2D` | Line/center/side strategies, window/screen navigation and swaps, `switchLayer`; observed rectangles, no layout modifier. No unmapped-window rectangles or Prompt integration |
+| `Actions.GroupNavigation` | Query-based navigation and `historyHook`; history persists through `ExtensibleState`, without `deepseq` |
+| `Actions.UpdatePointer` | `updatePointer refPos ratio` in `logHook`; observed geometry, no warp inside the focused window or during mod-drag. Requires the matching helper |
+| `Util.WorkspaceCompare` | Index/tag/physical-position sorts; no `ScreenComparator` or physical-rule variants |
+| `Util.Loggers` | Window/display/system loggers and formatting; no `logTitles'`, `TitlesFormat`, `aumixVolume`, `battery`, `loadAvg`. Use `logCmd`; `Align` lives in `Util.Types` |
 | `Actions.CycleWindows` | No `cycleRecentWindows` |
 | `Actions.WithAll` / `SinkAll` / `RotSlaves` | |
 | `Actions.SwapWorkspaces` / `DwmPromote` / `Promote` | |
@@ -59,7 +59,7 @@ the same names.
 | `Actions.Submap` | No `visualSubmap`; the grab lapses after 5 s |
 | `Hooks.ManageHelpers` / `InsertPosition` | No X11 property queries |
 | `Hooks.WorkspaceHistory` | History survives a restart |
-| `Hooks.StatusBar.PP` | No `ppUrgent` (no urgency hints); default `ppOutput` is stderr, since stdout is the protocol. `ppExtras` takes any `Util.Loggers` logger; `getSortByIndex` / `getSortByTag` are re-exported from `Util.WorkspaceCompare` |
+| `Hooks.StatusBar.PP` | No `ppUrgent`; `ppOutput` defaults to stderr. Supports loggers and re-exports index/tag sorts |
 | `Hooks.StatusBar` | `withSB`, `statusBarGeneric`, `statusBarPipe`; adds `statusBarFile`, `statusBarSpawn`, `macMenuBarPP`. No `statusBarProp` / `withEasySB` / `sbCleanupHook` (X11 properties, struts) |
 | `Hooks.DynamicLog` | Re-exports `StatusBar.PP` plus `dynamicLog`; no xmobar/dzen launchers |
 | `Util.EZConfig` / `Types` / `CustomKeys` | `checkKeymap` logs to stderr, not xmessage |
@@ -70,21 +70,13 @@ the same names.
 
 Not ported: Tabbed, Decoration, Prompt, EWMH, `Layout.WindowNavigation`.
 
-Directional navigation is the one place where an upstream layout modifier has
-no counterpart here. Upstream asks the layout for its rectangles, so
-`Navigation2D` needs `WindowNavigation` in the `layoutHook`; this port already
-knows every window's frame from the helper's last observation, so `windowGo`
-and `windowSwap` work with any layout, including a pure one, and no state has
-to live in the layout. A config that imports `WindowNavigation` will not
-compile; drop the import and the `windowNavigation` call, and keep the
-`Navigation2D` bindings.
-Named scratchpad exclusives, dynamic scratchpads and `nsHideOnFocusLoss` are
-not provided. `cycleRecentWindows` needs a grab that holds until the modifier
-is released, which the helper does not report.
+Use `Navigation2D` bindings without importing `WindowNavigation` or adding
+`windowNavigation`: this port uses observed window frames. Named scratchpad
+exclusives, dynamic scratchpads and `nsHideOnFocusLoss` are unsupported.
+Held-modifier cycling is unavailable because modifier releases are not reported.
 
-A layout's border widths reach the helper in the plan, so `NoBorders` and
-`withBorder` need a helper built alongside the engine. An older installed app
-ignores the field and draws the width from the config for every window.
+`NoBorders` / `withBorder` require a matching helper; older helpers ignore
+per-window widths and use the configured default.
 
 ## Runtime
 
