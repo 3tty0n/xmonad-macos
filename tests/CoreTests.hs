@@ -349,6 +349,16 @@ main = do
     (isJust (planAction focusPlan) && planFocus focusPlan==desired && planFocusForMs focusPlan==400)
   (_,retried) <- runX conf pending (reconcile oldFocus)
   check "pending focus survives stale observation" (W.peek (windowset retried)==desired && focusRequested retried)
+  let settingsCfg = cfg {manageHook=resource =? "com.apple.systempreferences" --> doFloat}
+      settingsWindow = (wi 4 10) {bundle="com.apple.systempreferences"}
+      settingsSnapshot = oldFocus
+        {snapWindows=snapWindows oldFocus ++ [settingsWindow], snapFocused=Just 4}
+  (settingsPlan,settingsState) <- runX (XConf settingsCfg) pending
+    (reconcile settingsSnapshot >> makePlan)
+  check "new focused Settings float cancels older focus intent"
+    (M.member 4 (W.floating $ windowset settingsState)
+     && W.peek (windowset settingsState)==Just 4
+     && not (focusRequested settingsState) && planFocus settingsPlan==Nothing)
   (_,acked) <- runX conf retried (reconcile $ oldFocus {snapFocused=desired,snapGeneration=3})
   check "focus acknowledgement clears request" (not $ focusRequested acked)
   (_,expired) <- runX conf pending (handleEvent M.empty (AckEvent aid previous True))

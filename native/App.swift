@@ -845,11 +845,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
   private func handleHover(_ point: CGPoint) {
     guard running, configured, !dryRun, !fullScreen else { return }
+    let focusAtMove = lastSnapshot?.focused
     axQueue.async { [weak self] in
       guard let self = self else { return }
       let wid = self.store.window(at: point)
       DispatchQueue.main.async {
         guard self.running else { return }
+        // Opening a floating window can change focus while this hit-test is
+        // queued. An older hover over the background must not raise it again.
+        guard self.lastSnapshot?.focused == focusAtMove else { return }
         guard let wid = wid else {
           self.hoverWid = nil
           return

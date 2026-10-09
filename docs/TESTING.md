@@ -31,6 +31,12 @@ a border the layout dropped.
 
 ## Manual matrix
 
+Settings-focus regression: a newly observed, natively focused Settings window
+matched by `doFloat` cancels an older pending focus request. CoreTests covers
+that takeover and verifies stale focus observations still retain the request.
+Queued hover results are discarded if observed focus changed during the
+hit-test. Desktop verification of opening Settings remains outstanding.
+
 Popup-focus regression: `make check` and `make build` passed locally after
 switching hover targeting to AX hit-testing and treating a focused menu or
 unmanaged popup as takeover of an outstanding focus request. Portable tests

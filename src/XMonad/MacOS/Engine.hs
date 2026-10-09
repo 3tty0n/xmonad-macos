@@ -106,6 +106,14 @@ reconcile snap = do
   when (generation previous < 0) $ restoreSaved snap c observed
   unless restarted $ followFloatDrags previous observed
   admitNewWindows c observed
+  -- A newly opened floating window taking native focus is user takeover.
+  -- Do not keep retrying an older hotkey/hover request for the window behind
+  -- it. Ordinary stale observations of existing windows still retain intent.
+  whenJust (snapFocused snap) $ \w -> do
+    ws <- gets windowset
+    when (not (W.member w (windowset previous))
+          && M.member w (W.floating ws) && onScreenWorkspace w ws) $
+      modify $ \s -> s {pendingFocus=Nothing}
   followObservedFocus snap observed
   unless restarted $ announceRemovals previous (M.keysSet observed)
 
