@@ -180,6 +180,14 @@ import Foundation
     for role in ["AXWindow", "AXButton", "AXTextField", "AXWebArea", ""] {
       check(!pointerFocusIsTransientRole(role), "ordinary \(role) is not a transient surface")
     }
+    check(retainingWindowEligibility(previous: true, observed: nil),
+          "failed AX eligibility read retains a managed window")
+    check(!retainingWindowEligibility(previous: false, observed: nil),
+          "failed AX eligibility read cannot admit a new window")
+    check(!retainingWindowEligibility(previous: true, observed: false),
+          "positive exclusion still removes eligibility")
+    check(retainingWindowEligibility(previous: false, observed: true),
+          "positive eligibility admits a window")
     var bad = plan
     bad.hide = [1]
     rejects(bad, "show/hide conflict")

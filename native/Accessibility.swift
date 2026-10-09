@@ -27,8 +27,12 @@ func axBoolean(_ e: AXUIElement, _ name: String) -> Bool? { axCopy(e, name) as? 
 func axBool(_ e: AXUIElement, _ name: String) -> Bool { axBoolean(e, name) ?? false }
 func axString(_ e: AXUIElement, _ name: String) -> String { (axCopy(e, name) as? String) ?? "" }
 func axSettable(_ e: AXUIElement, _ name: String) -> Bool {
+  axSettableRead(e, name) ?? false
+}
+func axSettableRead(_ e: AXUIElement, _ name: String) -> Bool? {
   var value: DarwinBoolean = false
-  return AXUIElementIsAttributeSettable(e, name as CFString, &value) == .success && value.boolValue
+  guard AXUIElementIsAttributeSettable(e, name as CFString, &value) == .success else { return nil }
+  return value.boolValue
 }
 func axFrame(_ e: AXUIElement) -> Rect? {
   guard let p = axCopy(e, kAXPositionAttribute), let s = axCopy(e, kAXSizeAttribute),
@@ -57,11 +61,26 @@ func axMinSize(_ e: AXUIElement) -> (Int, Int)? {
   return nil
 }
 func windowEligible(_ e: AXUIElement, subrole: String) -> Bool {
-  windowRoleIsEligible(
-    role: axString(e, kAXRoleAttribute), subrole: subrole,
-    fullScreen: axBool(e, "AXFullScreen"),
-    positionSettable: axSettable(e, kAXPositionAttribute),
-    sizeSettable: axSettable(e, kAXSizeAttribute))
+  windowEligibility(e, subrole: subrole) ?? false
+}
+// Unknown AX capability is not evidence that an admitted window disappeared.
+// Unsupported fullscreen attributes are normal; transport failures are not.
+func windowEligibility(_ e: AXUIElement, subrole: String) -> Bool? {
+  guard let role = axCopy(e, kAXRoleAttribute) as? String else { return nil }
+  var raw: CFTypeRef?
+  let error = AXUIElementCopyAttributeValue(e, "AXFullScreen" as CFString, &raw)
+  let fullScreen: Bool
+  if error == .attributeUnsupported { fullScreen = false }
+  else if error == .success, let value = raw as? Bool { fullScreen = value }
+  else { return nil }
+  guard let position = axSettableRead(e, kAXPositionAttribute) else { return nil }
+  if isManagedPopupSubrole(subrole) {
+    return windowRoleIsEligible(role: role, subrole: subrole, fullScreen: fullScreen,
+                               positionSettable: position, sizeSettable: false)
+  }
+  guard let size = axSettableRead(e, kAXSizeAttribute) else { return nil }
+  return windowRoleIsEligible(role: role, subrole: subrole, fullScreen: fullScreen,
+                             positionSettable: position, sizeSettable: size)
 }
 func axListedAsWindow(_ e: AXUIElement) -> Bool {
   reportsAsWindowRole(axString(e, kAXRoleAttribute)) && axFrame(e) != nil
@@ -482,8 +501,9 @@ final class AXStore {
         // window that no longer looks settable, and the engine would
         // forget which workspace owns it.
         if r.token == nil {
-          r.subrole = axString(e, kAXSubroleAttribute)
-          r.eligible = windowEligible(e, subrole: r.subrole)
+          if let subrole = axCopy(e, kAXSubroleAttribute) as? String { r.subrole = subrole }
+          r.eligible = retainingWindowEligibility(previous: r.eligible,
+            observed: windowEligibility(e, subrole: r.subrole))
         }
         // An owned window is driven to the last requested state until AX
         // agrees, in both directions. Hidden: if it comes back on its own

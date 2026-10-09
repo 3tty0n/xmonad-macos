@@ -69,6 +69,10 @@ func isManagedPopupSubrole(_ subrole: String) -> Bool {
 func reportsAsWindowRole(_ role: String) -> Bool {
   role == "AXWindow" || role == "AXTextField" || role == "AXTextArea"
 }
+// Preserve admission across a timeout; a new window still needs a positive read.
+func retainingWindowEligibility(previous: Bool, observed: Bool?) -> Bool {
+  observed ?? previous
+}
 // Tiling admission. Minimized need not be settable: emacs-mac undecorated
 // frames often have no AXMinimized. Empty subrole is a standard window that
 // has not filled the attribute in yet.
