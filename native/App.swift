@@ -849,7 +849,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       guard let self = self else { return }
       let wid = self.store.window(at: point)
       DispatchQueue.main.async {
-        guard self.running, let wid = wid, wid != self.hoverWid else { return }
+        guard self.running else { return }
+        guard let wid = wid else {
+          self.hoverWid = nil
+          return
+        }
+        guard wid != self.hoverWid else { return }
         self.hoverWid = wid
         self.sendPointerFocus(wid)
       }

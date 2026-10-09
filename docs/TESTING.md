@@ -31,6 +31,13 @@ a border the layout dropped.
 
 ## Manual matrix
 
+Popup-focus regression: `make check` and `make build` passed locally after
+switching hover targeting to AX hit-testing and treating a focused menu or
+unmanaged popup as takeover of an outstanding focus request. Portable tests
+cover transient-role classification only. Still needs desktop verification:
+right-click menus and Chrome extension popups stay open while the pointer
+moves inside them; normal hover focus resumes after closing them.
+
 Shipped config, one native Space per display, Stage Manager off, no unsaved
 work.
 

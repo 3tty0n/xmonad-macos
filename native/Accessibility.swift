@@ -660,11 +660,15 @@ final class AXStore {
       AXUIElementCopyElementAtPosition(system, Float(point.x), Float(point.y), &hit) == .success,
       let first = hit
     else { return nil }
+    // A menu can name its owning window through AXWindow. Do not walk through
+    // that transient surface and accidentally focus/raise the owner behind it.
+    if pointerFocusIsTransientRole(axString(first, kAXRoleAttribute)) { return nil }
     var candidates: [AXUIElement] = [first]
     if let w = axElement(first, kAXWindowAttribute) { candidates.append(w) }
     var current = first
     for _ in 0..<8 {
       guard let parent = axElement(current, kAXParentAttribute) else { break }
+      if pointerFocusIsTransientRole(axString(parent, kAXRoleAttribute)) { return nil }
       candidates.append(parent)
       current = parent
     }
@@ -674,6 +678,8 @@ final class AXStore {
       }) {
         return r
       }
+      // Do not traverse an unmanaged popup window to its managed owner.
+      if axString(e, kAXRoleAttribute) == kAXWindowRole { return nil }
     }
     return nil
   }
@@ -735,6 +741,28 @@ final class AXStore {
     return records.values.first { axSameWindow($0.element, window) }
   }
   func observedFocus() -> UInt64? { focusedRecord()?.wid }
+
+  // Menus may leave AXFocusedWindow pointing at their owner. Inspect the
+  // focused UI element as well before retrying a window-focus request.
+  private func transientOwnsFocus() -> Bool {
+    guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier else { return false }
+    let app = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(app, 0.15)
+    if let element = axElement(app, kAXFocusedUIElementAttribute) {
+      var current = element
+      for _ in 0..<8 {
+        if pointerFocusIsTransientRole(axString(current, kAXRoleAttribute)) { return true }
+        guard let parent = axElement(current, kAXParentAttribute) else { break }
+        current = parent
+      }
+    }
+    // A focused, unmanaged window (e.g. an extension popup) is user takeover,
+    // not evidence that the previous managed window needs raising again.
+    if let window = focusedAXWindow() {
+      return !records.values.contains { active.contains($0.wid) && axSameWindow($0.element, window) }
+    }
+    return false
+  }
 
   // A window on another workspace is parked against the bottom-right corner
   // of the display arrangement, keeping its size. Unlike AXMinimized this
@@ -889,7 +917,7 @@ final class AXStore {
       {
         // M-j/k leaves the previous window on screen. AX still naming it
         // is the request in flight, not the user taking over.
-        let userTook =
+        let userTook = transientOwnsFocus() ||
           current.map { w in
             w != id && shown.contains(w) && from.map { $0 != w } == true
           } == true
@@ -945,23 +973,15 @@ final class AXStore {
         x: CGFloat(r.x + r.width / 2),
         y: CGFloat(r.y + r.height / 2)))
   }
-  // The window under the pointer, topmost first. The window server's list is
-  // front to back, which AX does not report, so it decides the overlap.
+  // Resolve the actual AX surface under the pointer, not a filtered list of
+  // application windows that can omit the popup above them.
   func window(at point: CGPoint) -> UInt64? {
-    for (pid, rect) in cgVisibleFrames() {
-      guard point.x >= CGFloat(rect.x), point.x < CGFloat(rect.x + rect.width),
-        point.y >= CGFloat(rect.y), point.y < CGFloat(rect.y + rect.height)
-      else { continue }
-      if let r = records.values.first(where: {
-        $0.descriptor.pid == pid
-          && $0.frame.near(rect) && active.contains($0.wid) && $0.token == nil
-      }) {
-        return r.wid
-      }
-    }
-    // Chrome is absent from the on-screen CG list; AX hit-testing still
-    // finds the window under the pointer.
-    return windowAt(point)?.wid
+    // The filtered CG application-window list omits menus and popovers, so
+    // using it here clicks through them to their owner. AX resolves the actual
+    // topmost element, including Chrome's windows absent from that CG list.
+    // An unavailable or unmanaged hit is not permission to focus behind it.
+    guard let r = windowAt(point), r.token == nil else { return nil }
+    return r.wid
   }
   func close(_ id: UInt64) {
     guard let r = records[id], active.contains(id),

@@ -174,6 +174,12 @@ import Foundation
     check(
       mfocus == Rect(x: 100, y: 100, width: 200, height: 200),
       "movePointer focus decode")
+    for role in ["AXMenu", "AXMenuItem", "AXMenuBar", "AXMenuBarItem", "AXPopover", "AXSheet"] {
+      check(pointerFocusIsTransientRole(role), "transient \(role) blocks hover focus")
+    }
+    for role in ["AXWindow", "AXButton", "AXTextField", "AXWebArea", ""] {
+      check(!pointerFocusIsTransientRole(role), "ordinary \(role) is not a transient surface")
+    }
     var bad = plan
     bad.hide = [1]
     rejects(bad, "show/hide conflict")

@@ -1,6 +1,11 @@
 import Foundation
 
 // Protocol and safety logic have no AppKit dependency and are tested on Linux.
+// Transient AX surfaces must not redirect hover focus to their owning window.
+func pointerFocusIsTransientRole(_ role: String) -> Bool {
+  ["AXMenu", "AXMenuItem", "AXMenuBar", "AXMenuBarItem", "AXPopover", "AXSheet"].contains(role)
+}
+
 struct Rect: Codable, Equatable {
   var x: Int, y: Int, width: Int, height: Int
   func near(_ other: Rect, tolerance: Int = 2) -> Bool {
