@@ -62,6 +62,7 @@ the same names.
 | `Actions.Submap` | No `visualSubmap`; the grab lapses after 5 s |
 | `Hooks.ManageHelpers` / `InsertPosition` | No X11 property queries |
 | `Hooks.OnPropertyChange` / `DynamicProperty` | `onXPropertyChange`, `onTitleChange`, `onClassChange`, `dynamicTitle`; the hook runs when a snapshot's title or app/bundle differs from the previous one, so detection is snapshot-latency bound and a change that reverts between snapshots is missed. Takes the config like upstream's `onXPropertyChange`; `dynamicPropertyChange` is `onXPropertyChange` (no `Event`). Only `WM_NAME`, `_NET_WM_NAME` and `WM_CLASS` are known; the endo does not request focus |
+| `Hooks.Place` | `placeHook`, `placeFocused`, `smart`, `simpleSmart`, `fixed`, `underMouse`, `inBounds`, `withGaps`, `purePlaceWindow`. The engine has no pointer position, so `underMouse` uses the centre of the window's display; `smart` breaks overlap ties toward its corner argument |
 | `Hooks.WorkspaceHistory` | History survives a restart |
 | `Hooks.StatusBar.PP` | No `ppUrgent`; `ppOutput` defaults to stderr. Supports loggers and re-exports index/tag sorts |
 | `Hooks.StatusBar` | `withSB`, `statusBarGeneric`, `statusBarPipe`; adds `statusBarFile`, `statusBarSpawn`, `macMenuBarPP`. No `statusBarProp` / `withEasySB` / `sbCleanupHook` (X11 properties, struts) |

@@ -25,6 +25,7 @@ import GroupNavigationTests (runGroupNavigationTests)
 import MaximizeMinimizeTests (runMaximizeMinimizeTests)
 import MosaicTests (runMosaicTests)
 import OnPropertyChangeTests (runOnPropertyChangeTests)
+import PlaceTests (runPlaceTests)
 import ResizableThreeColTests (runResizableThreeColTests)
 import SpawnOnTests (runSpawnOnTests)
 import XMonad.Actions.UpdatePointer (updatePointer)
@@ -738,6 +739,7 @@ main = do
   runMaximizeMinimizeTests
   runMosaicTests
   runOnPropertyChangeTests
+  runPlaceTests conf initial
   runResizableThreeColTests
   runSpawnOnTests
   testUpdatePointer
