@@ -116,6 +116,7 @@ library
     XMonad.Actions.OnScreen
     XMonad.Actions.FindEmptyWorkspace
     XMonad.Actions.WindowGo
+    XMonad.Actions.SpawnOn
     XMonad.Actions.FloatKeys
     XMonad.Actions.Minimize
     XMonad.Hooks.ManageHelpers
@@ -150,4 +151,5 @@ test-suite core-tests
     MaximizeMinimizeTests
     MosaicTests
     ResizableThreeColTests
+    SpawnOnTests
   build-depends: xmonad-macos

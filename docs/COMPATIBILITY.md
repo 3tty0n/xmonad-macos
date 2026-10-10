@@ -57,6 +57,7 @@ the same names.
 | `Actions.PhysicalScreens` / `OnScreen` / `FocusNth` | |
 | `Actions.CopyWindow` | No `copiesPP` |
 | `Actions.FindEmptyWorkspace` / `FloatKeys` | |
+| `Actions.SpawnOn` | `spawnOn`, `spawnHere`, `spawnAndDo`, `manageSpawn`, `manageSpawnWithGC`; no Prompt helpers. Matches the window pid against the spawned shell and its descendants (read with `ps`), so apps started through `open` or already running never match; add `manageSpawn` to `manageHook` |
 | `Actions.WindowGo` | No `$BROWSER` / `$EDITOR` |
 | `Actions.Submap` | No `visualSubmap`; the grab lapses after 5 s |
 | `Hooks.ManageHelpers` / `InsertPosition` | No X11 property queries |

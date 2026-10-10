@@ -25,6 +25,7 @@ import GroupNavigationTests (runGroupNavigationTests)
 import MaximizeMinimizeTests (runMaximizeMinimizeTests)
 import MosaicTests (runMosaicTests)
 import ResizableThreeColTests (runResizableThreeColTests)
+import SpawnOnTests (runSpawnOnTests)
 import XMonad.Actions.UpdatePointer (updatePointer)
 import XMonad.Actions.Navigation2D
 import XMonad.Util.Loggers
@@ -736,6 +737,7 @@ main = do
   runMaximizeMinimizeTests
   runMosaicTests
   runResizableThreeColTests
+  runSpawnOnTests
   testUpdatePointer
   testShiftKeepsView
   putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, extensible state, magnifier, boring windows, scratchpads, no borders, key parser, protocol, directional navigation, loggers, workspace predicates and atomic recompile"

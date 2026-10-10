@@ -2,7 +2,7 @@
 -- helper is told about it by the plan that follows.
 module XMonad.Operations
   ( windows, modifyWindowSet, withWindowSet, withFocused, withUnfocused
-  , focus, kill, killWindow, refresh, spawn
+  , focus, kill, killWindow, refresh, spawn, spawnPID
   , float, floatLocation, floatWithRect, isClient
   , sendMessage, sendMessageWithNoRefresh, broadcastMessage, setLayout
   , screenWorkspace, pointWithin, scaleRationalRect
@@ -105,11 +105,17 @@ refresh = pure ()
 
 -- Detached, in its own process group, with output folded into the log.
 spawn :: String -> X ()
-spawn cmd = io $ do
+spawn = void . spawnPID
+
+-- The pid of the shell that was started, if it is still known.
+spawnPID :: String -> X (Maybe Int)
+spawnPID cmd = io $ do
   (_,_,_,handle) <- createProcess (shell cmd)
     { std_in=NoStream, std_out=UseHandle stderr, std_err=UseHandle stderr
     , create_group=True, close_fds=True }
+  started <- getPid handle
   void $ forkIO $ void $ waitForProcess handle
+  pure (fromIntegral <$> started)
 
 -- To the layout of the visible workspace only.
 sendMessage :: Message a => a -> X ()
