@@ -232,9 +232,10 @@ final class AXRecord {
   var eligible = false
   var subrole = ""
   var absent = 0
-  var lastTarget: Rect?
-  var lastActual: Rect?
-  var lastAttempt = Date.distantPast
+  // Adaptive retry policy for a target the application refuses to reach; see
+  // WriteBackoff. Replaces a fixed throttle so an impossible size does not
+  // keep re-issuing the same write for as long as plans keep arriving.
+  var backoff = WriteBackoff()
   var minSize: (Int, Int)?
   init(_ wid: UInt64, _ e: AXUIElement, _ app: AppDescriptor, _ frame: Rect) {
     self.wid = wid
@@ -373,6 +374,8 @@ final class AXStore {
     do {
       try journal.remove(token)
       r.token = nil
+      // Ownership ended: the next placement is real input, not a retry.
+      r.backoff.reset()
     } catch { logMessage("Cannot update recovery journal: \(error)") }
   }
   // A stale record adopts a replacement element only when the match is
@@ -404,6 +407,11 @@ final class AXStore {
   {
     latestGeneration = generation
     activeEpoch = epoch
+    // A changed display arrangement moves every window's real frame; a
+    // backoff computed for the old arrangement must not defer the new one.
+    if displays != self.displays {
+      for r in records.values { r.backoff.reset() }
+    }
     self.displays = displays
     let livePIDs = Set(apps.map(\.pid))
     // An application missing from one scan is not proof that it exited:
@@ -908,14 +916,18 @@ final class AXStore {
   private func move(_ r: AXRecord, _ target: Rect) {
     guard axMinimizedRead(r.element) == false, let actual = axFrame(r.element)
     else { return }
-    if actual.near(target) { return }
-    if r.lastTarget == target, r.lastActual == actual,
-      Date().timeIntervalSince(r.lastAttempt) < 2
-    {
+    // Already where the plan asks: nothing to write, and a later divergence
+    // must not inherit a backoff computed for a frame it has since left.
+    if actual.near(target) {
+      r.backoff.reset()
       return
     }
-    r.lastTarget = target
-    r.lastAttempt = Date()
+    let now = Date()
+    // A clamped window never reaches the target, so an identical, unmoved
+    // request waits longer each time instead of re-writing every scan. A
+    // changed target or observed frame is real input and attempts at once.
+    guard r.backoff.shouldAttempt(target: target, observed: actual, now: now) else { return }
+    r.backoff.note(target: target, observed: actual, at: now)
     var size = CGSize(width: target.width, height: target.height)
     var point = CGPoint(x: target.x, y: target.y)
     guard let sv = AXValueCreate(.cgSize, &size), let pv = AXValueCreate(.cgPoint, &point) else {
@@ -929,9 +941,10 @@ final class AXStore {
       let e3 = AXUIElementSetAttributeValue(r.element, kAXSizeAttribute as CFString, sv)
       return (e1, e2, e3, axFrame(r.element))
     }
-    let warn = r.lastActual != observed || (e1 != .success || e2 != .success || e3 != .success)
-    r.lastActual = observed
-    if warn, let observed = observed, !observed.near(target, tolerance: 4) {
+    // The log shares the backoff: the first write for a target/frame pair
+    // reports the constraint, and an unchanged stuck window stays quiet until
+    // the next due attempt rather than spamming once per scan.
+    if r.backoff.attempts == 1, let observed = observed, !observed.near(target, tolerance: 4) {
       logMessage(
         "Window \(r.wid) constrained requested=\(target) actual=\(observed), AX=\(e1.rawValue)/\(e2.rawValue)/\(e3.rawValue)"
       )
@@ -1063,7 +1076,7 @@ final class AXStore {
   // holds that frame, so this works for parked and minimized windows alike.
   private func restore(_ r: AXRecord) {
     show(r)
-    r.lastTarget = nil  // Never let the move throttle skip a restore.
+    r.backoff.reset()  // Never let the move backoff skip a restore.
     guard let entry = journal.entries.first(where: { $0.token == r.token }) else { return }
     move(r, entry.frame)
   }
@@ -1090,6 +1103,8 @@ final class AXStore {
     actionFirstSeen = [:]
     actionFrom = [:]
     pendingAck = nil
+    // A new epoch is real input: retry each window immediately.
+    for r in records.values { r.backoff.reset() }
   }
 
   // A new bridge has no valid old AX handles. Reattach only by an unambiguous

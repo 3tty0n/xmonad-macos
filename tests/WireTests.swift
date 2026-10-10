@@ -65,6 +65,7 @@ import Foundation
   static func main() throws {
     visibilityChecks()
     scanReadinessChecks()
+    writeBackoffChecks()
     let primary = Rect(x: 0, y: 0, width: 1512, height: 982)
     check(Rect.quartz(appKit: primary, primaryTop: 982) == primary, "primary origin")
     check(
@@ -679,5 +680,61 @@ import Foundation
     check(!scanReadiness(recordedLaunch: 1_700_000_000.25, observedLaunch: 0,
       frameReadable: true, eligibilityKnown: true),
       "a known record does not match an unread launch")
+  }
+  // An app that clamps a window (a minimum size) never reaches the requested
+  // frame, so an identical plan must keep writing but farther apart, and must
+  // never go permanently quiet. Real input always writes at once.
+  static func writeBackoffChecks() {
+    func at(_ seconds: Double) -> Date { Date(timeIntervalSince1970: seconds) }
+    let target = Rect(x: 0, y: 40, width: 900, height: 1100)
+    let clamped = Rect(x: 0, y: 40, width: 700, height: 900)
+    let moved = Rect(x: 20, y: 60, width: 900, height: 1100)
+    var backoff = WriteBackoff()
+    check(backoff.shouldAttempt(target: target, observed: clamped, now: at(0)),
+          "backoff writes a new target immediately")
+    backoff.note(target: target, observed: clamped, at: at(0))
+    check(backoff.attempts == 1, "backoff counts the first attempt")
+    check(!backoff.shouldAttempt(target: target, observed: clamped, now: at(1)),
+          "backoff defers an unchanged target before the first delay")
+    check(!backoff.shouldAttempt(target: target, observed: clamped, now: at(1.99)),
+          "backoff keeps deferring inside the first delay")
+    // 2s, then 4s, then 8s, then 16s, then the 30s cap.
+    let due = [2.0, 6.0, 14.0, 30.0, 60.0, 90.0]
+    for (index, when) in due.enumerated() {
+      check(backoff.shouldAttempt(target: target, observed: clamped, now: at(when)),
+            "backoff attempt \(index + 2) is due at \(when)s")
+      backoff.note(target: target, observed: clamped, at: at(when))
+      check(!backoff.shouldAttempt(target: target, observed: clamped, now: at(when + 0.5)),
+            "backoff waits again after attempt \(index + 2)")
+    }
+    check(backoff.attempts == due.count + 1, "backoff counts every attempt")
+    check(!backoff.shouldAttempt(target: target, observed: clamped, now: at(119)),
+          "backoff never widens past the cap")
+    check(backoff.shouldAttempt(target: target, observed: clamped, now: at(120)),
+          "backoff keeps attempting at the cap interval")
+    // A fresh target is real input: attempt now even mid-backoff.
+    check(backoff.shouldAttempt(target: moved, observed: clamped, now: at(120.1)),
+          "a changed target resets the backoff to immediate")
+    backoff.note(target: moved, observed: clamped, at: at(120.1))
+    // A changed observed frame is real input too.
+    check(backoff.shouldAttempt(target: moved, observed: target, now: at(120.2)),
+          "a changed observed frame resets the backoff to immediate")
+    backoff.note(target: moved, observed: target, at: at(120.2))
+    check(!backoff.shouldAttempt(target: moved, observed: target, now: at(121)),
+          "backoff still defers an unchanged pair")
+    check(backoff.shouldAttempt(target: target, observed: target, now: at(121)),
+          "a real move interleaved mid-backoff always attempts")
+    backoff.note(target: target, observed: target, at: at(121))
+    // reset() clears the schedule for the next real placement.
+    check(!backoff.shouldAttempt(target: target, observed: target, now: at(122)),
+          "backoff is engaged before reset")
+    backoff.reset()
+    check(backoff.shouldAttempt(target: target, observed: target, now: at(122)),
+          "reset restores an immediate attempt")
+    backoff.note(target: target, observed: target, at: at(122))
+    check(!backoff.shouldAttempt(target: target, observed: target, now: at(123)),
+          "reset restarts the first delay")
+    check(backoff.shouldAttempt(target: target, observed: target, now: at(124)),
+          "the restarted schedule is due after its own delay")
   }
 }

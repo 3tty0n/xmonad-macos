@@ -112,6 +112,58 @@ struct VisibilityGrace {
       && uncertainSince.map { max(0, now - $0) < uncertaintyLimit } != false
   }
 }
+// An application is allowed to refuse a geometry write: a window with a
+// minimum size clamps to that size, so the requested target is never reached.
+// Re-issuing the same size-position-size triple on a fixed interval then
+// wastes AX work and contends with the application's own UI for an outcome
+// that will not change. Identical, unmoved requests therefore back off — the
+// first write is immediate, then 2s, 4s, 8s and so on up to a cap — and reset
+// to immediate the moment any real input arrives. Like VisibilityGrace this is
+// deliberately pure and clock-injected so the policy is unit-tested off the
+// serial AX queue with a fake clock.
+struct WriteBackoff {
+  private(set) var target: Rect?
+  private(set) var observed: Rect?
+  // Writes issued for the current (target, observed) pair. 1 is the pair's
+  // first attempt, which is also the one allowed to log.
+  private(set) var attempts = 0
+  private var nextAttemptAt = Date.distantPast
+  static let firstDelay: TimeInterval = 2
+  static let maxDelay: TimeInterval = 30
+  // True when a write is due now: immediately for a target or observed frame
+  // not seen before, otherwise once the growing delay since the previous
+  // attempt for the same pair has elapsed. The pair is remembered so a later
+  // query for the same, unchanged state is deferred.
+  mutating func shouldAttempt(target t: Rect, observed o: Rect, now: Date) -> Bool {
+    guard self.target == t, self.observed == o else {
+      reset()
+      target = t
+      observed = o
+      nextAttemptAt = now
+      return true
+    }
+    return now >= nextAttemptAt
+  }
+  // Record an attempt for the pair and schedule the next one further out.
+  mutating func note(target t: Rect, observed o: Rect, at now: Date) {
+    if self.target != t || self.observed != o {
+      reset()
+      target = t
+      observed = o
+    }
+    attempts += 1
+    let delay = min(Self.maxDelay, Self.firstDelay * pow(2, Double(attempts - 1)))
+    nextAttemptAt = now.addingTimeInterval(delay)
+  }
+  // Forget the pair so the next write for this window is immediate again:
+  // a restore or release, a changed display arrangement, or a new epoch.
+  mutating func reset() {
+    target = nil
+    observed = nil
+    attempts = 0
+    nextAttemptAt = Date.distantPast
+  }
+}
 struct VisibilityDecision {
   var retained: Bool
   var actionable: Bool
