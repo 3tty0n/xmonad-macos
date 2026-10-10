@@ -31,9 +31,9 @@ maximizeWindowAndFocus w = maximizeWindow w >> windows (W.focusWindow w)
 -- The windows minimized on the current workspace, most recent first.
 withMinimized :: ([Window] -> X a) -> X a
 withMinimized action = do
-  minimized <- XS.gets minimizedStack
+  ms <- XS.gets minimizedStack
   onWorkspace <- withWindowSet (pure . W.index)
-  action (minimized `intersect` onWorkspace)
+  action (ms `intersect` onWorkspace)
 
 withLastMinimized :: (Window -> X ()) -> X ()
 withLastMinimized = withLastMinimized' . maybe (pure ())

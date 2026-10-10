@@ -8,7 +8,6 @@ module XMonad.Actions.SpawnOn
   , manageSpawn, manageSpawnWithGC, spawnedPids, matchSpawned
   ) where
 import Control.Exception (SomeException, try)
-import Control.Monad.IO.Class (liftIO)
 import qualified Data.Map.Strict as M
 import Data.List (unfoldr)
 import System.Process (readProcess)
