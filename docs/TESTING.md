@@ -21,8 +21,8 @@ Tests use `example/xmonad.hs`, staged in `build/config`, not your personal confi
 - Earlier desktop run: macOS 26.6.2, arm64, GHC 9.12.3, cabal 3.18.1.0,
   Swift 6.2. Handshake, tiling, `M-0`, Finder hide/restore, recompile/restart
   and quit were confirmed.
-- Latest local checks: `make check` and `make build` passed; 331 Swift checks,
-  491 static checks, Haskell tests and NDJSON integration.
+- Latest local checks: `make check` and `make build` passed; 371 Swift checks,
+  492 static checks, Haskell tests and NDJSON integration.
 - Recent regressions covered: transient AX eligibility reads, Settings focus
   takeover, popup-role classification and queued-hover invalidation. The log
   showed a known window briefly leaving with `eligible=false` and returning
@@ -30,29 +30,25 @@ Tests use `example/xmonad.hs`, staged in `build/config`, not your personal confi
 
 **Not desktop-verified:** hotplug, mixed Retina, native Space transitions,
 long AX-queue latency, journal crash recovery, Magnifier, BoringWindows,
-NamedScratchpad, NoBorders, Settings/popup focus fixes and transient-read
-  workspace/stack stability. Automated success does not establish these.
-+
-+Floating-drag border regression: a mod-drag moves the window with AX, and the
-+overlay is now repainted from the dragged frame on each step, so the focused
-+border and unfocused holes follow the window instead of staying put until the
-+next scan. The frame-patch helper is unit-tested; desktop confirmation of
-+dragging Settings or a floating panel is outstanding.
+NamedScratchpad, NoBorders, Settings/popup focus fixes, transient-read
+workspace/stack stability, floating-drag overlay repaint, and every native fix
+below. Automated success does not establish these.
 
-Additional regressions: fake-clock visibility grace, failed versus empty CG
-queries, conservative actionability and owned-window restore; Mosaic's real
-Expand/Shrink path, spacing, signed origins and checkpoint/layout reset.
-Mosaic factor-override tests verify old checkpoint shares are preserved while
-the multiplier changes, subsequent resizing uses it, and invalid overrides
-are rejected.
-One-time share repair is tested for preserving workspace stack, allowing later
-resizes, persisting completion through restart and supporting explicit reset.
-Wrapped Mosaic tests also cover a floating window preceding the tiled focus:
-resize uses the tiled index and ignores focus on a floating window, including
-with REFLECTX enabled.
-CG/hidden uncertainty has bounded retention; positive CG/app visibility can
-retain policy identity during AX timeouts, without permitting AX mutations.
-Sustained snapshot exclusion still loses membership and needs separate work.
+Additional regressions:
+- Native: fake-clock visibility grace and failed-versus-empty CG queries;
+  conservative actionability and owned-window restore; queued-hover
+  invalidation; popup/settings focus; floating-drag overlay repaint; the
+  constrained-write backoff; and the process-start-time readiness decision.
+- Haskell: Mosaic's real Expand/Shrink path, spacing, signed origins,
+  checkpoint/layout reset and one-time share repair; bounded retention of a
+  window omitted from a snapshot (membership kept, plan-omitted, re-appearance,
+  expiry, no premature removal, epoch rebuild).
+- The bridge log showed a known window briefly leaving with `eligible=false`
+  and returning with the same handle; a drag moved a floating frame without
+  repainting its overlay. Desktop reproduction remains outstanding.
+
+**Remaining limit:** a prolonged omission beyond the generation grace still
+drops membership; extending retention further needs a persistence contract.
 
 ## Desktop checklist
 

@@ -23,6 +23,11 @@ are left alone. Native full-screen suspends tiling.
 
 Epoch rebuilds carry workspace stacks, layouts, current workspace and floats
 for surviving windows. Failed AX eligibility reads retain the last known state.
+A window absent from a snapshot keeps its membership for a bounded grace but is
+kept out of every plan while unconfirmed, so a transient observation gap cannot
+move it to another workspace. A window whose process start time cannot be read
+is still tiled when its AX attributes are readable and the process instance
+matches. Repeated writes to a size an app clamps back off exponentially.
 
 ## Safety and recovery
 

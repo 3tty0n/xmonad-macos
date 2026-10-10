@@ -37,6 +37,7 @@ baseState = XState
   , commands = []
   , extensibleState = M.empty
   , menuBarText = Nothing
+  , unconfirmed = M.empty
   }
   where plain = ResizableThreeCol 1 (3/100) (1/2) []
 
