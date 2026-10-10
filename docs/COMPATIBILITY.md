@@ -38,6 +38,8 @@ the same names.
 | `Layout.TwoPane` / `Accordion` / `Spacing` | |
 | `Layout.Magnifier` | Magnified window is listed last, not first |
 | `Layout.BoringWindows` | |
+| `Layout.Maximize` | `maximize`, `maximizeWithPadding`, `maximizeRestore`; maximized window is listed last |
+| `Layout.Minimize` / `Actions.Minimize` | Logical minimize in `ExtensibleState` (not the Dock), hidden like any unlaid window; cooperates with `BoringWindows`; not persisted across restart |
 | `Layout.BinarySpacePartition` | `emptyBSP` and tree/resize/selection messages; no `SetGeometry` mouse resize or selection highlight |
 | `Layout.MultiToggle` / `MultiToggle.Instances` | `REFLECTX` / `REFLECTY` live in `Layout.Reflect` |
 | `Layout.NoBorders` | No `OnlyLayoutFloatBelow` / `OtherIndicated`, no deprecated `borderEventHook` |

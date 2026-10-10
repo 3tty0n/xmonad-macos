@@ -22,6 +22,7 @@ import XMonad.Layout.ResizableThreeCol
 import CycleRecentWSTests (runCycleRecentWSTests)
 import DynamicWorkspacesTests (runDynamicWorkspacesTests)
 import GroupNavigationTests (runGroupNavigationTests)
+import MaximizeMinimizeTests (runMaximizeMinimizeTests)
 import MosaicTests (runMosaicTests)
 import ResizableThreeColTests (runResizableThreeColTests)
 import XMonad.Actions.UpdatePointer (updatePointer)
@@ -732,6 +733,7 @@ main = do
   runGroupNavigationTests
   runDynamicWorkspacesTests
   runCycleRecentWSTests
+  runMaximizeMinimizeTests
   runMosaicTests
   runResizableThreeColTests
   testUpdatePointer

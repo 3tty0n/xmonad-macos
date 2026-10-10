@@ -92,6 +92,8 @@ library
     XMonad.Layout.LimitWindows
     XMonad.Layout.Gaps
     XMonad.Layout.BoringWindows
+    XMonad.Layout.Maximize
+    XMonad.Layout.Minimize
     XMonad.Layout.Magnifier
     XMonad.Layout.NoBorders
     XMonad.Actions.CycleWS
@@ -115,6 +117,7 @@ library
     XMonad.Actions.FindEmptyWorkspace
     XMonad.Actions.WindowGo
     XMonad.Actions.FloatKeys
+    XMonad.Actions.Minimize
     XMonad.Hooks.ManageHelpers
     XMonad.Hooks.InsertPosition
     XMonad.Hooks.StatusBar
@@ -144,6 +147,7 @@ test-suite core-tests
     CycleRecentWSTests
     DynamicWorkspacesTests
     GroupNavigationTests
+    MaximizeMinimizeTests
     MosaicTests
     ResizableThreeColTests
   build-depends: xmonad-macos
