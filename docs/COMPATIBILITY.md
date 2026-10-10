@@ -37,7 +37,7 @@ the same names.
 | `Layout.Renamed` / `Reflect` / `PerWorkspace` | |
 | `Layout.TwoPane` / `Accordion` / `Spacing` | |
 | `Layout.TwoPanePersistent` | Master stays left; the right pane keeps the last slave while the master is focused |
-| `Layout.MouseResizableTile` | `mouseResizableTile`, `mouseResizableTileMirrored`, `MRTMessage`, `Shrink` / `Expand` / `IncMasterN`; no draggers, so mouse resizing is unsupported and `draggerType` only sets the gap |
+| `Layout.MouseResizableTile` | `mouseResizableTile`, `mouseResizableTileMirrored`, `MRTMessage`, `Shrink` / `Expand` / `IncMasterN`; no draggers, so mouse resizing is unsupported; `draggerType` only sets the gap and `BordersDragger` assumes a zero border width |
 | `Layout.Magnifier` | Magnified window is listed last, not first |
 | `Layout.BoringWindows` | |
 | `Layout.Maximize` | `maximize`, `maximizeWithPadding`, `maximizeRestore`; maximized window is listed last |
