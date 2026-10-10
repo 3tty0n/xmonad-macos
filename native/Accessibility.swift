@@ -739,10 +739,11 @@ final class AXStore {
     pointerDrag = PointerDragSession(wid: r.wid, mode: mode, start: point, initial: frame)
     return r.wid
   }
-  func updatePointerDrag(to point: CGPoint) {
+  @discardableResult
+  func updatePointerDrag(to point: CGPoint) -> (UInt64, Rect)? {
     guard let drag = pointerDrag, actionable.contains(drag.wid), let r = records[drag.wid] else {
       pointerDrag = nil
-      return
+      return nil
     }
     let dx = Int((point.x - drag.start.x).rounded())
     let dy = Int((point.y - drag.start.y).rounded())
@@ -759,18 +760,20 @@ final class AXStore {
         width: max(floor.0, drag.initial.width + dx), height: max(floor.1, drag.initial.height + dy)
       )
     case .raise:
-      return
+      return nil
     }
     move(r, target)
     if let observed = axFrame(r.element) { r.frame = observed }
     relay.notify()
+    return (r.wid, r.frame)
   }
-  func endPointerDrag(at point: CGPoint) -> UInt64? {
+  @discardableResult
+  func endPointerDrag(at point: CGPoint) -> (UInt64, Rect)? {
     guard let drag = pointerDrag else { return nil }
-    updatePointerDrag(to: point)
+    let moved = updatePointerDrag(to: point)
     pointerDrag = nil
     relay.notify()
-    return drag.wid
+    return moved ?? records[drag.wid].map { (drag.wid, $0.frame) }
   }
   func cancelPointerDrag() { pointerDrag = nil }
   func fingerprints() -> [WindowPrint] {

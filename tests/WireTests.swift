@@ -134,6 +134,21 @@ import Foundation
     check(plan.action == 7 && plan.focusForMs == 400, "action sequencing fields")
     check(plan.borders == nil, "a plan without borders still decodes")
     check(plan.status == nil, "a plan without a PP status still decodes")
+    let moved = Rect(x: 640, y: 400, width: 500, height: 400)
+    let displayed = [
+      WindowInfo(
+        wid: 1, pid: 1, app: "Settings", bundle: "com.apple.systempreferences",
+        titleText: "Settings", onDisplay: 1, frame: Rect(x: 0, y: 24, width: 400, height: 400),
+        minimized: false, ownedHidden: false),
+      WindowInfo(
+        wid: 2, pid: 1, app: "Terminal", bundle: "com.apple.Terminal",
+        titleText: "shell", onDisplay: 1, frame: Rect(x: 0, y: 24, width: 800, height: 900),
+        minimized: false, ownedHidden: false),
+    ]
+    let patched = patchingFrame(displayed, wid: 1, frame: moved)
+    check(patched[0].frame == moved, "a dragged frame replaces the observation")
+    check(patched[1].frame == displayed[1].frame, "other windows keep their frames")
+    check(patched[0].wid == 1 && patched.count == displayed.count, "the set of windows is unchanged")
     let bjson = """
       {"type":"plan","generation":1,"epoch":1,
        "frames":[{"wid":1,"frame":{"x":0,"y":24,"width":800,"height":900}},

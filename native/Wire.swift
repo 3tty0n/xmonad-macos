@@ -197,6 +197,16 @@ func parkOrigin(screens: [Rect], window: Rect) -> Rect {
 func parkedOffDisplay(_ rect: Rect, _ displays: [DisplayInfo]) -> Bool {
   displays.map { $0.usable.intersectionArea(rect) }.reduce(0, +) <= 4096
 }
+// A mod-drag moves one window without a new observation. Patch its frame so
+// the overlay repaints from the frame the window is actually at.
+func patchingFrame(_ windows: [WindowInfo], wid: UInt64, frame: Rect) -> [WindowInfo] {
+  windows.map { window in
+    guard window.wid == wid else { return window }
+    var updated = window
+    updated.frame = frame
+    return updated
+  }
+}
 // The overlay follows a window that is already on a display. A restore keeps
 // ownedHidden true until a later scan agrees; only a pinned focus request may
 // trace through that interval. An owned-hidden window that is still painted

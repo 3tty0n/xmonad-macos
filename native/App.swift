@@ -717,7 +717,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     pointerPendingPoint = nil
     pointerUpdateInFlight = true
     axQueue.async { [weak self] in
-      self?.store.updatePointerDrag(to: point)
+      let moved = self?.store.updatePointerDrag(to: point)
       DispatchQueue.main.async {
         guard let self = self else { return }
         self.pointerUpdateInFlight = false
@@ -725,6 +725,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
           self.resetPointerCoalescer()
           return
         }
+        if let moved = moved { self.repaintDragged(moved.0, moved.1) }
         if let end = self.pointerPendingEnd {
           self.finishPointerDrag(end)
         } else {
@@ -743,17 +744,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     pointerUpdateInFlight = true
     axQueue.async { [weak self] in
       guard let self = self else { return }
-      _ = self.store.endPointerDrag(at: point)
+      let moved = self.store.endPointerDrag(at: point)
       DispatchQueue.main.async {
         self.pointerUpdateInFlight = false
         guard self.running else {
           self.resetPointerCoalescer()
           return
         }
+        if let moved = moved { self.repaintDragged(moved.0, moved.1) }
         self.scheduleScan()
         self.drainPointerUpdate()
       }
     }
+  }
+  // A mod-drag moves the window with AX directly, so no scan repaints the
+  // overlay until the next one. Follow the dragged frame here, or the focused
+  // border and the unfocused holes stay where the window used to be.
+  private func repaintDragged(_ wid: UInt64, _ frame: Rect) {
+    guard running, configured, !fullScreen, let snap = lastSnapshot else { return }
+    let windows = patchingFrame(snap.windows, wid: wid, frame: frame)
+    traceFocus(
+      ScanResult(windows: windows, focused: snap.focused, nativeFullScreen: false),
+      displays: displayInfo())
   }
   // A plan states every border it wants, so the widths of the previous plan
   // are dropped rather than merged: an entry nothing places is stale.

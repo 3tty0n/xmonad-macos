@@ -32,6 +32,12 @@ Tests use `example/xmonad.hs`, staged in `build/config`, not your personal confi
 long AX-queue latency, journal crash recovery, Magnifier, BoringWindows,
 NamedScratchpad, NoBorders, Settings/popup focus fixes and transient-read
   workspace/stack stability. Automated success does not establish these.
++
++Floating-drag border regression: a mod-drag moves the window with AX, and the
++overlay is now repainted from the dragged frame on each step, so the focused
++border and unfocused holes follow the window instead of staying put until the
++next scan. The frame-patch helper is unit-tested; desktop confirmation of
++dragging Settings or a floating panel is outstanding.
 
 Additional regressions: fake-clock visibility grace, failed versus empty CG
 queries, conservative actionability and owned-window restore; Mosaic's real
