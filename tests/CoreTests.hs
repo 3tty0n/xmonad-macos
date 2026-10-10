@@ -28,6 +28,8 @@ import OnPropertyChangeTests (runOnPropertyChangeTests)
 import PlaceTests (runPlaceTests)
 import ResizableThreeColTests (runResizableThreeColTests)
 import SpawnOnTests (runSpawnOnTests)
+import MouseResizableTileTests (runMouseResizableTileTests)
+import TwoPanePersistentTests (runTwoPanePersistentTests)
 import XMonad.Actions.UpdatePointer (updatePointer)
 import XMonad.Actions.Navigation2D
 import XMonad.Util.Loggers
@@ -742,6 +744,8 @@ main = do
   runPlaceTests conf initial
   runResizableThreeColTests
   runSpawnOnTests
+  runTwoPanePersistentTests
+  runMouseResizableTileTests
   testUpdatePointer
   testShiftKeepsView
   putStrLn "PASS: StackSet invariants, layouts, lifecycle, workspaces, hotplug, checkpoints, extensible state, magnifier, boring windows, scratchpads, no borders, key parser, protocol, directional navigation, loggers, workspace predicates and atomic recompile"

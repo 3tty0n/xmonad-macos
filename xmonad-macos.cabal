@@ -76,6 +76,8 @@ library
     XMonad.Layout.PerWorkspace
     XMonad.Layout.PerScreen
     XMonad.Layout.TwoPane
+    XMonad.Layout.TwoPanePersistent
+    XMonad.Layout.MouseResizableTile
     XMonad.Layout.Accordion
     XMonad.Layout.Column
     XMonad.Layout.Spiral
@@ -155,6 +157,8 @@ test-suite core-tests
     MosaicTests
     OnPropertyChangeTests
     PlaceTests
+    MouseResizableTileTests
+    TwoPanePersistentTests
     ResizableThreeColTests
     SpawnOnTests
   build-depends: xmonad-macos
