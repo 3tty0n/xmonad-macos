@@ -203,7 +203,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var lastSnapshot: Snapshot?
   private var dumpNext = false
   private var suppressShortcuts = UserDefaults.standard.bool(forKey: suppressDefaultsKey)
-  private var logKeys = UserDefaults.standard.bool(forKey: logKeysDefaultsKey)
+  private var logDiagnostics = UserDefaults.standard.bool(forKey: logKeysDefaultsKey)
+  private var lastPlanLog: String?
   private var pruneLogs =
     UserDefaults.standard.object(forKey: pruneLogsDefaultsKey) as? Bool ?? true
   private var axBusySince: Date?
@@ -400,8 +401,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     menu.addItem(NSMenuItem.separator())
     suppressItem = item("Disable macOS window shortcuts", #selector(toggleSuppressShortcuts))
     suppressItem.state = suppressShortcuts ? .on : .off
-    logKeysItem = item("Log key events", #selector(toggleLogKeys))
-    logKeysItem.state = logKeys ? .on : .off
+    logKeysItem = item("Log key and layout diagnostics", #selector(toggleLogKeys))
+    logKeysItem.state = logDiagnostics ? .on : .off
     pruneLogsItem = item("Delete logs older than 7 days", #selector(togglePruneLogs))
     pruneLogsItem.state = pruneLogs ? .on : .off
     menu.addItem(submenu("Settings", [suppressItem, logKeysItem, pruneLogsItem]))
@@ -448,7 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let enabled = !dryRun && running && configured && latestSent >= 0 && !fullScreen
     keyboard.setEnabled(enabled && tapReady)
     keyboard.setSuppressSystemShortcuts(suppressShortcuts)
-    keyboard.setLogKeys(logKeys)
+    keyboard.setLogKeys(logDiagnostics)
     pointer.setEnabled(enabled && pointerReady)
   }
   private func resume() {
@@ -631,10 +632,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       updateKeyState()
       scheduleScan()
     case .plan(let plan):
-      if logKeys {
-        logMessage(
-          "plan gen=\(plan.generation)/\(latestSent) epoch=\(plan.epoch)/\(currentEpoch) ws=\(plan.workspace) frames=\(plan.frames.map(\.wid)) hide=\(plan.hide)"
-        )
+      if logDiagnostics {
+        // P<gen>/<sent>:<epoch>/<current>:<ws>:<frames>:<hide>; repeats skipped.
+        let ids = { (w: [UInt64]) in w.map(String.init).joined(separator: ",") }
+        let body = "\(plan.epoch)/\(currentEpoch):\(plan.workspace):\(ids(plan.frames.map(\.wid))):\(ids(plan.hide))"
+        if body != lastPlanLog {
+          lastPlanLog = body
+          logMessage("P\(plan.generation)/\(latestSent):\(body)")
+        }
       }
       guard configured, !fullScreen, plan.epoch == currentEpoch, plan.generation == latestSent
       else { return }
@@ -1043,9 +1048,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
   @objc private func toggleLogKeys() {
-    logKeys = !logKeys
-    UserDefaults.standard.set(logKeys, forKey: logKeysDefaultsKey)
-    logKeysItem?.state = logKeys ? .on : .off
+    logDiagnostics = !logDiagnostics
+    lastPlanLog = nil
+    UserDefaults.standard.set(logDiagnostics, forKey: logKeysDefaultsKey)
+    logKeysItem?.state = logDiagnostics ? .on : .off
     updateKeyState()
   }
   @objc private func toggleSuppressShortcuts() {

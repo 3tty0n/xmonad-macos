@@ -117,9 +117,16 @@ final class KeyboardTap {
     let consume = emergency || (enabled && key != nil) || suppressed
     if consume { swallowed.insert(code) }
     // Opt-in diagnosis for "my modifier does nothing": modified keys only.
-    let report =
+    // K<mask>:<flags>[:<code>], hex; flags bound=1 grabbed=2 consumed=4
+    // tiling=8. Codes of unbound keys are omitted so typing is not recorded.
+    let report: String? =
       (logKeys && mask != 0)
-      ? "key code=\(code) mask=\(mask) bound=\(key != nil) grabbed=\(grabbed) consumed=\(consume) tiling=\(enabled)"
+      ? {
+        let flags =
+          (key != nil ? 1 : 0) | (grabbed ? 2 : 0) | (consume ? 4 : 0) | (enabled ? 8 : 0)
+        let head = "K\(String(mask, radix: 16)):\(String(flags, radix: 16))"
+        return key != nil ? "\(head):\(String(code, radix: 16))" : head
+      }()
       : nil
     lock.unlock()
     if let report = report { DispatchQueue.main.async { [weak self] in self?.onDebug?(report) } }
