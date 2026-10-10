@@ -89,6 +89,21 @@ func windowEligibility(_ e: AXUIElement, subrole: String) -> Bool? {
   return windowRoleIsEligible(role: role, subrole: subrole, fullScreen: fullScreen,
                              positionSettable: position, sizeSettable: size)
 }
+// A window is actionable only when its current geometry and eligibility were
+// actually read. The launch values are the process instance behind the PID:
+// a known pair that disagrees is PID reuse, so it must not inherit the old
+// window. sysctl can fail and leave the launch at 0, and refusing every such
+// window would silently stop tiling it, so an unknown launch on both sides is
+// still actionable; only two known values can contradict each other. One
+// known and one zero is not a match: the instance cannot be confirmed.
+func scanReadiness(recordedLaunch: Double, observedLaunch: Double,
+                   frameReadable: Bool, eligibilityKnown: Bool) -> Bool {
+  guard frameReadable, eligibilityKnown else { return false }
+  if recordedLaunch > 0 && observedLaunch > 0 {
+    return abs(recordedLaunch - observedLaunch) < 0.01
+  }
+  return recordedLaunch == 0 && observedLaunch == 0
+}
 func axListedAsWindow(_ e: AXUIElement) -> Bool {
   reportsAsWindowRole(axString(e, kAXRoleAttribute)) && axFrame(e) != nil
 }
@@ -518,8 +533,8 @@ final class AXStore {
           r.eligible = retainingWindowEligibility(previous: r.eligible,
             observed: eligibilityRead)
         }
-        if axFrame(e) != nil, eligibilityRead != nil,
-          app.launch > 0, abs(app.launch - r.descriptor.launch) < 0.01 {
+        if scanReadiness(recordedLaunch: r.descriptor.launch, observedLaunch: app.launch,
+          frameReadable: axFrame(e) != nil, eligibilityKnown: eligibilityRead != nil) {
           readsReady.insert(r.wid)
         }
       }

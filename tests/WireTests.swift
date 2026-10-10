@@ -64,6 +64,7 @@ import Foundation
   }
   static func main() throws {
     visibilityChecks()
+    scanReadinessChecks()
     let primary = Rect(x: 0, y: 0, width: 1512, height: 982)
     check(Rect.quartz(appKit: primary, primaryTop: 982) == primary, "primary origin")
     check(
@@ -629,5 +630,54 @@ import Foundation
     }
     check(grace[1]!.negativeReads == 0 && grace[1]!.uncertainSince == nil,
       "positive recovery clears counters and deadline")
+  }
+  static func scanReadinessChecks() {
+    // scanReadiness lives in native/Accessibility.swift, which the portable
+    // suite does not link (it needs AppKit/ApplicationServices). Mirror the
+    // pure predicate here so its truth table is pinned against regressions.
+    func scanReadiness(
+      recordedLaunch: Double, observedLaunch: Double,
+      frameReadable: Bool, eligibilityKnown: Bool
+    ) -> Bool {
+      guard frameReadable, eligibilityKnown else { return false }
+      if recordedLaunch > 0 && observedLaunch > 0 {
+        return abs(recordedLaunch - observedLaunch) < 0.01
+      }
+      return recordedLaunch == 0 && observedLaunch == 0
+    }
+    // A launch read that failed (0) must not silently disable tiling.
+    check(scanReadiness(recordedLaunch: 0, observedLaunch: 0,
+      frameReadable: true, eligibilityKnown: true),
+      "unknown launch with readable frame and eligibility is ready")
+    check(scanReadiness(recordedLaunch: 1_700_000_000.25, observedLaunch: 1_700_000_000.25,
+      frameReadable: true, eligibilityKnown: true),
+      "known matching launch is ready")
+    check(scanReadiness(recordedLaunch: 1_700_000_000.25, observedLaunch: 1_700_000_000.255,
+      frameReadable: true, eligibilityKnown: true),
+      "known launch inside tolerance is ready")
+    // PID reuse: two known instances that disagree must never be actionable.
+    check(!scanReadiness(recordedLaunch: 1_700_000_000.25, observedLaunch: 1_700_000_999.25,
+      frameReadable: true, eligibilityKnown: true),
+      "known mismatching launch is not ready")
+    check(!scanReadiness(recordedLaunch: 1_700_000_000.25, observedLaunch: 1_700_000_000.27,
+      frameReadable: true, eligibilityKnown: true),
+      "known launch past tolerance is not ready")
+    // Failed reads of the other critical attributes still suppress mutations.
+    check(!scanReadiness(recordedLaunch: 0, observedLaunch: 0,
+      frameReadable: false, eligibilityKnown: true),
+      "unknown frame is not ready")
+    check(!scanReadiness(recordedLaunch: 0, observedLaunch: 0,
+      frameReadable: true, eligibilityKnown: false),
+      "unknown eligibility is not ready")
+    check(!scanReadiness(recordedLaunch: 1_700_000_000.25, observedLaunch: 1_700_000_000.25,
+      frameReadable: false, eligibilityKnown: true),
+      "matching launch does not override an unread frame")
+    // One side unknown and the other known is not a confirmed instance.
+    check(!scanReadiness(recordedLaunch: 0, observedLaunch: 1_700_000_000.25,
+      frameReadable: true, eligibilityKnown: true),
+      "a zero record does not match a later nonzero launch")
+    check(!scanReadiness(recordedLaunch: 1_700_000_000.25, observedLaunch: 0,
+      frameReadable: true, eligibilityKnown: true),
+      "a known record does not match an unread launch")
   }
 }
