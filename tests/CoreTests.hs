@@ -26,10 +26,12 @@ import MaximizeMinimizeTests (runMaximizeMinimizeTests)
 import MosaicTests (runMosaicTests)
 import OnPropertyChangeTests (runOnPropertyChangeTests)
 import PlaceTests (runPlaceTests)
+import RefocusLastTests (runRefocusLastTests)
 import ResizableThreeColTests (runResizableThreeColTests)
 import SpawnOnTests (runSpawnOnTests)
 import MouseResizableTileTests (runMouseResizableTileTests)
 import TwoPanePersistentTests (runTwoPanePersistentTests)
+import WorkspaceNamesTests (runWorkspaceNamesTests)
 import XMonad.Actions.UpdatePointer (updatePointer)
 import XMonad.Actions.Navigation2D
 import XMonad.Util.Loggers
@@ -743,6 +745,8 @@ main = do
   runOnPropertyChangeTests
   runPlaceTests conf initial
   runResizableThreeColTests
+  runRefocusLastTests
+  runWorkspaceNamesTests
   runSpawnOnTests
   runTwoPanePersistentTests
   runMouseResizableTileTests

@@ -54,6 +54,8 @@ library
     XMonad.Util.SpawnOnce
     XMonad.Util.ExtensibleState
     XMonad.Hooks.WorkspaceHistory
+    XMonad.Hooks.RefocusLast
+    XMonad.Actions.WorkspaceNames
     XMonad.Util.CustomKeys
     XMonad.Util.Run
     XMonad.Util.NamedScratchpad
@@ -159,6 +161,8 @@ test-suite core-tests
     PlaceTests
     MouseResizableTileTests
     TwoPanePersistentTests
+    RefocusLastTests
     ResizableThreeColTests
     SpawnOnTests
+    WorkspaceNamesTests
   build-depends: xmonad-macos

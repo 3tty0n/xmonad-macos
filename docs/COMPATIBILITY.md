@@ -57,6 +57,7 @@ the same names.
 | `Actions.WithAll` / `SinkAll` / `RotSlaves` | |
 | `Actions.SwapWorkspaces` / `DwmPromote` / `Promote` | |
 | `Actions.PhysicalScreens` / `OnScreen` / `FocusNth` | |
+| `Actions.WorkspaceNames` | Names, `workspaceNamesPP`, `swapTo` / `swapWithCurrent`; show them in the menu bar via `macMenuBarPP (workspaceNamesPP def)`. No `renameWorkspace` (Prompt) or `workspaceNamesEwmh` (EWMH) |
 | `Actions.CopyWindow` | No `copiesPP` |
 | `Actions.FindEmptyWorkspace` / `FloatKeys` | |
 | `Actions.SpawnOn` | `spawnOn`, `spawnHere`, `spawnAndDo`, `manageSpawn`, `manageSpawnWithGC`; no Prompt helpers. Matches the window pid against the spawned shell and its descendants (read with `ps`), so apps started through `open` or already running never match; add `manageSpawn` to `manageHook` |
@@ -66,6 +67,7 @@ the same names.
 | `Hooks.OnPropertyChange` / `DynamicProperty` | `onXPropertyChange`, `onTitleChange`, `onClassChange`, `dynamicTitle`; the hook runs when a snapshot's title or app/bundle differs from the previous one, so detection is snapshot-latency bound and a change that reverts between snapshots is missed. Takes the config like upstream's `onXPropertyChange`; `dynamicPropertyChange` is `onXPropertyChange` (no `Event`). Only `WM_NAME`, `_NET_WM_NAME` and `WM_CLASS` are known; the endo does not request focus |
 | `Hooks.Place` | `placeHook`, `placeFocused`, `smart`, `simpleSmart`, `fixed`, `underMouse`, `inBounds`, `withGaps`, `purePlaceWindow`. The engine has no pointer position, so `underMouse` uses the centre of the window's display; `smart` breaks overlap ties toward its corner argument |
 | `Hooks.WorkspaceHistory` | History survives a restart |
+| `Hooks.RefocusLast` | `refocusLastLogHook`, `refocusLastWhen`, `refocusLastLayoutHook`, `isFloat`, `toggleFocus`, `swapWithLast`; no `shiftRL` / `refocusWhen`. Closing is detected on the next layout pass, and recents are not kept across a restart |
 | `Hooks.StatusBar.PP` | No `ppUrgent`; `ppOutput` defaults to stderr. Supports loggers and re-exports index/tag sorts |
 | `Hooks.StatusBar` | `withSB`, `statusBarGeneric`, `statusBarPipe`; adds `statusBarFile`, `statusBarSpawn`, `macMenuBarPP`. No `statusBarProp` / `withEasySB` / `sbCleanupHook` (X11 properties, struts) |
 | `Hooks.DynamicLog` | Re-exports `StatusBar.PP` plus `dynamicLog`; no xmobar/dzen launchers |
