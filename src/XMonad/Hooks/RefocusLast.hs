@@ -1,147 +1,158 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 -- Adapted from xmonad-contrib XMonad.Hooks.RefocusLast (BSD-3-Clause),
--- Copyright (c) 2018 Tim Schwartz and the Xmonad Community.
--- Closing is observed from the helper's snapshots, so the layout hook checks
--- each workspace on every layout pass: when the window recorded as focused is
--- gone, the previously focused one is focused instead of the stack neighbour.
--- Recents hold window ids, so they are not kept across a restart.
+-- Copyright (c) 2018 L. S. Leary and the Xmonad Community.
+-- There is no X11 event stream, so refocusLastWhen is a logHook rather than an
+-- event hook. A closed window is already gone from the window set by then, so
+-- the predicate is evaluated on each workspace's focused window on every pass
+-- and the last verdict is used when that window disappears. It records the
+-- recents itself: use it instead of refocusLastLogHook, not together with
+-- refocusLastLayoutHook, which would record the new focus first.
 module XMonad.Hooks.RefocusLast
-  ( refocusLastLogHook, refocusLastLayoutHook, refocusLastWhen, isFloat
-  , toggleFocus, swapWithLast
-  , RecentWins(..), RecentsMap(..), RefocusLastLayoutHook
+  ( refocusLastLogHook, refocusLastLayoutHook, refocusLastWhen
+  , refocusingIsActive, isFloat
+  , toggleRefocusing, toggleFocus, swapWithLast, refocusWhen, shiftRLWhen
+  , updateRecentsOn
+  , RecentWins(..), RecentsMap(..), RefocusLastLayoutHook(..)
+  , RefocusLastToggle(..)
+  , withRecentsIn
   ) where
+import Control.Monad (forM_, when)
 import qualified Data.Map.Strict as M
+import Data.Maybe (fromMaybe)
 import XMonad.Core
 import XMonad.Layout.LayoutModifier
-import XMonad.Operations (modifyWindowSet, windows)
+import XMonad.Operations (windows, withWindowSet)
 import qualified XMonad.StackSet as W
 import qualified XMonad.Util.ExtensibleState as XS
 
--- The focused window of a workspace and the one focused before it.
-data RecentWins = Empty | Single !Window | Double !Window !Window
-  deriving (Eq, Read, Show)
+data RecentWins = Recent { previous :: !Window, current :: !Window }
+  deriving (Show, Read, Eq)
 
 newtype RecentsMap = RecentsMap (M.Map WorkspaceId RecentWins)
+  deriving (Show, Read, Eq)
 
 instance ExtensionClass RecentsMap where
   initialValue = RecentsMap M.empty
-
--- Record the focus of every visible workspace; add it to the logHook.
-refocusLastLogHook :: X ()
-refocusLastLogHook = refocusLastWhen (pure True)
-
--- Like 'refocusLastLogHook', but a focused window the predicate rejects
--- forgets the history, so closing it refocuses the stack neighbour.
-refocusLastWhen :: X Bool -> X ()
-refocusLastWhen p = do
-  ws <- gets windowset
-  mapM_ (record ws) (W.current ws : W.visible ws)
-  where
-    record ws sc = case W.stack (W.workspace sc) of
-      Nothing -> setRecents tag Empty
-      Just st -> do
-        let w = W.focus st
-        ok <- if tag == W.currentTag ws then p else pure True
-        old <- recentsOf tag
-        setRecents tag (if ok then push w old else Single w)
-      where tag = W.tag (W.workspace sc)
-
-push :: Window -> RecentWins -> RecentWins
-push w r = case r of
-  Empty -> Single w
-  Single a | a == w -> r
-           | otherwise -> Double w a
-  Double a b | a == w -> r
-             | b == w -> Double w a
-             | otherwise -> Double w a
-
-recentsOf :: WorkspaceId -> X RecentWins
-recentsOf t = XS.gets $ \(RecentsMap m) -> M.findWithDefault Empty t m
-
-setRecents :: WorkspaceId -> RecentWins -> X ()
-setRecents t r = XS.modify $ \(RecentsMap m) ->
-  RecentsMap (if r == Empty then M.delete t m else M.insert t r m)
-
--- Whether the focused window of the current workspace is floating.
-isFloat :: X Bool
-isFloat = gets $ \s -> case W.peek (windowset s) of
-  Just w -> M.member w (W.floating (windowset s))
-  Nothing -> False
+  extensionType = PersistentExtension
 
 data RefocusLastLayoutHook a = RefocusLastLayoutHook
-  deriving (Read, Show)
+  deriving (Show, Read)
+
+instance LayoutModifier RefocusLastLayoutHook a where
+  modifyLayout _ w@(W.Workspace tg _ _) r = updateRecentsOn tg >> runLayout w r
+
+newtype RefocusLastToggle = RefocusLastToggle { refocusing :: Bool }
+  deriving (Show, Read, Eq)
+
+instance ExtensionClass RefocusLastToggle where
+  initialValue = RefocusLastToggle { refocusing = True }
+  extensionType = PersistentExtension
+
+-- The predicate's last verdict on each workspace's focused window.
+newtype Verdicts = Verdicts (M.Map WorkspaceId Bool)
+
+instance ExtensionClass Verdicts where
+  initialValue = Verdicts M.empty
+
+refocusLastLogHook :: X ()
+refocusLastLogHook = withWindowSet (updateRecentsOn . W.currentTag)
 
 refocusLastLayoutHook :: l a -> ModifiedLayout RefocusLastLayoutHook l a
 refocusLastLayoutHook = ModifiedLayout RefocusLastLayoutHook
 
-instance LayoutModifier RefocusLastLayoutHook Window where
-  modifyLayout _ w r = refocus w >>= \w' -> runLayout w' r
-
--- Refocus the previous window when the recorded focused one has gone, and
--- hand the inner layout the corrected stack.
-refocus :: W.Workspace WorkspaceId (l Window) Window
-        -> X (W.Workspace WorkspaceId (l Window) Window)
-refocus w = do
-  let tag = W.tag w
-  recents <- recentsOf tag
+-- Add to the logHook. When the recorded focused window of a visible workspace
+-- has been closed and the predicate held for it, focus the previous one.
+refocusLastWhen :: Query Bool -> X ()
+refocusLastWhen p = do
   ws <- gets windowset
-  let full = maybe [] W.integrate (stackOf tag ws)
-      focused = W.focus <$> stackOf tag ws
-  case recents of
-    Double cur prev
-      | cur `notElem` full, Just f <- focused, f /= prev, prev `elem` full -> do
-          setRecents tag (Single prev)
-          modifyWindowSet $ W.mapWorkspace $ \wk ->
-            if W.tag wk == tag then wk {W.stack = W.stack wk >>= toWindow prev}
-            else wk
-          requestFocus tag ws prev
-          pure w {W.stack = W.stack w >>= toWindow prev}
-    _ -> pure w
-  where
-    stackOf t ws = W.stack =<< lookupWs t ws
-    lookupWs t ws = case filter ((== t) . W.tag) (W.workspaces ws) of
-      x:_ -> Just x
-      [] -> Nothing
+  let visibleTags = map (W.tag . W.workspace) (W.current ws : W.visible ws)
+  Verdicts verdicts <- XS.get
+  forM_ visibleTags $ \tag ->
+    withRecentsIn tag () $ \lw cw ->
+      when (W.findTag cw ws == Nothing && M.findWithDefault False tag verdicts) $
+        focusPrevious tag lw
+  ws' <- gets windowset
+  new <- mapM (\tag -> do
+                 b <- maybe (pure False) (runQuery p) (W.peek (W.view tag ws'))
+                 pure (tag, b)) visibleTags
+  XS.put (Verdicts (M.fromList new))
+  mapM_ updateRecentsOn visibleTags
 
-requestFocus :: WorkspaceId -> WindowSet -> Window -> X ()
-requestFocus t ws prev
-  | t == W.currentTag ws = modify $ \s ->
-      let n = nextActionId s + 1
-      in s {nextActionId = n, pendingFocus = Just (n, prev)}
-  | otherwise = pure ()
+focusPrevious :: WorkspaceId -> Window -> X ()
+focusPrevious tag lw = do
+  ws <- gets windowset
+  let ws' = tryFocusIn tag [lw] ws
+  when (W.peek ws' /= W.peek ws) $ modify $ \s ->
+    let n = nextActionId s + 1
+    in s { windowset = ws'
+         , nextActionId = if tag == W.currentTag ws then n else nextActionId s
+         , pendingFocus = if tag == W.currentTag ws
+                            then (,) n <$> W.peek ws' else pendingFocus s }
 
--- Focus a window within a stack, if it is in it.
-toWindow :: Window -> W.Stack Window -> Maybe (W.Stack Window)
-toWindow x st
-  | x `elem` W.integrate st = Just (until ((== x) . W.focus) W.focusDown' st)
-  | otherwise = Just st
+refocusingIsActive :: Query Bool
+refocusingIsActive = liftX (XS.gets refocusing)
 
--- Focus the window that was focused before this one, on this workspace.
+isFloat :: Query Bool
+isFloat = ask >>= \w -> liftX (gets (M.member w . W.floating . windowset))
+
+toggleRefocusing :: X ()
+toggleRefocusing = XS.modify (RefocusLastToggle . not . refocusing)
+
 toggleFocus :: X ()
-toggleFocus = do
-  tag <- gets (W.currentTag . windowset)
-  r <- recentsOf tag
-  case r of
-    Double _ prev -> windows (W.focusWindow prev)
-    _ -> pure ()
+toggleFocus = withRecents $ \lw cw ->
+  when (cw /= lw) . windows $ tryFocus [lw]
 
--- Swap the focused window with the previously focused one in the stack;
--- the focus stays on the window that was focused.
 swapWithLast :: X ()
-swapWithLast = do
-  tag <- gets (W.currentTag . windowset)
-  r <- recentsOf tag
-  case r of
-    Double cur prev -> windows $ W.modify' $ \st ->
-      let ws = W.integrate st
-          swap x | x == cur = prev
-                 | x == prev = cur
-                 | otherwise = x
-          (up, rest) = break (== cur) (map swap ws)
-      in if prev `elem` ws
-           then case rest of
-             x:down -> W.Stack x (reverse up) down
-             [] -> st
-           else st
-    _ -> pure ()
+swapWithLast = withRecents $ \lw cw ->
+  when (cw /= lw) . windows . W.modify' $ \st ->
+    let swap w | w == lw = cw
+               | w == cw = lw
+               | otherwise = w
+    in W.Stack (swap (W.focus st)) (map swap (W.up st)) (map swap (W.down st))
+
+refocusWhen :: Query Bool -> WorkspaceId -> X (WindowSet -> WindowSet)
+refocusWhen p tag = withRecentsIn tag id $ \lw cw -> do
+  b <- runQuery p cw
+  pure (if b then tryFocusIn tag [cw, lw] else id)
+
+shiftRLWhen :: Query Bool -> WorkspaceId -> X (WindowSet -> WindowSet)
+shiftRLWhen p to = withWindowSet $ \ws -> do
+  refocus <- refocusWhen p (W.currentTag ws)
+  let shift = maybe id (W.shiftWin to) (W.peek ws)
+  pure (refocus . shift)
+
+updateRecentsOn :: WorkspaceId -> X ()
+updateRecentsOn tag = withWindowSet $ \ws ->
+  whenJust (W.peek $ W.view tag ws) $ \fw -> do
+    RecentsMap m <- XS.get
+    let insertRecent l c = XS.put . RecentsMap $ M.insert tag (Recent l c) m
+    case M.lookup tag m of
+      Just (Recent _ cw) -> when (cw /= fw) (insertRecent cw fw)
+      Nothing -> insertRecent fw fw
+
+tryFocus :: [Window] -> WindowSet -> WindowSet
+tryFocus wins = W.modify' $ \s ->
+  fromMaybe s (firstJust [focusIn w s | w <- wins])
+
+tryFocusIn :: WorkspaceId -> [Window] -> WindowSet -> WindowSet
+tryFocusIn tag wins ws =
+  W.view (W.currentTag ws) . tryFocus wins . W.view tag $ ws
+
+focusIn :: Window -> W.Stack Window -> Maybe (W.Stack Window)
+focusIn w s
+  | w `elem` W.integrate s = Just (until ((== w) . W.focus) W.focusDown' s)
+  | otherwise = Nothing
+
+firstJust :: [Maybe a] -> Maybe a
+firstJust xs = case [x | Just x <- xs] of
+  x:_ -> Just x
+  [] -> Nothing
+
+withRecentsIn :: WorkspaceId -> a -> (Window -> Window -> X a) -> X a
+withRecentsIn tag dflt f = do
+  RecentsMap m <- XS.get
+  maybe (pure dflt) (\(Recent lw cw) -> f lw cw) (M.lookup tag m)
+
+withRecents :: (Window -> Window -> X ()) -> X ()
+withRecents f = withWindowSet $ \ws -> withRecentsIn (W.currentTag ws) () f

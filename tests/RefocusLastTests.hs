@@ -15,7 +15,7 @@ check name ok = unless ok $ ioError $ userError ("FAIL: " ++ name)
 
 cfgWith :: X () -> XConfig Layout
 cfgWith hook = def
-  { layoutHook = Layout (refocusLastLayoutHook (layoutHook def))
+  { layoutHook = Layout (layoutHook def)
   , workspaces = ["1","2"], logHook = hook }
 
 display1 :: DisplayInfo
@@ -40,7 +40,7 @@ visited conf s = snd <$> runX conf s
 
 runRefocusLastTests :: IO ()
 runRefocusLastTests = do
-  let c = cfgWith refocusLastLogHook
+  let c = cfgWith (refocusLastWhen (pure True))
       conf = XConf c
   s1 <- visited conf (startWith c)
   check "focus follows the requests" (focusOf s1 == Just 3)
@@ -60,16 +60,43 @@ runRefocusLastTests = do
   check "a rejected window leaves the stack neighbour focused"
     (focusOf t2 == focusOf (closing 3 t1))
 
-  (isf, _) <- runX conf s1 isFloat
+  let cf = cfgWith (refocusLastWhen isFloat)
+  f1 <- visited (XConf cf) (startWith cf)
+  let floated = f1 { windowset = W.float 3 (W.RationalRect 0 0 1 1) (windowset f1) }
+  (_, f2) <- runX (XConf cf) floated (windows (W.focusWindow 3) >> makePlan >> pure ())
+  (_, f3) <- runX (XConf cf) f2 (windows (W.delete 3) >> makePlan >> pure ())
+  check "a closed float refocuses the previous window" (focusOf f3 == Just 1)
+  (_, f4) <- runX (XConf cf) f1 (windows (W.delete 3) >> makePlan >> pure ())
+  check "a closed tiled window is not refocused under isFloat"
+    (focusOf f4 /= Just 1)
+  (isf, _) <- runX conf s1 (runQuery isFloat 3)
   check "isFloat is false for a tiled window" (not isf)
   (isf2, _) <- runX conf s1
-    (windows (W.float 3 (W.RationalRect 0 0 1 1)) >> isFloat)
+    (windows (W.float 3 (W.RationalRect 0 0 1 1)) >> runQuery isFloat 3)
   check "isFloat is true for a floating window" isf2
+  (act, _) <- runX conf s1 (runQuery refocusingIsActive 3)
+  (off, _) <- runX conf s1 (toggleRefocusing >> runQuery refocusingIsActive 3)
+  check "toggleRefocusing flips refocusingIsActive" (act && not off)
+
+  (_, shifted) <- runX conf s1 $
+    shiftRLWhen (pure True) "2" >>= windows
+  check "shiftRLWhen moves the window and refocuses the previous one"
+    (focusOf shifted == Just 1 && W.findTag 3 (windowset shifted) == Just "2")
+  (_, shifted') <- runX conf s1 $
+    shiftRLWhen (pure False) "2" >>= windows
+  check "shiftRLWhen with a false predicate shifts like W.shift"
+    (focusOf shifted' == Just 2)
+
+  let lc = def { layoutHook = Layout (refocusLastLayoutHook (layoutHook def))
+               , workspaces = ["1","2"] }
+  l1 <- visited (XConf lc) (startWith lc)
+  (_, l2) <- runX (XConf lc) l1 toggleFocus
+  check "the layout hook records recents for toggleFocus" (focusOf l2 == Just 1)
 
   (_, g1) <- runX conf s1 toggleFocus
   check "toggleFocus focuses the previous window" (focusOf g1 == Just 1)
   (_, w1) <- runX conf s1 swapWithLast
-  check "swapWithLast keeps focus and exchanges positions"
-    (focusOf w1 == Just 3
+  check "swapWithLast exchanges the windows under the focus position"
+    (focusOf w1 == Just 1
      && W.index (windowset w1) == swapped (W.index (windowset s1)))
   where swapped = map (\x -> case x of 1 -> 3; 3 -> 1; y -> y)
