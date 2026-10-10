@@ -4,7 +4,7 @@
 module XMonad.MacOS.Engine
   ( xmonad, initialState, reconcile, floatObservedWindow, makePlan, rescreen
   , rescreenWith, checkpoint, restoreCheckpoint, handleEvent
-  , workspaceSummary ) where
+  , workspaceSummary, retentionGenerations ) where
 import XMonad.Core
 import XMonad.MacOS.Protocol
 import XMonad.MacOS.CLI (handleCommand)
@@ -17,7 +17,7 @@ import qualified Data.Set as S
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy.Char8 as BL
 import Data.Aeson
-import Data.List (find, nub, (\\))
+import Data.List (find, nub)
 import Data.Maybe (fromMaybe, mapMaybe)
 import Control.Applicative ((<|>))
 import Control.Monad (forM_, when, unless, guard)
@@ -27,7 +27,8 @@ import GHC.Generics (Generic)
 
 initialState :: XConfig Layout -> [DisplayInfo] -> XState
 initialState c ds = XState
-  { windowset=ws, windowInfo=M.empty, ignoredWindows=S.empty, generation=(-1), epoch=(-1)
+  { windowset=ws, windowInfo=M.empty, ignoredWindows=S.empty, unconfirmed=M.empty
+  , generation=(-1), epoch=(-1)
   , pendingFocus=Nothing, nextActionId=0
   , displayAffinity=M.fromList [(displayID (W.screenDetail sc), W.tag (W.workspace sc))
                                | sc <- W.screens ws]
@@ -115,7 +116,9 @@ reconcile snap = do
           && M.member w (W.floating ws) && onScreenWorkspace w ws) $
       modify $ \s -> s {pendingFocus=Nothing}
   followObservedFocus snap observed
-  unless restarted $ announceRemovals previous (M.keysSet observed)
+  unless restarted $ do
+    now <- gets windowset
+    announceRemovals previous now
 
 -- Windows worth managing: everything the helper reported, minus the ones the
 -- user minimized. A window we hid stays, or its workspace would be forgotten.
@@ -124,13 +127,19 @@ observedWindows snap = M.fromList
   [(wid wi,wi) | wi <- snapWindows snap, not (minimized wi) || ownedHidden wi]
 
 -- Replace the state with one that matches the snapshot: a different native
--- Space epoch starts over, displays are re-assigned, and windows that are
--- gone are dropped.
+-- Space epoch starts over, displays are re-assigned, and windows that are gone
+-- are dropped. A window the helper merely omitted is not gone at once: it keeps
+-- its workspace, stack and float for a bounded grace so a slow observation does
+-- not rebuild its configuration. While unconfirmed it stays out of every plan.
+retentionGenerations :: Int
+retentionGenerations = 3
+
 adoptSnapshot :: Snapshot -> XConfig Layout -> XState
               -> M.Map Window WindowInfo -> X ()
 adoptSnapshot snap c previous observed = put base
   { windowset = surviving
   , windowInfo = observed
+  , unconfirmed = pending
   , ignoredWindows = S.intersection live (ignoredWindows base)
   , generation = snapGeneration snap
   , epoch = snapEpoch snap
@@ -142,14 +151,34 @@ adoptSnapshot snap c previous observed = put base
   , extensibleState = extensibleState previous
   }
   where
-    base | snapEpoch snap /= epoch previous =
+    restarted = snapEpoch snap /= epoch previous
+    base | restarted =
              carryWorlds previous (initialState c (snapDisplays snap))
          | otherwise = previous
     live = M.keysSet observed
     (rescreened, affinity) = rescreenWith (snapDisplays snap) (windowset base)
       (M.toList $ displayAffinity base)
+    -- A window the helper reports as user-minimized is excluded from the
+    -- observation on purpose: drop it at once, exactly as before.
+    minimizedNow = S.fromList [wid wi | wi <- snapWindows snap
+                              , minimized wi, not (ownedHidden wi)]
+    -- Absent from the observation and not deliberately minimized, so possibly a
+    -- transient omission. The stored generation is when it disappeared.
+    missing = S.fromList [w | w <- W.allWindows rescreened
+                        , S.notMember w live, S.notMember w minimizedNow]
+    prior = M.filterWithKey (\w _ -> S.member w missing)
+              (if restarted then M.empty else unconfirmed previous)
+    stamped = M.union (M.fromList [(w, snapGeneration snap) | w <- S.toList missing
+                                     , M.notMember w prior]) prior
+    expired = M.filter (\seen -> snapGeneration snap - seen > retentionGenerations)
+                       stamped
+    pending = M.difference stamped expired
+    -- Only a user-minimized window or one whose grace has run out leaves now.
+    -- A window whose workspace vanished is absent from @rescreened@, so it is
+    -- not in @missing@ and its entry clears without touching the stack.
+    dropped = S.union minimizedNow (M.keysSet expired)
     surviving = foldr W.delete rescreened
-      [w | w <- W.allWindows rescreened, S.notMember w live]
+      [w | w <- W.allWindows rescreened, S.member w dropped]
 
 -- A native Space change or a display wake makes the helper re-announce the
 -- active Space, which bumps the epoch and rebuilds the world. The rebuild sees
@@ -234,10 +263,13 @@ followObservedFocus snap observed = whenJust (snapFocused snap) $ \w -> do
   when (known && visible && ours && onScreenWorkspace w (windowset s)) $ put s
     {windowset=W.focusWindow w (windowset s),pendingFocus=Nothing}
 
--- Layouts that track windows need to hear about the ones that closed.
-announceRemovals :: XState -> S.Set Window -> X ()
-announceRemovals previous live = forM_ gone (broadcastMessage . WindowRemoved)
-  where gone = [w | w <- W.allWindows (windowset previous), S.notMember w live]
+-- Layouts that track windows need to hear about the ones that really closed:
+-- a user-minimized window, or an omission whose grace has run out. A window
+-- still inside its grace stays in the set, so it is not announced yet.
+announceRemovals :: XState -> WindowSet -> X ()
+announceRemovals previous now = forM_ gone (broadcastMessage . WindowRemoved)
+  where gone = [w | w <- W.allWindows (windowset previous)
+                  , w `notElem` W.allWindows now]
 
 screenFor :: WindowInfo -> WindowSet -> Maybe WindowScreen
 screenFor wi ws =
@@ -283,12 +315,14 @@ makePlan = do
   s <- get
   let ws = windowset s
       shown = [w | Placement w _ <- placements]
+      pending = M.keysSet (unconfirmed s)
   pure Plan
     { planGeneration = generation s
     , planEpoch = epoch s
     , planFrames = placements
     , planBorders = [BorderWidth w n | (w,n) <- M.toList (borderOverrides s)]
-    , planHide = W.allWindows ws \\ shown
+    , planHide = [w | w <- W.allWindows ws, w `notElem` shown
+                 , S.notMember w pending]
     , planFocus = requestedFocus s shown
     , planAction = case requestedFocus s shown of
         Just _ -> fst <$> pendingFocus s
@@ -307,14 +341,20 @@ makePlan = do
 placeScreen :: WindowScreen -> X [Placement]
 placeScreen sc = do
   floats <- gets (W.floating . windowset)
+  -- A window whose absence is still unconfirmed is not actionable: leave it out
+  -- of both the tiled stack and the floating rectangles, so the plan neither
+  -- places nor hides it until it is observed again or its grace runs out.
+  pending <- gets (M.keysSet . unconfirmed)
   let ws = W.workspace sc
       area = screenRect (W.screenDetail sc)
-      tiled = ws {W.stack = W.stack ws >>= W.filter (`M.notMember` floats)}
+      tiled = ws {W.stack = W.stack ws >>= W.filter (\w -> M.notMember w floats
+                                                        && S.notMember w pending)}
   (tiledRects,newLayout) <- runLayout tiled area
   whenJust newLayout $ \l -> modify $ \s -> s {windowset = W.mapWorkspace
     (\cw -> if W.tag cw == W.tag ws then cw {W.layout=l} else cw) (windowset s)}
   let floatRects = [(w,fromRationalRect area rr)
-                   | w <- W.integrate' (W.stack ws), Just rr <- [M.lookup w floats]]
+                   | w <- W.integrate' (W.stack ws), Just rr <- [M.lookup w floats]
+                   , S.notMember w pending]
   pure [Placement w rect | (w,rect) <- tiledRects ++ floatRects]
 
 -- Focus is only ever requested for a window a key binding asked for, and only

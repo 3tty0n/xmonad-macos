@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 import XMonad
@@ -67,7 +69,7 @@ import qualified XMonad.Util.ExtensibleState as XS
 import XMonad.Hooks.WorkspaceHistory
 import qualified Data.Aeson.KeyMap as KM
 import Control.Exception (finally)
-import Control.Monad (forM_,unless)
+import Control.Monad (forM_,unless,foldM)
 import System.Directory
   ( copyFile, createDirectoryIfMissing, getPermissions, getTemporaryDirectory
   , removeFile, removePathForcibly, setOwnerExecutable, setPermissions )
@@ -98,6 +100,18 @@ instance ExtensionClass Counter where
   extensionType = PersistentExtension
 newtype Scratch = Scratch Int deriving (Eq, Show)
 instance ExtensionClass Scratch where initialValue = Scratch 0
+-- A layout that records every WindowRemoved broadcast, so a test can tell when
+-- the engine decides a window is really gone rather than transiently omitted.
+newtype Recorder a = Recorder [Window] deriving (Eq, Show, Read)
+instance LayoutClass Recorder Window where
+  handleMessage (Recorder _) m = do
+    case fromMessage m of
+      Just (WindowRemoved w) -> XS.modify (\(Removals rs) -> Removals (w:rs))
+      Nothing -> pure ()
+    pure Nothing
+  description _ = "Recorder"
+newtype Removals = Removals [Window] deriving (Eq, Show)
+instance ExtensionClass Removals where initialValue = Removals []
 main :: IO ()
 main = do
   forM_ [1..30::Int] $ \n -> do
@@ -257,6 +271,65 @@ main = do
   let userSnapshot=ownSnapshot {snapGeneration=3,snapWindows=[(wi 1 10){minimized=True,ownedHidden=False},wi 2 10,wi 3 20]}
   (_,sUser) <- runX conf sOwn (reconcile userSnapshot)
   check "user-minimized window is not managed" (not $ W.member 1 $ windowset sUser)
+  check "user-minimized windows are never retained"
+    (not (W.member 1 (windowset sUser)) && M.notMember 1 (unconfirmed sUser))
+  -- A window the helper omits is not deleted at once: it keeps its workspace,
+  -- stack and float for a bounded grace and is kept out of the plan, so nothing
+  -- places, hides or focuses it. This is the "configuration rebuilt" bug.
+  (_,floated2) <- runX conf s1 (floatObservedWindow 2)
+  check "grace fixture: window 2 is floating on workspace 1"
+    (M.member 2 (W.floating $ windowset floated2)
+     && W.findTag 2 (windowset floated2) == Just "1")
+  let omit2 g = snapshot {snapGeneration=g,snapWindows=[wi 1 10,wi 3 20]
+                         ,snapFocused=Just 1}
+  (_,pending2) <- runX conf floated2 (reconcile (omit2 2))
+  check "a transient omission keeps the window's workspace"
+    (W.findTag 2 (windowset pending2) == Just "1")
+  check "a transient omission keeps the window's float"
+    (M.member 2 (W.floating $ windowset pending2))
+  check "a transient omission is recorded as unconfirmed"
+    (M.member 2 (unconfirmed pending2) && M.notMember 2 (windowInfo pending2))
+  (pendingPlan,_) <- runX conf pending2 makePlan
+  check "an unconfirmed window is not placed"
+    (2 `notElem` [w | Placement w _ <- planFrames pendingPlan])
+  check "an unconfirmed window is not hidden" (2 `notElem` planHide pendingPlan)
+  check "an unconfirmed window cannot take focus" (planFocus pendingPlan == Nothing)
+  -- Re-appearance inside the grace clears the pending state and keeps the
+  -- original workspace and float.
+  let back2 = snapshot {snapGeneration=3,snapWindows=[wi 1 10,wi 2 10,wi 3 20]
+                       ,snapFocused=Just 1}
+  (_,restored2) <- runX conf pending2 (reconcile back2)
+  check "re-appearance clears the unconfirmed entry"
+    (M.notMember 2 (unconfirmed restored2))
+  check "re-appearance keeps the window's workspace"
+    (W.findTag 2 (windowset restored2) == Just "1")
+  check "re-appearance keeps the window's float"
+    (M.member 2 (W.floating $ windowset restored2))
+  (restoredPlan,_) <- runX conf restored2 makePlan
+  check "re-appearance places the floating window again"
+    (isJust (lookup 2 [(w,r) | Placement w r <- planFrames restoredPlan]))
+  -- A window omitted for longer than the grace is dropped exactly as before,
+  -- and its removal reaches the layouts only then.
+  (_,recState) <- runX conf s1 $ do
+    setLayout (Layout (Recorder []))
+    XS.put (Removals [])
+  let firstMissing = 2
+      lastGrace = firstMissing + retentionGenerations
+      firstDropped = lastGrace + 1
+  (_,withinGrace) <- runX conf recState (reconcile (omit2 firstMissing))
+  (removalsEarly,_) <- runX conf withinGrace (XS.get :: X Removals)
+  check "no removal is announced while the omission is within the grace"
+    (removalsEarly == Removals [])
+  retained <- foldM (\st g -> snd <$> runX conf st (reconcile (omit2 g)))
+    withinGrace [firstMissing+1 .. lastGrace]
+  check "the window stays through the last generation inside the grace"
+    (W.member 2 (windowset retained) && M.member 2 (unconfirmed retained))
+  (_,gDrop) <- runX conf retained (reconcile (omit2 firstDropped))
+  check "a prolonged omission drops the window from the window set"
+    (not (W.member 2 (windowset gDrop)) && M.notMember 2 (unconfirmed gDrop))
+  (removalsLate,_) <- runX conf gDrop (XS.get :: X Removals)
+  check "the removal is announced when the grace expires"
+    (removalsLate == Removals [2])
   (_,cycleState) <- runX conf s2 $ sendMessage NextLayout >> sendMessage NextLayout >> sendMessage NextLayout
   -- One screen, so a neighbour workspace is hidden rather than on a monitor.
   let single=initialState cfg [head displays]
@@ -400,6 +473,16 @@ main = do
      && W.findTag 3 (windowset woken)==Just "2")
   check "an epoch rebuild keeps the current workspace"
     (W.currentTag (windowset woken)==W.currentTag (windowset moved))
+  -- The same rebuild with a window the helper omitted: confirmed workspaces are
+  -- still carried, and the omission is retained rather than re-admitted.
+  let wakeOmit=wake {snapWindows=[wi 1 10,wi 3 20]}
+  (_,wokenOmit) <- runX conf moved (reconcile wakeOmit)
+  check "an epoch rebuild keeps carried workspaces for confirmed windows"
+    (W.findTag 1 (windowset wokenOmit)==Just "3"
+     && W.findTag 3 (windowset wokenOmit)==Just "2")
+  check "an epoch rebuild retains an omitted window on its workspace"
+    (W.findTag 2 (windowset wokenOmit)==Just "1"
+     && M.member 2 (unconfirmed wokenOmit))
   let saved=checkpoint s3
   case restoreCheckpoint cfg 1 displays (windowInfo s3) saved of
     Left e -> ioError $ userError e

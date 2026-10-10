@@ -67,6 +67,10 @@ data XState = XState
   { windowset :: WindowSet
   , windowInfo :: M.Map Window WindowInfo
   , ignoredWindows :: S.Set Window
+  -- Windows the helper omitted from its latest snapshot but that stay in the
+  -- window set for a bounded grace, keyed by the snapshot generation they went
+  -- missing. They are not placed, hidden, or focused while unconfirmed.
+  , unconfirmed :: M.Map Window Int
   , generation :: Int
   , epoch :: Int
   -- (action id, window) for an explicit focus request; Nothing once acked,
