@@ -107,6 +107,7 @@ reconcile snap = do
   when (generation previous < 0) $ restoreSaved snap c observed
   unless restarted $ followFloatDrags previous observed
   admitNewWindows c observed
+  unless restarted $ announceChanges c previous observed
   -- A newly opened floating window taking native focus is user takeover.
   -- Do not keep retrying an older hotkey/hover request for the window behind
   -- it. Ordinary stale observations of existing windows still retain intent.
@@ -249,6 +250,17 @@ admitNewWindows c observed = forM_ (M.elems observed) $ \wi -> do
       in st { windowset = managed
             , ignoredWindows = if W.member w managed then ignoredWindows st
                                else S.insert w (ignoredWindows st) }
+
+-- A window seen in both snapshots whose title or application changed. One
+-- that is new, or that a manageHook ignored, has nothing to re-manage.
+announceChanges :: XConfig Layout -> XState -> M.Map Window WindowInfo -> X ()
+announceChanges c previous observed =
+  forM_ (M.toList observed) $ \(w,new) -> do
+    managed <- gets (W.member w . windowset)
+    whenJust (M.lookup w (windowInfo previous)) $ \old ->
+      when (managed && changed old new) $ windowChangeHook c w old new
+  where changed a b = titleText a /= titleText b || app a /= app b
+                      || bundle a /= bundle b
 
 -- Follow the focus the helper observed, unless a request of our own is still
 -- outstanding for a different window. A window being hidden must not drag us

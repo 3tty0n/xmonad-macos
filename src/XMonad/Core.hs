@@ -48,6 +48,9 @@ data XConfig l = XConfig
   , manageHook :: ManageHook
   , startupHook :: X ()
   , logHook :: X ()
+  -- Run for a managed window whose title or application differs from the
+  -- previous snapshot; the stand-in for upstream's PropertyNotify events.
+  , windowChangeHook :: Window -> WindowInfo -> WindowInfo -> X ()
   -- The helper draws the border itself: another application's window cannot be
   -- given one, so it is an overlay following the focused window. Zero is off.
   , borderWidth :: Int

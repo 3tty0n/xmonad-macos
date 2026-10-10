@@ -25,6 +25,7 @@ defaultConfig = XConfig
   , manageHook = mempty
   , startupHook = pure ()
   , logHook = pure ()
+  , windowChangeHook = \_ _ _ -> pure ()
   , borderWidth = 1
   , focusedBorderColor = "#ff0000"
   , normalBorderColor = "#dddddd"

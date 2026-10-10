@@ -24,6 +24,7 @@ import DynamicWorkspacesTests (runDynamicWorkspacesTests)
 import GroupNavigationTests (runGroupNavigationTests)
 import MaximizeMinimizeTests (runMaximizeMinimizeTests)
 import MosaicTests (runMosaicTests)
+import OnPropertyChangeTests (runOnPropertyChangeTests)
 import ResizableThreeColTests (runResizableThreeColTests)
 import SpawnOnTests (runSpawnOnTests)
 import XMonad.Actions.UpdatePointer (updatePointer)
@@ -736,6 +737,7 @@ main = do
   runCycleRecentWSTests
   runMaximizeMinimizeTests
   runMosaicTests
+  runOnPropertyChangeTests
   runResizableThreeColTests
   runSpawnOnTests
   testUpdatePointer

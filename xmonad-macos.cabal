@@ -120,6 +120,8 @@ library
     XMonad.Actions.FloatKeys
     XMonad.Actions.Minimize
     XMonad.Hooks.ManageHelpers
+    XMonad.Hooks.OnPropertyChange
+    XMonad.Hooks.DynamicProperty
     XMonad.Hooks.InsertPosition
     XMonad.Hooks.StatusBar
     XMonad.Hooks.StatusBar.PP
@@ -150,6 +152,7 @@ test-suite core-tests
     GroupNavigationTests
     MaximizeMinimizeTests
     MosaicTests
+    OnPropertyChangeTests
     ResizableThreeColTests
     SpawnOnTests
   build-depends: xmonad-macos
