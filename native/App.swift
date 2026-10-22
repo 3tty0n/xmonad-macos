@@ -201,6 +201,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   // placed yet. Acting on that is what loses the workspace assignments.
   private var settledAt = Date.distantPast
   private var lastSnapshot: Snapshot?
+  // Front-to-back on-screen order from the last scan, for clipping borders.
+  private var lastStack: [StackEntry] = []
   private var dumpNext = false
   private var suppressShortcuts = UserDefaults.standard.bool(forKey: suppressDefaultsKey)
   private var logDiagnostics = UserDefaults.standard.bool(forKey: logKeysDefaultsKey)
@@ -790,7 +792,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     border.paint(
       focused: focused.map { spec($0.0, $0.1) },
-      rest: rest.map { spec($0.0, $0.1) })
+      rest: rest.map { spec($0.0, $0.1) }, stack: lastStack)
   }
   private func traceFocus(_ result: ScanResult, displays: [DisplayInfo]) {
     guard running, configured, !fullScreen else {
@@ -967,6 +969,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.fullScreen = result.nativeFullScreen
         self.updateKeyState()
+        self.lastStack = result.stack
         self.traceFocus(result, displays: displays)
         if self.fullScreen {
           self.setStatus("Native full-screen; tiling suspended")

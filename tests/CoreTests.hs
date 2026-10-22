@@ -166,6 +166,8 @@ main = do
   let circle=pureLayout Circle frame3 (W.Stack 2 [1] [3,4])
   check "Circle places every window" (length circle==4)
   check "Circle raises the focused window last" (fst (last circle)==2)
+  check "Circle stacks the master under the focused window, satellites below"
+    (map fst circle==[4,3,1,2])
   let bigger=fromMaybe Circle (pureMessage Circle (SomeMessage Expand))
       wide=lookup 1 (pureLayout bigger frame3 (W.Stack 2 [1] [3,4]))
       base=lookup 1 circle
@@ -705,6 +707,10 @@ main = do
                                (W.modify' (const (W.Stack 1 [] [])) ws3)) makePlan
   check "smartBorders drops a lone window's border"
     (planBorders planSolo==[BorderWidth 1 0])
+  let flWs = W.float 2 (W.RationalRect 0.1 0.1 0.5 0.5) ws3
+  (planFl,_) <- runX conf (base1 {windowset=flWs}) makePlan
+  check "the plan lists placed floating windows" (planFloating planFl==[2])
+  check "tiled-only plans list no floats" (null (planFloating planSolo))
   (planThree,_) <- runX conf (borderState (smartBorders tallW) ws3) makePlan
   check "smartBorders keeps borders when windows share the screen"
     (null (planBorders planThree))

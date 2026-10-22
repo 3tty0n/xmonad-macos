@@ -60,6 +60,8 @@ data Plan = Plan
   { planGeneration :: Int, planEpoch :: Int
   , planFrames :: [Placement], planHide :: [Window], planFocus :: Maybe Window
   , planBorders :: [BorderWidth]
+  -- The placed windows that are floating, in planFrames order.
+  , planFloating :: [Window]
   , planAction :: Maybe Int, planFocusForMs :: Int
   , planWorkspace :: String, planLayout :: String, planCheckpoint :: Value
   -- The display the current screen sits on, so the helper can follow it.
@@ -72,7 +74,7 @@ instance ToJSON Plan where
   toJSON p = object $
     ["type" .= ("plan" :: String),"generation" .= planGeneration p,"epoch" .= planEpoch p
     ,"frames" .= planFrames p,"hide" .= planHide p,"focus" .= planFocus p
-    ,"borders" .= planBorders p
+    ,"borders" .= planBorders p,"floating" .= planFloating p
     ,"action" .= planAction p,"focusForMs" .= planFocusForMs p
     ,"workspace" .= planWorkspace p,"layout" .= planLayout p,"checkpoint" .= planCheckpoint p
     ,"screen" .= planScreen p

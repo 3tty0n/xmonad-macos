@@ -29,7 +29,11 @@ final class BorderOverlay {
     self.normalColor = BorderOverlay.parse(normal) ?? NSColor(white: 0.85, alpha: 1)
     if self.width == 0 { hide() }
   }
-  func paint(focused: BorderSpec?, rest: [BorderSpec]) {
+  // `stack` is the window server's last observed front-to-back order. Each
+  // unfocused frame is clipped to the visible part of its window, so in an
+  // overlapping layout a window's frame is not drawn over the windows above
+  // it. Without an observation only the focused window is clipped out.
+  func paint(focused: BorderSpec?, rest: [BorderSpec], stack: [StackEntry] = []) {
     // One pass, one display arrangement: reading the primary display's top
     // edge per panel put a linear screen scan inside the per-window loop.
     let top = BorderOverlay.primaryTop()
@@ -40,12 +44,16 @@ final class BorderOverlay {
     let focusedFrame = focused.map {
       BorderOverlay.appKitFrame($0.rect, inset: inset, top: top)
     }
+    var painted: [UInt64: Rect] = [:]
+    for spec in rest + (focused.map { [$0] } ?? []) {
+      painted[spec.wid] = BorderOverlay.outset(spec.rect, by: spec.width)
+    }
     var next: [UInt64: NSPanel] = [:]
     if let spec = focused, spec.width > 0 {
       next[spec.wid] = place(
         panels.removeValue(forKey: spec.wid), spec: spec,
         frame: BorderOverlay.appKitFrame(spec.rect, inset: CGFloat(spec.width), top: top),
-        color: focusedColor, exclude: nil, front: true)
+        color: focusedColor, exclude: [], front: true)
     }
     let skip = focused?.wid
     for spec in rest
@@ -53,12 +61,14 @@ final class BorderOverlay {
       && next[spec.wid] == nil
     {
       let overlay = BorderOverlay.appKitFrame(spec.rect, inset: CGFloat(spec.width), top: top)
-      let hole = focusedFrame.flatMap {
-        BorderOverlay.hole(in: overlay, cutting: $0)
+      let above = (occluders(of: spec.wid, in: stack, painted: painted) ?? []).map {
+        BorderOverlay.appKitFrame($0, inset: 0, top: top)
       }
+      let holes = BorderOverlay.holes(
+        in: overlay, cutting: (focusedFrame.map { [$0] } ?? []) + above)
       next[spec.wid] = place(
         panels.removeValue(forKey: spec.wid), spec: spec,
-        frame: overlay, color: normalColor, exclude: hole, front: false)
+        frame: overlay, color: normalColor, exclude: holes, front: false)
     }
     for p in panels.values { retire(p) }
     panels = next
@@ -76,7 +86,7 @@ final class BorderOverlay {
   // so the window server never composites a frame with stale content.
   private func place(
     _ existing: NSPanel?, spec: BorderSpec, frame: NSRect,
-    color: NSColor, exclude: NSRect?, front: Bool
+    color: NSColor, exclude: [NSRect], front: Bool
   ) -> NSPanel {
     let p = existing ?? spare.popLast() ?? make()
     let level = NSWindow.Level(BorderOverlay.overlayLevel - (front ? 0 : 1))
@@ -130,14 +140,21 @@ final class BorderOverlay {
       x: CGFloat(r.x) - inset, y: top - CGFloat(r.y + r.height) - inset,
       width: CGFloat(r.width) + inset * 2, height: CGFloat(r.height) + inset * 2)
   }
-  // Overlay-local rectangle to clip out of an unfocused frame so the focused
-  // window (and its own overlay) is not covered. Nil when they do not overlap.
+  static func outset(_ r: Rect, by w: Int) -> Rect {
+    Rect(x: r.x - w, y: r.y - w, width: r.width + 2 * w, height: r.height + 2 * w)
+  }
+  // Overlay-local rectangle to clip out of an unfocused frame so a window
+  // above it (and its own overlay) is not covered. Nil when they do not
+  // overlap.
   static func hole(in overlay: NSRect, cutting other: NSRect) -> NSRect? {
     let hit = overlay.intersection(other.insetBy(dx: -1, dy: -1))
     guard !hit.isNull, hit.width > 0.5, hit.height > 0.5 else { return nil }
     return NSRect(
       x: hit.minX - overlay.minX, y: hit.minY - overlay.minY,
       width: hit.width, height: hit.height)
+  }
+  static func holes(in overlay: NSRect, cutting others: [NSRect]) -> [NSRect] {
+    others.compactMap { hole(in: overlay, cutting: $0) }
   }
   static func parse(_ hex: String) -> NSColor? {
     var text = hex.trimmingCharacters(in: .whitespaces)
@@ -153,19 +170,16 @@ final class BorderOverlay {
 private final class BorderView: NSView {
   private var color = NSColor.systemRed
   private var lineWidth: CGFloat = 1
-  private var exclude: NSRect?
+  private var exclude: [NSRect] = []
   // Reports whether anything changed, so an unchanged frame is not redrawn.
-  func update(color: NSColor, lineWidth: CGFloat, exclude: NSRect?) -> Bool {
+  func update(color: NSColor, lineWidth: CGFloat, exclude: [NSRect]) -> Bool {
     guard
       color != self.color || lineWidth != self.lineWidth
         || exclude != self.exclude
     else { return false }
     self.color = color
     self.lineWidth = lineWidth
-    if exclude != self.exclude {
-      self.exclude = exclude
-      updateMask()
-    }
+    self.exclude = exclude
     return true
   }
   override init(frame frameRect: NSRect) {
@@ -175,26 +189,8 @@ private final class BorderView: NSView {
     layer?.backgroundColor = CGColor.clear
   }
   required init?(coder: NSCoder) { fatalError("BorderView") }
-  override func setFrameSize(_ newSize: NSSize) {
-    super.setFrameSize(newSize)
-    updateMask()
-  }
-  private func updateMask() {
-    guard let hole = exclude, hole.width > 0, hole.height > 0 else {
-      layer?.mask = nil
-      return
-    }
-    let path = CGMutablePath()
-    path.addRect(bounds)
-    path.addRect(hole)
-    let mask = CAShapeLayer()
-    mask.fillRule = .evenOdd
-    mask.path = path
-    CATransaction.begin()
-    CATransaction.setDisableActions(true)
-    layer?.mask = mask
-    CATransaction.commit()
-  }
+  // Holes may overlap, so they are erased one by one: an even-odd mask of
+  // their union would paint the overlap back in.
   override func draw(_ dirty: NSRect) {
     guard lineWidth > 0 else { return }
     let path = NSBezierPath(
@@ -203,6 +199,8 @@ private final class BorderView: NSView {
     path.lineWidth = lineWidth
     color.setStroke()
     path.stroke()
+    NSColor.clear.setFill()
+    for hole in exclude { hole.fill(using: .copy) }
   }
 }
 #endif

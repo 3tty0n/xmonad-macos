@@ -333,6 +333,7 @@ makePlan = do
     , planEpoch = epoch s
     , planFrames = placements
     , planBorders = [BorderWidth w n | (w,n) <- M.toList (borderOverrides s)]
+    , planFloating = [w | w <- shown, M.member w (W.floating ws)]
     , planHide = [w | w <- W.allWindows ws, w `notElem` shown
                  , S.notMember w pending]
     , planFocus = requestedFocus s shown

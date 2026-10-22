@@ -13,6 +13,91 @@ import Foundation
       fatalError("FAIL: \(name)")
     } catch { count += 1 }
   }
+  static func stackChecks() {
+    func window(_ wid: UInt64, _ pid: Int32, _ frame: Rect) -> WindowInfo {
+      WindowInfo(
+        wid: wid, pid: pid, app: "a", bundle: "b", titleText: "t", onDisplay: 1,
+        frame: frame, minimized: false, ownedHidden: false)
+    }
+    // Circle on a 1000x1000 screen: a centred master and two satellites, one
+    // of another app; a panel nothing manages sits between them.
+    let master = Rect(x: 150, y: 150, width: 700, height: 700)
+    let east = Rect(x: 600, y: 300, width: 400, height: 400)
+    let west = Rect(x: 0, y: 300, width: 400, height: 400)
+    let panel = Rect(x: 500, y: 500, width: 100, height: 100)
+    let windows = [window(1, 10, master), window(2, 10, east), window(3, 20, west)]
+    let cg: [(Int32, Rect)] = [
+      (20, west), (30, panel), (10, Rect(x: 152, y: 151, width: 700, height: 700)), (10, east),
+    ]
+    let stack = observedStack(cg, windows: windows)
+    check(stack.map(\.wid) == [3, nil, 1, 2], "stack matches windows by PID and frame")
+    let painted: [UInt64: Rect] = [1: master, 2: east, 3: west]
+    check(occluders(of: 3, in: stack, painted: painted) == [], "the top window is not covered")
+    check(
+      occluders(of: 2, in: stack, painted: painted) == [west, panel, master],
+      "the bottom window is covered by everything in front of it")
+    check(occluders(of: 9, in: stack, painted: painted) == nil, "an unobserved window has no depth")
+    let moved = Rect(x: 0, y: 0, width: 300, height: 300)
+    check(
+      occluders(of: 1, in: stack, painted: [1: master, 3: moved]) == [moved, panel],
+      "a managed window covers where it is painted now")
+    check(
+      occluders(of: 1, in: stack, painted: [1: master]) == [panel],
+      "a managed window that is not painted covers nothing")
+    let fpids: [UInt64: Int32] = [1: 10, 2: 10, 3: 20, 4: 10, 5: 10]
+    check(
+      floatsToRaise(after: 1, floating: [3, 5, 4], pids: fpids) == [5, 4],
+      "only same-app floats are raised, in plan order")
+    check(
+      floatsToRaise(after: 4, floating: [5, 4], pids: fpids).isEmpty,
+      "a focused float raises nothing")
+    check(
+      floatsToRaise(after: 9, floating: [5], pids: fpids).isEmpty,
+      "an unknown window raises nothing")
+    let fr = Rect(x: 0, y: 0, width: 100, height: 100)
+    let far = Rect(x: 500, y: 500, width: 10, height: 10)
+    let fstack = [
+      StackEntry(wid: 5, frame: fr), StackEntry(wid: 1, frame: fr),
+      StackEntry(wid: 4, frame: fr), StackEntry(wid: 2, frame: far),
+    ]
+    check(
+      floatsCovered(by: 1, floating: [5, 4, 2], pids: fpids, stack: fstack) == [4],
+      "only a float below and overlapping the tile is covered")
+    check(
+      floatsCovered(by: 4, floating: [5, 1], pids: fpids, stack: fstack).isEmpty,
+      "nothing to raise when the floats are already in front")
+    check(
+      floatsCovered(by: 7, floating: [5], pids: fpids, stack: fstack).isEmpty,
+      "an unobserved window has no covered floats")
+    // An NS-port window sits a titlebar off its AX frame; another window of
+    // the same app matches exactly further back and must keep its match.
+    let emacs = Rect(x: 0, y: 0, width: 500, height: 500)
+    let other = Rect(x: 0, y: 28, width: 500, height: 472)
+    let loose = observedStack(
+      [(40, Rect(x: 0, y: 28, width: 500, height: 472)), (40, emacs)],
+      windows: [window(5, 40, emacs), window(6, 40, other)])
+    check(loose.map(\.wid) == [6, 5], "exact matches are claimed before loose ones")
+    let titlebar = observedStack(
+      [(40, Rect(x: 0, y: 40, width: 500, height: 460))], windows: [window(5, 40, emacs)])
+    check(titlebar.map(\.wid) == [5], "a titlebar-offset frame still matches")
+    let twins = observedStack(
+      [(40, Rect(x: 0, y: 40, width: 500, height: 460))],
+      windows: [window(5, 40, emacs), window(6, 40, Rect(x: 0, y: 0, width: 500, height: 510))])
+    check(twins.map(\.wid) == [nil], "an ambiguous loose match stays unmanaged")
+    // Overlay geometry: the bottom satellite's frame loses both covered parts.
+    let top: CGFloat = 1000
+    let overlay = BorderOverlay.appKitFrame(east, inset: 2, top: top)
+    let holes = BorderOverlay.holes(
+      in: overlay,
+      cutting: [west, panel, master].map { BorderOverlay.appKitFrame($0, inset: 0, top: top) })
+    check(holes.count == 2, "only overlapping windows cut holes")
+    check(
+      holes.last == NSRect(x: 0, y: 0, width: 253, height: 404),
+      "the master's hole is in overlay coordinates")
+    check(
+      BorderOverlay.outset(east, by: 2) == Rect(x: 598, y: 298, width: 404, height: 404),
+      "a covering window's own border is clipped out too")
+  }
   static func bundledInstallChecks() throws {
     let fm = FileManager.default
     let root = fm.temporaryDirectory.appendingPathComponent("xmonad-install-\(getpid())")
@@ -177,6 +262,15 @@ import Foundation
     let emsg = try JSONDecoder().decode(EngineMessage.self, from: edata)
     guard case .plan(let none) = emsg else { fatalError("empty borders") }
     check(none.borders?.isEmpty == true, "an empty border list is not nil")
+    check(none.floating == nil, "a plan without floating decodes as nil")
+    let fjson = """
+      {"type":"plan","generation":1,"epoch":1,"frames":[],"hide":[],
+       "workspace":"1","layout":"Tall","checkpoint":null,"floating":[4,2]}
+      """
+    guard case .plan(let fplan) = try JSONDecoder().decode(
+      EngineMessage.self, from: Data(fjson.utf8))
+    else { fatalError("decode floating") }
+    check(fplan.floating == [4, 2], "the floating list decodes in order")
     check(none.status == "[1] : Tall", "a logHook's PP status decodes")
     let mjson = """
       {"type":"movePointer","bounds":{"x":200,"y":200,"width":1,"height":1},
@@ -325,6 +419,7 @@ import Foundation
     check(
       BorderOverlay.hole(in: tiled, cutting: NSRect(x: 900, y: 0, width: 10, height: 10)) == nil,
       "disjoint frames keep the unfocused border")
+    stackChecks()
     try validateMouseBindings([MouseBind(mask: 68, button: 1, action: .move)])
     count += 1
     do {

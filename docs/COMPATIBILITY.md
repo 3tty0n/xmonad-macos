@@ -87,6 +87,21 @@ Held-modifier cycling is unavailable because modifier releases are not reported.
 `NoBorders` / `withBorder` require a matching helper; older helpers ignore
 per-window widths and use the configured default.
 
+Layouts list windows bottom to top (the reverse of upstream), but the helper
+does not restack them: only the focused window is raised. macOS has no public
+API to order another application's window without activating it
+(`kAXRaiseAction` reorders within the app and can change its main window), so
+in overlapping layouts (`Circle`, `Accordion`, `Roledex`, `Magnifier`, floats)
+the other windows keep the order the user last left them in. Borders follow
+the real order: an unfocused border is clipped to the visible part of its
+window, read from the window server's on-screen list.
+
+Floating windows stay in front of tiled windows only within one app: after
+focusing a tiled window, or after the user clicks one that an observed scan
+shows covering a float of the same app, the helper re-raises that app's floats
+(`kAXRaiseAction`, no activation) and restores main/focused window if AX moved
+it. Floats of other apps can be covered by a tiled window.
+
 ## Runtime
 
 | API | Status |

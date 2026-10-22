@@ -272,6 +272,71 @@ func cgHasWindow(pid: Int32, near rect: Rect, in windows: [(Int32, Rect)], toler
 {
   windows.contains { $0.0 == pid && $0.1.near(rect, tolerance: tolerance) }
 }
+// One on-screen window in the window server's front-to-back order: the managed
+// window it was matched to by PID and frame, or nil for anything else.
+struct StackEntry: Equatable {
+  var wid: UInt64?
+  var frame: Rect
+}
+// Exact frame matches are claimed first so a loose (titlebar-offset) match
+// cannot take a window that another entry shows exactly. A loose match must
+// be the only candidate; an ambiguous entry stays unmanaged.
+func observedStack(_ cg: [(Int32, Rect)], windows: [WindowInfo]) -> [StackEntry] {
+  var owner = [UInt64?](repeating: nil, count: cg.count)
+  var claimed = Set<UInt64>()
+  for (i, entry) in cg.enumerated() {
+    if let w = windows.first(where: {
+      $0.pid == entry.0 && !claimed.contains($0.wid) && $0.frame.near(entry.1, tolerance: 8)
+    }) {
+      owner[i] = w.wid
+      claimed.insert(w.wid)
+    }
+  }
+  for (i, entry) in cg.enumerated() where owner[i] == nil {
+    let loose = windows.filter {
+      $0.pid == entry.0 && !claimed.contains($0.wid) && cgMatchesAXFrame($0.frame, entry.1)
+    }
+    if loose.count == 1 {
+      owner[i] = loose[0].wid
+      claimed.insert(loose[0].wid)
+    }
+  }
+  return zip(owner, cg).map { StackEntry(wid: $0, frame: $1.1) }
+}
+// What covers a window: everything in front of it in the observed stack. A
+// managed window counts at the rectangle it is painted at now, which a plan
+// may have moved since the observation; one not painted (hidden, parked) is
+// skipped. Nil when the window itself was not observed, so its depth is
+// unknown.
+func occluders(of wid: UInt64, in stack: [StackEntry], painted: [UInt64: Rect]) -> [Rect]? {
+  guard let depth = stack.firstIndex(where: { $0.wid == wid }) else { return nil }
+  return stack[..<depth].compactMap { entry in
+    guard let other = entry.wid else { return entry.frame }
+    return painted[other]
+  }
+}
+// Floating windows of the focused window's own app to raise after it, in
+// plan order (last is top). Another app's windows cannot be ordered without
+// activating it, and a focused float needs no help staying above tiles.
+func floatsToRaise(after wid: UInt64, floating: [UInt64], pids: [UInt64: Int32]) -> [UInt64] {
+  guard let pid = pids[wid], !floating.contains(wid) else { return [] }
+  return floating.filter { pids[$0] == pid }
+}
+// The subset of those that the observed stack shows behind the tiled window
+// and overlapping it. Once raised they are in front, so a repeat scan finds
+// nothing to do.
+func floatsCovered(by wid: UInt64, floating: [UInt64], pids: [UInt64: Int32],
+  stack: [StackEntry]) -> [UInt64]
+{
+  guard let depth = stack.firstIndex(where: { $0.wid == wid }) else { return [] }
+  let frame = stack[depth].frame
+  let covered = Set(
+    stack[(depth + 1)...].compactMap { entry -> UInt64? in
+      guard let id = entry.wid, entry.frame.intersectionArea(frame) > 0 else { return nil }
+      return id
+    })
+  return floatsToRaise(after: wid, floating: floating, pids: pids).filter(covered.contains)
+}
 func cgShowsOriginal(pid: Int32, original: Rect, windows: [(Int32, Rect)], displays: [DisplayInfo])
   -> Bool
 {
@@ -328,6 +393,9 @@ struct Plan: Decodable {
   // the configured width for every window.
   var borders: [BorderOverride]?
   var workspaces: [WorkspaceInfo]?
+  // Placed floating windows, bottom to top. Absent from older engines, which
+  // leaves floats where the system put them.
+  var floating: [UInt64]?
   // Menu bar text rendered by a logHook's PP; nil keeps workspaceRow.
   var status: String?
   var screen: Int?

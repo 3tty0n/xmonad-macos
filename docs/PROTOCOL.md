@@ -50,6 +50,11 @@ intent. `epoch` bumps on a native Space switch; both `generation` and
 windows use the handshake default. Entries for unplaced windows are ignored,
 not rejected. Older helpers ignore this field.
 
+`floating`, when present, lists the placed windows that are floating, bottom
+to top. After focusing a tiled window the helper re-raises the floats of the
+same app, in that order. Older helpers ignore it; older engines omit it and
+nothing is raised.
+
 `status`, when present, is menu bar text a logHook rendered
 (`macMenuBarPP`); without it the helper builds its own workspace row.
 

@@ -116,8 +116,9 @@ split3HorizontallyBy middle f (Rectangle sx sy sw sh)
         r3w = sw-r1w-r2w
 -- Adapted from xmonad-contrib XMonad.Layout.Circle (BSD-3-Clause),
 -- Copyright (c) Peter De Wachter and the Xmonad Community. The master window
--- takes a centred area and the rest orbit it, overlapping. The focused window
--- is placed last, which is how this port raises a window.
+-- takes a centred area and the rest orbit it, overlapping. Upstream lists the
+-- focused window first, then master and satellites, top to bottom; this port
+-- lists bottom to top, so that order is reversed and the focused window last.
 --
 -- Upstream fixes the centre at 1/sqrt 2 of the frame. Here it is a field so
 -- Shrink and Expand can resize it; `Circle` is that layout with upstream's
@@ -129,8 +130,8 @@ pattern Circle = CircleRatio 0.03 0.707
 
 instance LayoutClass Circle a where
   pureLayout l r s = case splitAt (length $ W.up s) (circleLayout (circleFrac l) r ws) of
-    (before,focused:after) -> before ++ after ++ [focused]
-    (ps,[]) -> ps
+    (before,focused:after) -> reverse (before ++ after) ++ [focused]
+    (ps,[]) -> reverse ps
     where ws = W.integrate s
   pureMessage l m = resize <$> fromMessage m
     where resize Shrink = l {circleFrac = max 0.1 $ circleFrac l - circleDelta l}

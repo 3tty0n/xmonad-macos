@@ -258,6 +258,7 @@ final class NotificationRelay {
 }
 struct ScanResult {
   var windows: [WindowInfo], focused: UInt64?, nativeFullScreen: Bool
+  var stack: [StackEntry] = []
 }
 struct PointerDragSession {
   var wid: UInt64, mode: PointerMode, start: CGPoint, initial: Rect
@@ -316,6 +317,8 @@ final class AXStore {
   private var actionFirstSeen: [Int: Date] = [:]
   private var actionFrom: [Int: UInt64] = [:]
   private var pendingAck: (Int, UInt64?, Bool)?
+  private var floatOrder: [UInt64] = []
+  private var lastScanFocus: UInt64?
   init(journal: RecoveryJournal, relay: NotificationRelay) {
     self.journal = journal
     self.relay = relay
@@ -721,7 +724,12 @@ final class AXStore {
           active.contains($0.wid) && $0.lastMinimized != true && axSameWindow($0.element, window)
         })?.wid
     }
-    return ScanResult(windows: result, focused: focused, nativeFullScreen: fullScreen)
+    // The helper's own border panels sit at application levels too.
+    let me = ProcessInfo.processInfo.processIdentifier
+    let stack = observedStack(cg.filter { $0.0 != me }, windows: result)
+    if !fullScreen { raiseCoveredFloats(focused: focused, stack: stack) }
+    return ScanResult(
+      windows: result, focused: focused, nativeFullScreen: fullScreen, stack: stack)
   }
   private func windowAt(_ point: CGPoint) -> AXRecord? {
     let system = AXUIElementCreateSystemWide()
@@ -961,6 +969,7 @@ final class AXStore {
       return false
     }
     try PlanSafety.validate(p, active: active)
+    floatOrder = p.floating ?? []
     // Restore and place destinations before hiding sources. Only deliberate
     // policy focus requests may activate an app; ordinary scans never do.
     let dragging = pointerDrag?.wid
@@ -1012,6 +1021,8 @@ final class AXStore {
           AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, r.element)
           AXUIElementSetAttributeValue(r.element, kAXMainAttribute as CFString, kCFBooleanTrue)
           AXUIElementPerformAction(r.element, kAXRaiseAction as CFString)
+          raiseFloats(
+            floatsToRaise(after: id, floating: floatOrder, pids: floatPids()), keeping: r)
         }
         let observed = observedFocus() ?? current
         if observed == id || userTook {
@@ -1029,6 +1040,31 @@ final class AXStore {
     }
     if let screen = p.screen { followScreen(screen) }
     return true
+  }
+  private func floatPids() -> [UInt64: Int32] {
+    records.mapValues { $0.descriptor.pid }
+  }
+  // AXRaise on a sibling orders it within the app without activating it. It
+  // may still move the app's main or focused window, so focus is put back
+  // afterwards, without a raise that would cover the floats again.
+  private func raiseFloats(_ ids: [UInt64], keeping r: AXRecord) {
+    let floats = ids.compactMap { actionable.contains($0) ? records[$0] : nil }
+    guard !floats.isEmpty else { return }
+    for f in floats { AXUIElementPerformAction(f.element, kAXRaiseAction as CFString) }
+    if let now = focusedAXWindow(), axSameWindow(r.element, now) { return }
+    let app = AXUIElementCreateApplication(r.descriptor.pid)
+    AXUIElementSetAttributeValue(app, kAXFocusedWindowAttribute as CFString, r.element)
+    AXUIElementSetAttributeValue(r.element, kAXMainAttribute as CFString, kCFBooleanTrue)
+  }
+  // The user clicked a tiled window: bring its app's covered floats back in
+  // front, once, judged from the observed stack.
+  private func raiseCoveredFloats(focused: UInt64?, stack: [StackEntry]) {
+    defer { lastScanFocus = focused }
+    guard let id = focused, id != lastScanFocus, pointerDrag == nil, !floatOrder.isEmpty,
+      let r = records[id], actionable.contains(id)
+    else { return }
+    raiseFloats(
+      floatsCovered(by: id, floating: floatOrder, pids: floatPids(), stack: stack), keeping: r)
   }
   func takeAck() -> (action: Int, focused: UInt64?, expired: Bool)? {
     defer { pendingAck = nil }
