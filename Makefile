@@ -6,7 +6,7 @@
 # then the shipped example/xmonad.hs. Override with `make build CONFIG=<path>`.
 CONFIG ?=
 
-.PHONY: help bootstrap build install package run dry-run check icon clean
+.PHONY: help bootstrap build install package run dry-run check icon clean ax-fixture ax-test
 
 help:
 	@echo "make bootstrap   install the toolchain, build, and install"
@@ -15,6 +15,7 @@ help:
 	@echo "make package     build the release XMonadMac.app and its zip"
 	@echo "make run         launch XMonadMac (xmonad start)"
 	@echo "make check       Swift, Haskell, integration and packaging tests"
+	@echo "make ax-test     desktop AX fixture checks against the running helper"
 	@echo "make clean       remove build/ and dist-newstyle/"
 	@echo ""
 	@echo "Once installed, use xmonad for everything else:"
@@ -31,5 +32,7 @@ package: ; ./scripts/package.sh
 run: ; "$(HOME)/.local/bin/xmonad" start
 dry-run: ; "$(HOME)/.local/bin/xmonad" start --dry-run
 check: ; ./scripts/test-portable.sh && ./scripts/test.sh
+ax-fixture: ; ./scripts/build-ax-fixture.sh
+ax-test: ; ./scripts/test-ax.sh --allow-desktop
 icon: ; ./scripts/make-icon.sh
 clean: ; rm -rf build dist-newstyle
