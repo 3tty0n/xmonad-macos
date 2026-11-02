@@ -17,7 +17,7 @@ conf = XConf cfg
 
 info :: Int -> WindowInfo
 info p = WindowInfo 7 p "App" "org.app" "t" 10 (Rectangle 0 24 100 100)
-                    False False "AXStandardWindow"
+                    False False "AXStandardWindow" False
 
 -- Window 7 sits on workspace "1" and belongs to process p.
 withWindow :: Int -> XState

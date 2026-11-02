@@ -33,14 +33,38 @@ struct Paths {
   }
 }
 let commandNotification = Notification.Name("org.xmonad.XMonadMac.command")
-func descriptors() -> [AppDescriptor] {
-  NSWorkspace.shared.runningApplications.compactMap { app in
-    guard app.activationPolicy == .regular, app.processIdentifier != getpid() else { return nil }
+// Windows of regular apps, plus a non-Apple accessory app while it owns an
+// on-screen window or still has a window policy knows about. An LSUIElement
+// panel such as Box Drive's integration window is a real surface with no Dock
+// icon; ignoring it leaves it unmanaged, unfocused and behind the tiles.
+func descriptors(keeping known: Set<pid_t> = []) -> [AppDescriptor] {
+  let windowPIDs = onScreenApplicationPIDs()
+  return NSWorkspace.shared.runningApplications.compactMap { app in
+    let pid = app.processIdentifier
+    guard pid != getpid() else { return nil }
+    let bundle = app.bundleIdentifier ?? ""
+    let accessory: Bool
+    switch app.activationPolicy {
+    case .regular:
+      accessory = false
+    case .accessory:
+      // com.apple.* accessory agents are system UI (Spotlight, Control
+      // Center, authorization prompts); they are not tiling clients. An
+      // anonymous agent has no bundle to identify its window either.
+      guard
+        accessoryAppIsManaged(
+          bundle: bundle, hasOnScreenWindow: windowPIDs.contains(pid),
+          known: known.contains(pid))
+      else { return nil }
+      accessory = true
+    default:
+      return nil
+    }
     return AppDescriptor(
-      pid: app.processIdentifier, name: app.localizedName ?? "",
-      bundle: app.bundleIdentifier ?? "",
+      pid: pid, name: app.localizedName ?? "",
+      bundle: bundle,
       launch: app.launchDate?.timeIntervalSince1970 ?? processStartTime(app.processIdentifier),
-      hidden: app.isHidden)
+      hidden: app.isHidden, accessory: accessory)
   }
 }
 func displayInfo() -> [DisplayInfo] {
@@ -944,7 +968,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // An empty application list means the system is not answering yet,
     // as after a display wake. Scanning on it would report a world with no
     // windows in it.
-    let apps = descriptors()
+    // An accessory app is only in the list while it owns a window (known
+    // PIDs are kept) so an idle menu-bar helper costs no AX timeout.
+    let knownPIDs = Set(lastSnapshot?.windows.map { $0.pid } ?? [])
+    let apps = descriptors(keeping: knownPIDs)
     guard !apps.isEmpty else {
       scheduleScan()
       return

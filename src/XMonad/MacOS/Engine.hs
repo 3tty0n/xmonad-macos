@@ -9,7 +9,7 @@ import XMonad.Core
 import XMonad.MacOS.Protocol
 import XMonad.MacOS.CLI (handleCommand)
 import XMonad.Operations (broadcastMessage, windows)
-import XMonad.ManageHook ((-->), doFloat)
+import XMonad.ManageHook ((-->), doFloat, isAccessory)
 import XMonad.Hooks.ManageHelpers (isDialog)
 import qualified XMonad.StackSet as W
 import qualified Data.Map.Strict as M
@@ -110,12 +110,14 @@ reconcile snap = do
   unless restarted $ announceChanges c previous observed
   -- A newly opened floating window taking native focus is user takeover.
   -- Do not keep retrying an older hotkey/hover request for the window behind
-  -- it. Ordinary stale observations of existing windows still retain intent.
+  -- it. A request for that same new window (an accessory app's panel) stands.
   whenJust (snapFocused snap) $ \w -> do
     ws <- gets windowset
     when (not (W.member w (windowset previous))
           && M.member w (W.floating ws) && onScreenWorkspace w ws) $
-      modify $ \s -> s {pendingFocus=Nothing}
+      modify $ \s -> case pendingFocus s of
+        Just (_, target) | target /= w -> s {pendingFocus=Nothing}
+        _ -> s
   followObservedFocus snap observed
   unless restarted $ do
     now <- gets windowset
@@ -244,12 +246,22 @@ admitNewWindows c observed = forM_ (M.elems observed) $ \wi -> do
     put s {windowset=W.view here . W.insertUp w . W.view target $ ws}
     -- Dialogs float by default. The user's manageHook runs afterwards, so
     -- doIgnore still removes them and doSink can put one in the tiling.
-    Endo hook <- runQuery (manageHook c <> (isDialog --> doFloat)) w
+    Endo hook <- runQuery
+      (manageHook c <> (isDialog --> doFloat) <> (isAccessory --> doFloat)) w
     modify $ \st ->
       let managed = hook (windowset st)
       in st { windowset = managed
             , ignoredWindows = if W.member w managed then ignoredWindows st
                                else S.insert w (ignoredWindows st) }
+    -- A window of an accessory app has no ordinary activation path: the app
+    -- has no Dock icon and macOS may leave its panel behind the active app.
+    -- Ask the helper to activate and raise the newly shown float. A regular
+    -- dialog takes native focus on its own and needs no request.
+    ws <- gets windowset
+    when (accessoryApp wi && W.member w ws && M.member w (W.floating ws)) $
+      modify $ \st -> st
+        { pendingFocus = Just (nextActionId st + 1, w)
+        , nextActionId = nextActionId st + 1 }
 
 -- A window seen in both snapshots whose title or application changed. One
 -- that is new, or that a manageHook ignored, has nothing to re-manage.
@@ -581,10 +593,15 @@ handleEvent keymap event = case event of
   SnapshotEvent snap -> reconcile snap
   MouseFloatEvent w -> floatObservedWindow w
   -- Focus follows the mouse only when the helper is configured to report it.
+  -- A hover over the window that already has policy focus is not a request:
+  -- raising it would activate its app and push an unmanaged panel in front
+  -- (Box Drive's integration window) to the back.
   PointerFocusEvent w -> do
-    known <- gets (W.member w . windowset)
-    onScreen <- gets (onScreenWorkspace w . windowset)
-    when (known && onScreen) $ windows (W.focusWindow w)
+    s <- get
+    let known = W.member w (windowset s)
+        onScreen = onScreenWorkspace w (windowset s)
+        alreadyFocused = W.peek (windowset s) == Just w
+    when (known && onScreen && not alreadyFocused) $ windows (W.focusWindow w)
   -- A bound key is the one thing that may ask the helper to change focus.
   KeyEvent m k grabbed -> do
     pending <- gets keyGrab

@@ -52,6 +52,10 @@ struct WindowInfo: Codable, Equatable {
   // AX subrole. Standard windows are AXStandardWindow; dialogs and
   // floating panels use the popup subroles below. Missing in old tests.
   var subrole: String = "AXStandardWindow"
+  // The window belongs to an accessory (LSUIElement) application. Such a
+  // window has no Dock icon or app-switcher entry, so policy floats it and
+  // brings a newly shown one forward itself.
+  var accessory: Bool = false
 }
 // Dialogs and floating panels the helper will manage as windows. Sheets and
 // unknown subroles stay unmanaged: a sheet is tied to its parent.
@@ -201,16 +205,27 @@ func windowVisibilityDecision(known: Bool, owned: Bool, orphaned: Bool,
 // Tiling admission. Minimized need not be settable: emacs-mac undecorated
 // frames often have no AXMinimized. Empty subrole is a standard window that
 // has not filled the attribute in yet.
+// An accessory app is scanned only while it owns an on-screen window, or while
+// policy still knows one of its windows (a panel that just closed). Apple's
+// accessory agents are system UI, not tiling clients, and a bundle-less agent
+// has no stable identity to match a window against.
+func accessoryAppIsManaged(bundle: String, hasOnScreenWindow: Bool, known: Bool) -> Bool {
+  guard !bundle.isEmpty, !bundle.hasPrefix("com.apple.") else { return false }
+  return hasOnScreenWindow || known
+}
 func windowRoleIsEligible(
   role: String, subrole: String, fullScreen: Bool,
-  positionSettable: Bool, sizeSettable: Bool
+  positionSettable: Bool, sizeSettable: Bool, accessory: Bool = false
 ) -> Bool {
   guard reportsAsWindowRole(role), !fullScreen, positionSettable else { return false }
   if isManagedPopupSubrole(subrole) { return true }
   let standard =
     subrole == "AXStandardWindow" || subrole.isEmpty
     || role == "AXTextField" || role == "AXTextArea"
-  return standard && sizeSettable
+  // An accessory app's panel (Box Drive's search window, a utility's
+  // settings) is often fixed-size but still a real window. It cannot tile,
+  // but policy can float it and move it, so a readable position is enough.
+  return standard && (sizeSettable || accessory)
 }
 // AX and CG disagree by a titlebar on emacs-mac and similar NS ports.
 func cgMatchesAXFrame(_ ax: Rect, _ cg: Rect, originSlop: Int = 24) -> Bool {

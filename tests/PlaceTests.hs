@@ -70,7 +70,7 @@ runPlaceTests conf initial = do
     (place simpleSmart (Rectangle 0 0 100 50) [] (0, 0)
        == Rectangle 0 0 200 100)
   let fr = Rectangle 100 80 200 100
-      wInfo n f = WindowInfo n 1 "a" "b" "t" 10 f False False "AXStandardWindow"
+      wInfo n f = WindowInfo n 1 "a" "b" "t" 10 f False False "AXStandardWindow" False
       info = M.fromList [(7, wInfo 7 fr), (8, wInfo 8 (Rectangle 0 24 300 300))]
       base = initial
         { windowInfo = info

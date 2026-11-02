@@ -19,7 +19,7 @@ displays = [DisplayInfo 10 (Rectangle 0 24 1000 800)]
 
 win :: Window -> String -> String -> WindowInfo
 win w cls t = WindowInfo w 1 cls ("bundle." ++ cls) t 10
-                (Rectangle 0 0 100 100) False False "AXStandardWindow"
+                (Rectangle 0 0 100 100) False False "AXStandardWindow" False
 
 snap :: Int -> [WindowInfo] -> Snapshot
 snap g ws = Snapshot g 1 displays ws Nothing Nothing

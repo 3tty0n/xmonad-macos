@@ -25,7 +25,10 @@ expired. Snapshot:
 ```
 
 `ownedHidden` is true for windows this WM parked or minimized, so their
-**virtual** workspace is kept. Missing `subrole` is `AXStandardWindow`.
+**virtual** workspace is kept. Missing `subrole` is `AXStandardWindow`. An
+`accessory` flag (default false) marks a window of an `LSUIElement` app: policy
+floats it, and a newly admitted one carries a focus action because such an app
+has no ordinary activation path.
 
 ```json
 {"type":"key","mask":8,"sym":106}

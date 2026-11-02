@@ -67,12 +67,12 @@ func axMinSize(_ e: AXUIElement) -> (Int, Int)? {
   }
   return nil
 }
-func windowEligible(_ e: AXUIElement, subrole: String) -> Bool {
-  windowEligibility(e, subrole: subrole) ?? false
+func windowEligible(_ e: AXUIElement, subrole: String, accessory: Bool = false) -> Bool {
+  windowEligibility(e, subrole: subrole, accessory: accessory) ?? false
 }
 // Unknown AX capability is not evidence that an admitted window disappeared.
 // Unsupported fullscreen attributes are normal; transport failures are not.
-func windowEligibility(_ e: AXUIElement, subrole: String) -> Bool? {
+func windowEligibility(_ e: AXUIElement, subrole: String, accessory: Bool = false) -> Bool? {
   guard let role = axCopy(e, kAXRoleAttribute) as? String else { return nil }
   var raw: CFTypeRef?
   let error = AXUIElementCopyAttributeValue(e, "AXFullScreen" as CFString, &raw)
@@ -83,11 +83,13 @@ func windowEligibility(_ e: AXUIElement, subrole: String) -> Bool? {
   guard let position = axSettableRead(e, kAXPositionAttribute) else { return nil }
   if isManagedPopupSubrole(subrole) {
     return windowRoleIsEligible(role: role, subrole: subrole, fullScreen: fullScreen,
-                               positionSettable: position, sizeSettable: false)
+                               positionSettable: position, sizeSettable: false,
+                               accessory: accessory)
   }
   guard let size = axSettableRead(e, kAXSizeAttribute) else { return nil }
   return windowRoleIsEligible(role: role, subrole: subrole, fullScreen: fullScreen,
-                             positionSettable: position, sizeSettable: size)
+                             positionSettable: position, sizeSettable: size,
+                             accessory: accessory)
 }
 // A window is actionable only when its current geometry and eligibility were
 // actually read. The launch values are the process instance behind the PID:
@@ -176,8 +178,33 @@ func cgVisibleFrames() -> [(pid_t, Rect)]? {
     return (pid, frame)
   }
 }
+// Accessory apps normally own no windows, so they are not scanned. One that
+// currently owns an on-screen application window is a real UI surface: Box
+// Drive's integration panel is a fixed-size standard window of an LSUIElement
+// app. Only PIDs with such a window are reported, so idle helpers cost nothing.
+func onScreenApplicationPIDs() -> Set<pid_t> {
+  guard
+    let list = CGWindowListCopyWindowInfo(
+      [.optionOnScreenOnly, .excludeDesktopElements],
+      kCGNullWindowID) as? [[String: Any]]
+  else { return [] }
+  let me = ProcessInfo.processInfo.processIdentifier
+  return Set(
+    list.compactMap { d -> pid_t? in
+      guard let layer = (d[kCGWindowLayer as String] as? NSNumber)?.intValue,
+        cgWindowIsApplicationLayer(layer),
+        let pid = (d[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value,
+        pid != me
+      else { return nil }
+      return pid
+    })
+}
 struct AppDescriptor {
   var pid: pid_t, name: String, bundle: String, launch: Double, hidden: Bool
+  // LSUIElement application. Its windows are floated and a newly shown one
+  // is brought forward by policy, because the app has no ordinary activation
+  // path of its own.
+  var accessory: Bool = false
 }
 struct RecoveryEntry: Codable {
   var token: String, pid: Int32, launch: Double, bundle: String
@@ -539,7 +566,8 @@ final class AXStore {
         if r.token == nil {
           if let subrole = axCopy(e, kAXSubroleAttribute) as? String { r.subrole = subrole }
         }
-        let eligibilityRead = windowEligibility(e, subrole: r.subrole)
+        let eligibilityRead = windowEligibility(
+          e, subrole: r.subrole, accessory: app.accessory)
         if r.token == nil {
           r.eligible = retainingWindowEligibility(previous: r.eligible,
             observed: eligibilityRead)
@@ -664,7 +692,8 @@ final class AXStore {
           bundle: r.descriptor.bundle, titleText: r.title,
           onDisplay: bestDisplay(for: r.frame, in: displays),
           frame: r.frame, minimized: mini, ownedHidden: own,
-          subrole: r.subrole.isEmpty ? "AXStandardWindow" : r.subrole))
+          subrole: r.subrole.isEmpty ? "AXStandardWindow" : r.subrole,
+          accessory: r.descriptor.accessory))
     }
     if ambiguous > 0 && Date().timeIntervalSince(lastAmbiguityWarning) > 30 {
       logMessage(

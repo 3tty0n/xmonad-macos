@@ -107,9 +107,10 @@ it. Floats of other apps can be covered by a tiled window.
 | API | Status |
 |---|---|
 | `logHook` | Run before every plan, i.e. after each state change |
-| `manageHook` | `composeAll`, `doFloat`, `doShift`, `doIgnore`; dialogs float |
+| `manageHook` | `composeAll`, `doFloat`, `doShift`, `doIgnore`; dialogs and accessory-app windows float |
 | `className` / `bundleId` / `title` / `subrole` | App name / bundle / `AXTitle` / AX subrole |
 | `isDialog` | AX dialog and floating-panel subroles |
+| `isAccessory` | Window belongs to an `LSUIElement` app (no Dock icon) |
 | `spawn` / `kill` | Shell command / native Close |
 | `keys` / `additionalKeysP` | Sequences (`"M-x a"`) become submaps; unsupported keys and a key that is also a prefix are hard errors |
 | `mod1Mask` / `mod4Mask` | Option / Command |

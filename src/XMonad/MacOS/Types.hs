@@ -44,19 +44,24 @@ data WindowInfo = WindowInfo
   -- AX subrole: AXStandardWindow, AXDialog, AXSystemDialog, AXFloatingWindow
   -- or AXSystemFloatingWindow. Absent in older snapshots.
   , subroleText :: !String
+  -- The window belongs to an accessory (LSUIElement) application. Such an app
+  -- has no Dock icon or app-switcher entry, so a newly shown window has no
+  -- ordinary activation path; policy floats it and requests focus itself.
+  , accessoryApp :: !Bool
   } deriving (Show, Eq, Generic)
 instance ToJSON WindowInfo where
   toJSON w = object
     [ "wid" .= wid w, "pid" .= pid w, "app" .= app w, "bundle" .= bundle w
     , "titleText" .= titleText w, "onDisplay" .= onDisplay w, "frame" .= frame w
     , "minimized" .= minimized w, "ownedHidden" .= ownedHidden w
-    , "subrole" .= subroleText w ]
+    , "subrole" .= subroleText w, "accessory" .= accessoryApp w ]
 instance FromJSON WindowInfo where
   parseJSON = withObject "WindowInfo" $ \o -> WindowInfo
     <$> o .: "wid" <*> o .: "pid" <*> o .: "app" <*> o .: "bundle"
     <*> o .: "titleText" <*> o .: "onDisplay" <*> o .: "frame"
     <*> o .: "minimized" <*> o .: "ownedHidden"
     <*> o .:? "subrole" .!= "AXStandardWindow"
+    <*> o .:? "accessory" .!= False
 
 -- Numerically compatible with the commonly used X modifier masks.
 shiftMask, lockMask, controlMask, mod1Mask, mod2Mask, mod3Mask, mod4Mask, mod5Mask :: KeyMask

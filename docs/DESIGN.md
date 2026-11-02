@@ -18,8 +18,9 @@ Chrome's missing CG metadata and Emacs's AX roles have explicit handling.
 
 Workspaces are **xmonad tags, not macOS Spaces**. Hidden windows are parked
 off-screen; apps that refuse parking (Finder) are minimized. `Full` hides
-nothing. Dialogs float; sheets, popovers, hidden apps and user-minimized windows
-are left alone. Native full-screen suspends tiling.
+nothing. Dialogs and windows of accessory (`LSUIElement`) apps float; sheets,
+popovers, hidden apps and user-minimized windows are left alone. Native
+full-screen suspends tiling.
 
 Epoch rebuilds carry workspace stacks, layouts, current workspace and floats
 for surviving windows. Failed AX eligibility reads retain the last known state.

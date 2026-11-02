@@ -95,7 +95,7 @@ displays :: [DisplayInfo]
 displays=[DisplayInfo 10 (Rectangle 0 24 1000 800),DisplayInfo 20 (Rectangle (-1000) 24 1000 800)]
 wi :: Window -> Int -> WindowInfo
 wi w d=WindowInfo w 123 "Terminal" "com.apple.Terminal" (show w) d
-  (Rectangle (if d==10 then 0 else -1000) 24 500 800) False False "AXStandardWindow"
+  (Rectangle (if d==10 then 0 else -1000) 24 500 800) False False "AXStandardWindow" False
 snapshot :: Snapshot
 snapshot=Snapshot 1 1 displays [wi 1 10,wi 2 10,wi 3 20] (Just 1) Nothing
 initial :: XState
@@ -442,6 +442,18 @@ main = do
     (M.member 4 (W.floating $ windowset settingsState)
      && W.peek (windowset settingsState)==Just 4
      && not (focusRequested settingsState) && planFocus settingsPlan==Nothing)
+  -- An accessory (LSUIElement) app's panel has no Dock icon and may not
+  -- activate itself. Policy floats it and asks the helper to bring it forward.
+  let accessoryWindow = (wi 5 10) {accessoryApp=True}
+      accessorySnapshot = oldFocus
+        {snapWindows=snapWindows oldFocus ++ [accessoryWindow], snapFocused=Just 1}
+  (accessoryPlan,accessoryState) <- runX conf pending
+    (reconcile accessorySnapshot >> makePlan)
+  check "a new accessory window is floated and asked for focus"
+    (M.member 5 (W.floating $ windowset accessoryState)
+     && W.peek (windowset accessoryState)==Just 5
+     && fmap snd (pendingFocus accessoryState)==Just 5
+     && isJust (planAction accessoryPlan) && planFocus accessoryPlan==Just 5)
   (_,acked) <- runX conf retried (reconcile $ oldFocus {snapFocused=desired,snapGeneration=3})
   check "focus acknowledgement clears request" (not $ focusRequested acked)
   (_,expired) <- runX conf pending (handleEvent M.empty (AckEvent aid previous True))
@@ -1003,6 +1015,13 @@ testShiftKeepsView = do
   (_, hovered) <- runX conf shifted (handleEvent keymap (PointerFocusEvent 1))
   check "a pointer focus for the parked window does not switch the view"
     (W.currentTag (windowset hovered) == "1")
+  let idle = started {pendingFocus = Nothing}
+  (_, selfHover) <- runX conf idle (handleEvent keymap (PointerFocusEvent 1))
+  check "hovering the already focused window sends no focus request"
+    (pendingFocus selfHover == Nothing && W.peek (windowset selfHover) == Just 1)
+  (_, otherHover) <- runX conf idle (handleEvent keymap (PointerFocusEvent 2))
+  check "hovering another window still focuses it"
+    (W.peek (windowset otherHover) == Just 2 && isJust (pendingFocus otherHover))
 
 -- A predicate that accepts exactly one tag.
 onlyTag :: WorkspaceId -> WSType

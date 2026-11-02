@@ -2,6 +2,18 @@
 
 Written when a version tag is cut; between tags, see the git log.
 
+## Unreleased
+
+- Windows of accessory (`LSUIElement`) applications are managed while they own
+  an on-screen window. Box Drive's fixed-size integration panel is floated and
+  a newly shown one is activated and raised, instead of being ignored and left
+  behind the tiles. A fixed-size accessory window is eligible because it can be
+  moved even though it cannot be resized; the `isAccessory` manage-hook query
+  exposes the same fact to a config.
+- Hovering the window that already has policy focus no longer sends a focus
+  request. The old request activated its app and raised it, which pushed an
+  unmanaged panel in front of it to the back.
+
 ## 1.2.0 - 2026-10-10
 
 - Popups stop stealing focus back: right-click menus and Chrome extension

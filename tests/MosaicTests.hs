@@ -131,7 +131,7 @@ runResizeTests = do
   let serializedOld = show $ currentLayout oldTwice
       saved = checkpoint oldTwice
       live = M.fromList [(w, WindowInfo w 123 "Test" "test" "" 10 r
-                               False False "AXStandardWindow") | w <- [1,2,3]]
+                               False False "AXStandardWindow" False) | w <- [1,2,3]]
   restoredWS <- either (ioError . userError) pure $
     restoreCheckpoint cfg (epoch oldTwice) [DisplayInfo 10 r] live saved
   let loaded = oldTwice {windowset = restoredWS}
@@ -248,7 +248,7 @@ runWeightRepairTests = do
   repeatedSettings <- weights repeated
   check "repeated repair hook preserves subsequent user resizing"
     (repeatedSettings == resizedSettings && resizedSettings /= repairSettings)
-  let live = [WindowInfo w 123 "Test" "test" "" 10 r False False "AXStandardWindow"
+  let live = [WindowInfo w 123 "Test" "test" "" 10 r False False "AXStandardWindow" False
              | w <- [1,2,3]]
       snap = Snapshot 2 1 [DisplayInfo 10 r] live (Just 3) (Just $ checkpoint resized)
   (_, restarted) <- runX conf (initialState cfg [DisplayInfo 10 r]) $

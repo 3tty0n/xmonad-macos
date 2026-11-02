@@ -450,6 +450,14 @@ import Foundation
     check(window["titleText"] as? String == "α\nβ", "title escaping")
     check(window["ownedHidden"] as? Bool == false, "ownership wire name")
     check(window["subrole"] as? String == "AXStandardWindow", "default subrole")
+    check(window["accessory"] as? Bool == false, "default accessory flag")
+    let accessoryInfo = WindowInfo(
+      wid: 43, pid: 123, app: "Box", bundle: "com.box.desktop", titleText: "Search",
+      onDisplay: 1, frame: primary, minimized: false, ownedHidden: false,
+      accessory: true)
+    let accessoryObject = try JSONSerialization.jsonObject(
+      with: try JSONEncoder().encode(accessoryInfo)) as! [String: Any]
+    check(accessoryObject["accessory"] as? Bool == true, "accessory flag round trips")
     check(
       isManagedPopupSubrole("AXDialog") && isManagedPopupSubrole("AXSystemDialog")
         && isManagedPopupSubrole("AXFloatingWindow")
@@ -489,6 +497,35 @@ import Foundation
         role: "AXWindow", subrole: "AXUnknown", fullScreen: false,
         positionSettable: true, sizeSettable: true),
       "unknown subroles stay ineligible")
+    check(
+      !windowRoleIsEligible(
+        role: "AXWindow", subrole: "AXStandardWindow", fullScreen: false,
+        positionSettable: true, sizeSettable: false),
+      "a fixed-size window is not tiled")
+    check(
+      windowRoleIsEligible(
+        role: "AXWindow", subrole: "AXStandardWindow", fullScreen: false,
+        positionSettable: true, sizeSettable: false, accessory: true),
+      "a fixed-size accessory window is eligible to float")
+    check(
+      accessoryAppIsManaged(
+        bundle: "com.box.desktop", hasOnScreenWindow: true, known: false),
+      "a non-Apple accessory app with a window is managed")
+    check(
+      accessoryAppIsManaged(
+        bundle: "com.box.desktop", hasOnScreenWindow: false, known: true),
+      "a known accessory window survives the scan that no longer lists it")
+    check(
+      !accessoryAppIsManaged(
+        bundle: "com.box.desktop", hasOnScreenWindow: false, known: false),
+      "an idle accessory app is not scanned")
+    check(
+      !accessoryAppIsManaged(
+        bundle: "com.apple.controlcenter", hasOnScreenWindow: true, known: true),
+      "Apple accessory agents stay unmanaged")
+    check(
+      !accessoryAppIsManaged(bundle: "", hasOnScreenWindow: true, known: true),
+      "a bundle-less accessory agent stays unmanaged")
     let axFrame = Rect(x: 0, y: 24, width: 800, height: 600)
     let cgFrame = Rect(x: 0, y: 0, width: 800, height: 624)
     check(cgMatchesAXFrame(axFrame, cgFrame), "titlebar offset still matches CG")

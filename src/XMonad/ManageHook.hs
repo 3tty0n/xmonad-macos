@@ -2,7 +2,7 @@
 -- snapshot the helper sent, so they describe macOS windows rather than X11
 -- properties: see the module comments on each.
 module XMonad.ManageHook
-  ( className, resource, appName, title, subrole, queryInfo
+  ( className, resource, appName, title, subrole, isAccessory, queryInfo
   , (=?), (-->), (<&&>), (<||>), (<+>), composeAll, idHook
   , doF, doIgnore, doShift, doFloat
   ) where
@@ -20,13 +20,17 @@ queryInfo f fallback = do
 
 -- className is the application's display name, which is localized; resource
 -- and appName are its bundle identifier, which is not. title is AXTitle.
--- subrole is the AX subrole (AXStandardWindow, AXDialog, ...).
+-- subrole is the AX subrole (AXStandardWindow, AXDialog, ...). isAccessory is
+-- true for a window of an LSUIElement app, which has no Dock icon.
 className, resource, appName, title, subrole :: Query String
 className = queryInfo app ""
 resource = queryInfo bundle ""
 appName = resource
 title = queryInfo titleText ""
 subrole = queryInfo subroleText "AXStandardWindow"
+
+isAccessory :: Query Bool
+isAccessory = queryInfo accessoryApp False
 
 (=?) :: Eq a => Query a -> a -> Query Bool
 q =? v = (==v) <$> q

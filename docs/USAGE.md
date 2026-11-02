@@ -54,7 +54,10 @@ there. Override with `mouseBindings` / `additionalMouseBindings`
 (`MouseMove`, `MouseResize`, `MouseRaise`). Mask 0 is rejected.
 
 Dialogs (`AXDialog` / `AXFloatingWindow`) float at the app's size. Sheets
-and popovers are unmanaged.
+and popovers are unmanaged. A window of an accessory (`LSUIElement`) app is
+managed while the app owns it: it floats, and a newly shown one is brought
+forward because such an app has no Dock icon or ordinary activation path. This
+covers Box Drive's integration panel, which is a fixed-size standard window.
 
 Borders: `borderWidth`, `focusedBorderColor`, `normalBorderColor` (0 turns
 them off). They are click-through overlays. `focusFollowsMouse` is on by

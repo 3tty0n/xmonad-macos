@@ -21,8 +21,8 @@ Tests use `example/xmonad.hs`, staged in `build/config`, not your personal confi
 - Earlier desktop run: macOS 26.6.2, arm64, GHC 9.12.3, cabal 3.18.1.0,
   Swift 6.2. Handshake, tiling, `M-0`, Finder hide/restore, recompile/restart
   and quit were confirmed.
-- Latest local checks: `make check` and `make build` passed; 371 Swift checks,
-  492 static checks, Haskell tests and NDJSON integration.
+- Latest local checks: `make check` and `make build` passed; 394 Swift checks,
+  552 static checks, Haskell tests and NDJSON integration.
 - Recent regressions covered: transient AX eligibility reads, Settings focus
   takeover, popup-role classification and queued-hover invalidation. The log
   showed a known window briefly leaving with `eligible=false` and returning
@@ -31,18 +31,27 @@ Tests use `example/xmonad.hs`, staged in `build/config`, not your personal confi
 **Not desktop-verified:** hotplug, mixed Retina, native Space transitions,
 long AX-queue latency, journal crash recovery, Magnifier, BoringWindows,
 NamedScratchpad, NoBorders, Settings/popup focus fixes, transient-read
-workspace/stack stability, floating-drag overlay repaint, and every native fix
-below. Automated success does not establish these.
+workspace/stack stability, floating-drag overlay repaint, the accessory-window
+(Box Drive) focus path, and every native fix below. Automated success does not
+establish these.
+
+The accessory path was observed once on the desktop: Box Drive's search panel
+entered the snapshot with `accessory=true`, was floated at its own frame (no
+constrained-geometry log), and was reported as the focused window. Box closes
+that panel on losing focus, so its own lifetime is not a stable target.
 
 Additional regressions:
 - Native: fake-clock visibility grace and failed-versus-empty CG queries;
   conservative actionability and owned-window restore; queued-hover
   invalidation; popup/settings focus; floating-drag overlay repaint; the
   constrained-write backoff; and the process-start-time readiness decision.
-- Haskell: Mosaic's real Expand/Shrink path, spacing, signed origins,
-  checkpoint/layout reset and one-time share repair; bounded retention of a
-  window omitted from a snapshot (membership kept, plan-omitted, re-appearance,
-  expiry, no premature removal, epoch rebuild).
+  A fixed-size standard window of an accessory app is eligible only to float.
+- Haskell: an accessory-app window is floated and a newly admitted one carries
+  a focus action; hovering the already focused window sends no action; Mosaic's
+  real Expand/Shrink path, spacing, signed origins, checkpoint/layout reset and
+  one-time share repair; bounded retention of a window omitted from a snapshot
+  (membership kept, plan-omitted, re-appearance, expiry, no premature removal,
+  epoch rebuild).
 - The bridge log showed a known window briefly leaving with `eligible=false`
   and returning with the same handle; a drag moved a floating frame without
   repainting its overlay. Desktop reproduction remains outstanding.
@@ -64,6 +73,7 @@ display and Stage Manager off. TCC permission requires interactive consent.
 | `M-Space` to Full | All windows remain unminimized; focused window fills screen |
 | `M` + left/right drag | Floats and moves/resizes without snap-back |
 | Save panel / Settings | Floats; newly focused Settings stays in front |
+| Box Drive integration panel | Floats with a border; a newly shown one comes to the front and keeps keyboard focus |
 | Right-click / Chrome extension popup | Stays open; hover resumes after dismissal |
 | `M-2` then `M-1` | Only WM-hidden windows return; Finder minimizes/restores |
 | User `Cmd-M` | Never auto-restored |

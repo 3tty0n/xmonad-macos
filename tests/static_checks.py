@@ -59,8 +59,8 @@ check('reply(toApplicationShouldTerminate' not in app and 'restored.wait(timeout
 border=(root/'native/Border.swift').read_text()
 check('dockWindow' in border and 'orderFrontRegardless' in border,
       'Borders must sit below the Dock and menu bar, or they draw over a revealed Dock')
-check('hole(in' in border and 'evenOdd' in border,
-      'Unfocused borders must clip out the focused window so a float is not covered')
+check('hole(in' in border and 'occluders(of' in border,
+      'Unfocused borders must clip out the windows above them, focused or not')
 check('animationBehavior' in border and 'alphaValue' in border,
       'Focus border must not orderOut and fade back in after a workspace switch')
 check(at(r'panels\s*:\s*\[\s*UInt64\s*:\s*NSPanel\s*\]',border) >= 0
@@ -132,6 +132,10 @@ for gone in ['recompile-installed.sh','autostart.sh','doctor.sh','recover.sh','r
 check(not (root/'tests'/'ops_smoke.sh').exists(), 'Atomic recompile belongs in CoreTests, not ops_smoke.sh')
 check('mouseMask' in engine and 'floatObservedWindow' in engine,'Haskell mouse policy integration missing')
 check('isDialog --> doFloat' in engine,'Dialogs must float by default')
+check('isAccessory --> doFloat' in engine,'Accessory app windows must float by default')
+check('onScreenApplicationPIDs' in app and 'accessory: accessory' in app,
+      'Accessory apps with on-screen windows must be scanned')
+check('sizeSettable || accessory' in wire,'Fixed-size accessory windows must be eligible to float')
 check('subroleText' in (root/'src/XMonad/MacOS/Types.hs').read_text(),'Window subrole missing from protocol types')
 check('isManagedPopupSubrole' in wire and 'cgWindowIsApplicationLayer' in wire,'Popup admission helpers missing')
 check('bundleOmitsOnScreenCGWindows' in wire,'Chrome CGWindow omission helper missing')

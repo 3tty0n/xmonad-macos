@@ -26,7 +26,7 @@ conf = XConf cfg
 
 win :: Window -> String -> WindowInfo
 win w cls = WindowInfo w 123 cls "com.apple." (show w) 10
-              (Rectangle 0 0 100 100) False False "AXStandardWindow"
+              (Rectangle 0 0 100 100) False False "AXStandardWindow" False
 
 -- Windows 1, 2 and 3 on workspace "1", focused on 1.
 threeState :: XState
