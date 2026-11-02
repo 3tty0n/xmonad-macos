@@ -24,12 +24,15 @@ Haskell and drives a signed Swift helper that moves the windows.
 
 ## Install
 
-Download `XMonadMac-<version>-arm64.zip` from
-[Releases](https://github.com/3tty0n/xmonad-macos/releases), unzip it, and
-move `XMonadMac.app` to `/Applications`. Open it, add it under System
-Settings → Privacy & Security → Accessibility, then choose **Restart
-XMonadMac** from its menu. A build that is not notarized is blocked on first
-open; allow it with **Open Anyway** in Privacy & Security.
+- Download `XMonadMac-<version>-arm64.zip` from
+[Releases](https://github.com/3tty0n/xmonad-macos/releases),
+- unzip it, and
+- move `XMonadMac.app` to `/Applications`.
+- Open it, add it under System Settings → Privacy & Security → Accessibility, then
+- choose **Restart XMonadMac** from its menu.
+
+A build that is not notarized is blocked on first open;
+allow it with **Open Anyway** in Privacy & Security.
 
 The first launch installs the engine, writes `~/.config/xmonad-mac/xmonad.hs`
 if you have no config yet, and links `xmonad` into `~/.local/bin`. Opening a
