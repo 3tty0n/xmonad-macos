@@ -2,7 +2,7 @@
 
 Written when a version tag is cut; between tags, see the git log.
 
-## Unreleased
+## 1.2.2 - 2026-11-02
 
 - A native tab group (Ghostty and other AppKit-tabbed windows) is no longer
   mistaken for several same-frame windows. Only the window carrying the
