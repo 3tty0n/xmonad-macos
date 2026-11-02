@@ -131,6 +131,16 @@ final class FixtureApp: NSObject, NSApplicationDelegate {
     window.makeKeyAndOrderFront(nil)
   }
 
+  private func addTab(to id: Int) {
+    guard let parent = windows[id] else { return }
+    let childID = makeWindow(fixed: false)
+    guard let child = windows[childID] else { return }
+    child.tabbingMode = .preferred
+    parent.addTabbedWindow(child, ordered: .above)
+    parent.makeKeyAndOrderFront(nil)
+    writeState()
+  }
+
   private func closeWindow(_ id: Int) {
     guard let window = windows.removeValue(forKey: id) else { return }
     window.orderOut(nil)
@@ -234,6 +244,8 @@ final class FixtureApp: NSObject, NSApplicationDelegate {
       _ = makeWindow(fixed: parts.dropFirst().first == "fixed")
     case "new-fixed":
       _ = makeWindow(fixed: true)
+    case "tab":
+      if let id = parts.dropFirst().first.flatMap({ Int($0) }) { addTab(to: id) }
     case "close":
       if let id = parts.dropFirst().first.flatMap({ Int($0) }) { closeWindow(id) }
     case "minimize":

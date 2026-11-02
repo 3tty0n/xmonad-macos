@@ -31,18 +31,18 @@ passes it) because it creates and closes fixture windows. The fixture supports:
 
 The driver compares AppKit's actual `topLeftFrame` and `isMiniaturized` state
 with the helper's `xmonad dump` snapshot. It covers membership, focus, close,
-user-minimize ownership, duplicate titles, delayed minimize, a hung app not
-starving a responsive one, and the accessory fixed-size floating path. It does
-not replace the manual matrix below for native Spaces, display hotplug or
-mixed Retina.
+user-minimize ownership, duplicate titles, native tab groups, delayed minimize,
+a hung app not starving a responsive one, and the accessory fixed-size floating
+path. It does not replace the manual matrix below for native Spaces, display
+hotplug or mixed Retina.
 
 ## Recorded results
 
 - Earlier desktop run: macOS 26.6.2, arm64, GHC 9.12.3, cabal 3.18.1.0,
   Swift 6.2. Handshake, tiling, `M-0`, Finder hide/restore, recompile/restart
   and quit were confirmed.
-- Latest local checks: `make check` and `make build` passed; 431 Swift checks,
-  569 static checks, Haskell tests and NDJSON integration.
+- Latest local checks: `make check` and `make build` passed; 436 Swift checks,
+  571 static checks, Haskell tests and NDJSON integration.
 - 2026-11-02 desktop run (macOS 26.6.2, arm64, GHC 9.12.3, cabal 3.18.1.0,
   Swift 6.2): `xmonad self-test`, `make ax-test`, `xmonad --recompile`,
   `xmonadctl recompile`, `xmonad autostart on/off/status` and
@@ -52,6 +52,10 @@ mixed Retina.
   deliberately corrupt `recovery.json` started paused, produced exactly one
   quarantine copy, and `recover --report` returned 2 without adding another.
   The original journal was restored and the helper resumed.
+- 2026-11-02 Ghostty tab verification: with four AX windows at one frame
+  (native tab group), the helper managed exactly one container. Switching from
+  the single-Ghostty workspace to workspace 3 parked it off-screen and switching
+  back restored it at its original frame. The extra test tab was closed.
 - Recent regressions covered: transient AX eligibility reads, Settings focus
   takeover, popup-role classification and queued-hover invalidation. The log
   showed a known window briefly leaving with `eligible=false` and returning
@@ -78,6 +82,8 @@ Additional regressions:
   A fixed-size standard window of an accessory app is eligible only to float.
   A repeatedly timing-out app enters scan cooldown, keeps its known windows in
   the snapshot but not actionable, and cannot exceed the 30s retry cap.
+  Native tab siblings at a container's frame are excluded from same-frame
+  ambiguity, so the visible tab group remains manageable.
 - Haskell: an accessory-app window is floated and a newly admitted one carries
   a focus action; hovering the already focused window sends no action; Mosaic's
   real Expand/Shrink path, spacing, signed origins, checkpoint/layout reset and

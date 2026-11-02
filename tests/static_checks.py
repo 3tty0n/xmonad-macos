@@ -166,6 +166,10 @@ check('onScreenApplicationPIDs' in app and 'accessory: accessory' in app,
 check('sizeSettable || accessory' in wire,'Fixed-size accessory windows must be eligible to float')
 check('refreshDescriptor' in ax and 'var descriptor: AppDescriptor' in ax,
       'An accessory policy change after the first scan must reach existing records')
+check('axHasTabGroupChild' in ax and 'tabSibling' in ax,
+      'Native tab siblings must not look like same-frame ambiguity')
+check('addTabbedWindow' in (root/'tests/AXFixture.swift').read_text(),
+      'The AX fixture must cover native tabs')
 check('subroleText' in (root/'src/XMonad/MacOS/Types.hs').read_text(),'Window subrole missing from protocol types')
 check('isManagedPopupSubrole' in wire and 'cgWindowIsApplicationLayer' in wire,'Popup admission helpers missing')
 check('bundleOmitsOnScreenCGWindows' in wire,'Chrome CGWindow omission helper missing')

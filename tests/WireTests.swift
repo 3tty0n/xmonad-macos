@@ -217,9 +217,46 @@ import Foundation
     check(fm.fileExists(atPath: futureURL.path),
           "an unknown journal version keeps the original file")
   }
+  static func tabSiblingChecks() {
+    let frame = Rect(x: 5, y: 44, width: 1790, height: 1120)
+    let other = Rect(x: 1800, y: 44, width: 800, height: 600)
+    check(
+      tabSiblingIndices([
+        TabCandidate(frame: frame, hasTabGroup: true),
+        TabCandidate(frame: frame, hasTabGroup: false),
+        TabCandidate(frame: frame, hasTabGroup: false),
+      ]) == [1, 2],
+      "tab siblings at the container frame are identified")
+    check(
+      tabSiblingIndices([
+        TabCandidate(frame: frame, hasTabGroup: true),
+        TabCandidate(frame: other, hasTabGroup: false),
+      ]).isEmpty,
+      "a same-app window at another frame is not a tab sibling")
+    check(
+      tabSiblingIndices([
+        TabCandidate(frame: frame, hasTabGroup: false),
+        TabCandidate(frame: frame, hasTabGroup: false),
+      ]).isEmpty,
+      "same-frame windows without a tab group stay conservative")
+    check(
+      tabSiblingIndices([
+        TabCandidate(frame: frame, hasTabGroup: true),
+        TabCandidate(frame: nil, hasTabGroup: false),
+      ]).isEmpty,
+      "a tab sibling without a readable frame is not guessed")
+    check(
+      tabSiblingIndices([
+        TabCandidate(frame: frame, hasTabGroup: true),
+        TabCandidate(frame: other, hasTabGroup: true),
+        TabCandidate(frame: frame, hasTabGroup: false),
+      ]) == [2],
+      "a tab sibling is matched to its own container, not every tab group")
+  }
   static func main() throws {
     visibilityChecks()
     appScanBackoffChecks()
+    tabSiblingChecks()
     scanReadinessChecks()
     writeBackoffChecks()
     try recoveryJournalChecks()

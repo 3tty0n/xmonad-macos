@@ -2,6 +2,14 @@
 
 Written when a version tag is cut; between tags, see the git log.
 
+## Unreleased
+
+- A native tab group (Ghostty and other AppKit-tabbed windows) is no longer
+  mistaken for several same-frame windows. Only the window carrying the
+  `AXTabGroup` child is managed; tab siblings at the same frame are ignored.
+  Switching away from a workspace whose only window is a tabbed Ghostty now
+  parks it instead of leaving it on screen.
+
 ## 1.2.1 - 2026-11-02
 
 - Windows of accessory (`LSUIElement`) applications are managed while they own

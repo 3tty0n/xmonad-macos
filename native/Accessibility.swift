@@ -103,6 +103,16 @@ func scanReadiness(recordedLaunch: Double, observedLaunch: Double,
 func axListedAsWindow(_ e: AXUIElement) -> Bool {
   reportsAsWindowRole(axString(e, kAXRoleAttribute)) && axFrame(e) != nil
 }
+// A native tab group exposes a single AXTabGroup child on the visible
+// container window. Every tab is also an AXWindow at the container's frame,
+// so this is the public signal that separates the real window from its tab
+// siblings.
+func axHasTabGroupChild(_ e: AXUIElement) -> Bool {
+  guard let children = axCopy(e, kAXChildrenAttribute) as? [AXUIElement] else {
+    return false
+  }
+  return children.contains { axString($0, kAXRoleAttribute) == "AXTabGroup" }
+}
 // System-wide AXFocusedWindow can name a text area inside the frame (Emacs).
 func axWindowRoot(_ e: AXUIElement) -> AXUIElement {
   if axString(e, kAXRoleAttribute) == kAXWindowRole { return e }
@@ -205,6 +215,10 @@ final class AXRecord {
   var descriptor: AppDescriptor
   var element: AXUIElement
   var frame: Rect, title: String, identifier: String
+  // A native tab that is not the visible container. macOS exposes every tab
+  // as an AXWindow at the same frame; only the window carrying the AXTabGroup
+  // child is the container. Tab siblings are managed by the app, not us.
+  var tabSibling = false
   // When the element was first found destroyed. Display wake destroys every
   // element and the replacements take several seconds to appear, so the
   // record, with its last known state, stands in for the window meanwhile.
@@ -534,6 +548,25 @@ final class AXStore {
         scanBackoff[app.pid] = next
       }
       succeeded.insert(app.pid)
+      // Native tab groups expose every tab as an AXWindow at the container's
+      // frame. Only the window with an AXTabGroup child is the visible
+      // container; marking the others keeps a two-tab Ghostty window from
+      // looking like two same-frame peers and being dropped as ambiguous.
+      for r in records.values where r.descriptor.pid == app.pid {
+        r.tabSibling = false
+      }
+      var tabSiblings: [AXUIElement] = []
+      if windows.count > 1 {
+        let candidates = windows.map {
+          TabCandidate(frame: axFrame($0), hasTabGroup: axHasTabGroupChild($0))
+        }
+        tabSiblings = tabSiblingIndices(candidates).sorted().map { windows[$0] }
+      }
+      for r in records.values where r.descriptor.pid == app.pid {
+        if tabSiblings.contains(where: { CFEqual($0, r.element) }) {
+          r.tabSibling = true
+        }
+      }
       // Display sleep/wake makes macOS destroy every AXUIElement and hand
       // out fresh ones for the same windows. A record whose element none
       // of this scan's windows matches is a candidate to re-identify by
@@ -543,6 +576,7 @@ final class AXStore {
       }
       var adopted: Set<UInt64> = []
       for e in windows {
+        if tabSiblings.contains(where: { CFEqual($0, e) }) { continue }
         let r: AXRecord
         if let old = records.values.first(where: {
           $0.descriptor.pid == app.pid && CFEqual($0.element, e)
@@ -647,13 +681,15 @@ final class AXStore {
       // Asking an app that just timed out for each window's minimized state
       // re-opens the same stall. Use the last observation; an unresponsive
       // app's windows are retained but never actionable.
-      guard succeeded.contains(r.descriptor.pid) else { continue }
+      guard succeeded.contains(r.descriptor.pid), !r.tabSibling else { continue }
       if let observed = axMinimizedRead(r.element) {
         minimizedReads[r.wid] = observed
         r.lastMinimized = observed
       }
     }
-    let onScreenEligible = all.filter { $0.eligible && $0.lastMinimized != true }
+    let onScreenEligible = all.filter {
+      $0.eligible && !$0.tabSibling && $0.lastMinimized != true
+    }
     let byPid = Dictionary(grouping: onScreenEligible, by: { $0.descriptor.pid })
     var peerCount: [UInt64: Int] = [:]
     for group in byPid.values {
@@ -664,7 +700,7 @@ final class AXStore {
     actionable = []
     var ambiguous = 0
     for r in all.sorted(by: { $0.wid < $1.wid }) {
-      guard r.eligible else { continue }
+      guard r.eligible, !r.tabSibling else { continue }
       // Cmd-H takes an application's windows out of management, but one
       // observation is not enough: on wake macOS reports applications
       // hidden that are not, and dropping them here costs the workspace.

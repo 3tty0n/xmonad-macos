@@ -257,11 +257,33 @@ func accessoryAppIsManaged(bundle: String, hasOnScreenWindow: Bool, known: Bool)
   guard !bundle.isEmpty, !bundle.hasPrefix("com.apple.") else { return false }
   return hasOnScreenWindow || known
 }
+// Native tab groups expose every tab as an AXWindow at the container's frame.
+// Only the window carrying an AXTabGroup child is the visible container; its
+// siblings at the same frame are managed by the app. This returns the sibling
+// indices so the scan does not turn one tabbed window into several same-frame
+// peers and drop all of them as ambiguous.
+struct TabCandidate: Equatable {
+  var frame: Rect?
+  var hasTabGroup: Bool
+}
+func tabSiblingIndices(_ windows: [TabCandidate]) -> Set<Int> {
+  let containers = windows.indices.filter { windows[$0].hasTabGroup }
+  guard !containers.isEmpty else { return [] }
+  var siblings = Set<Int>()
+  for index in windows.indices where !containers.contains(index) {
+    guard let frame = windows[index].frame else { continue }
+    let sameFrame = containers.contains { container in
+      guard let containerFrame = windows[container].frame else { return false }
+      return frame.near(containerFrame)
+    }
+    if sameFrame { siblings.insert(index) }
+  }
+  return siblings
+}
 func windowRoleIsEligible(
   role: String, subrole: String, fullScreen: Bool,
   positionSettable: Bool, sizeSettable: Bool, accessory: Bool = false
-) -> Bool {
-  guard reportsAsWindowRole(role), !fullScreen, positionSettable else { return false }
+) -> Bool {  guard reportsAsWindowRole(role), !fullScreen, positionSettable else { return false }
   if isManagedPopupSubrole(subrole) { return true }
   let standard =
     subrole == "AXStandardWindow" || subrole.isEmpty

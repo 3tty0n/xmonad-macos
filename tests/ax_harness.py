@@ -245,6 +245,30 @@ def test_duplicate_titles(fixture, directory):
         app.quit()
 
 
+def test_native_tabs(fixture, directory):
+    prefix = "AXFixture-tabs"
+    state = directory / "tabs.json"
+    app = launch(fixture, state, "--windows", "1", "--title-prefix", prefix)
+    try:
+        pid = app.state()["pid"]
+        wait_for(lambda s: len(windows_of(s, pid)) == 1,
+                 "the initial tabbed fixture window")
+        app.send("tab 1")
+        app.wait_windows(2)
+        # A native tab group exposes both windows to AX at the same frame.
+        # Policy must manage the one container, not drop both as ambiguous.
+        time.sleep(1.5)
+        snapshot = dump_snapshot()
+        windows = windows_of(snapshot, pid)
+        check(len(windows) == 1,
+              "native tab siblings must not be managed as separate windows",
+              windows)
+        check(windows[0].get("minimized") is False,
+              "the active tab was left minimized", windows[0])
+    finally:
+        app.quit()
+
+
 def test_hung_app_does_not_starve(fixture, directory):
     prefix = "AXFixture-hung"
     state = directory / "hung.json"
@@ -317,10 +341,11 @@ def main():
     try:
         test_regular(args.fixture, directory)
         test_duplicate_titles(args.fixture, directory)
+        test_native_tabs(args.fixture, directory)
         test_hung_app_does_not_starve(args.fixture, directory)
         test_accessory_fixed(args.fixture, directory)
         print("PASS: native AX fixture (membership/focus/close/minimize/"
-              "duplicate titles/hung app/accessory fixed-size float)")
+              "duplicate titles/native tabs/hung app/accessory fixed-size float)")
     finally:
         subprocess.run(["pkill", "-x", "AXFixture"], capture_output=True)
         shutil.rmtree(directory, ignore_errors=True)
