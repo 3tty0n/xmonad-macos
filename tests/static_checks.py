@@ -79,6 +79,34 @@ check('rescreenWith' in engine,'Display affinity survives reconnects')
 check('normalBorderColor' in (root/'src/XMonad/Config.hs').read_text(),'Unfocused border colour missing')
 check('mouseBindings' in (root/'src/XMonad/Config.hs').read_text(),'mouseBindings missing from the default config')
 check('0.45' in ax,'Scan total latency budget missing')
+check('AppScanBackoff' in wire and 'scanBackoff' in ax,
+      'A repeatedly timing-out app must enter a bounded scan cooldown')
+check('unresponsive: unresponsivePIDs.contains' in ax and 'ax-unresponsive' in wire,
+      'An unresponsive app must retain known windows without authorizing mutations')
+check('scanMs' in app and 'scanTimeouts' in app,
+      'Scan duration and timeout counts must be visible in status/doctor')
+check('AX queue did not restore within 8s' in app,
+      'A paused helper must not wait forever on a wedged AX queue')
+recovery=(root/'native/Recovery.swift').read_text()
+check('RecoveryEnvelope' in recovery and 'currentVersion' in recovery,
+      'Recovery journal needs a versioned envelope')
+check('quarantineURL' in recovery and '.corrupt-' in recovery,
+      'A corrupt recovery journal must be preserved, not discarded')
+check('--recover-report' in app
+      and '--recover-report' in (root/'src/XMonad/MacOS/CLI.hs').read_text(),
+      'The redacted recovery report must be reachable from the CLI')
+check('native/Recovery.swift' in (root/'scripts/build-native.sh').read_text(),
+      'Native build omits the recovery journal')
+check('native/Recovery.swift' in (root/'scripts/test-portable.sh').read_text(),
+      'Portable tests omit the recovery journal')
+fixture=root/'tests/AXFixture.swift'
+harness=root/'tests/ax_harness.py'
+check(fixture.is_file() and harness.is_file(),
+      'The native AX fixture and driver must exist')
+check('--allow-desktop' in harness.read_text(),
+      'The desktop harness must require explicit consent')
+check('ax-test' in (root/'Makefile').read_text(),
+      'The desktop harness needs a make target')
 check('resizeFloor' in ax and 'AXMinSize' in ax,'Resize floor must read AX minimum size')
 check('takeAck' in ax and 'actionFirstSeen' in ax,'Native action acknowledgement missing')
 check('session.json' in app or 'Paths.session' in app,'Helper-restart session persistence missing')
@@ -136,6 +164,8 @@ check('isAccessory --> doFloat' in engine,'Accessory app windows must float by d
 check('onScreenApplicationPIDs' in app and 'accessory: accessory' in app,
       'Accessory apps with on-screen windows must be scanned')
 check('sizeSettable || accessory' in wire,'Fixed-size accessory windows must be eligible to float')
+check('refreshDescriptor' in ax and 'var descriptor: AppDescriptor' in ax,
+      'An accessory policy change after the first scan must reach existing records')
 check('subroleText' in (root/'src/XMonad/MacOS/Types.hs').read_text(),'Window subrole missing from protocol types')
 check('isManagedPopupSubrole' in wire and 'cgWindowIsApplicationLayer' in wire,'Popup admission helpers missing')
 check('bundleOmitsOnScreenCGWindows' in wire,'Chrome CGWindow omission helper missing')

@@ -100,7 +100,9 @@ is reserved for the protocol.
 
 `./scripts/signing-identity.sh` makes the Accessibility grant survive
 rebuilds. `xmonad recover` restores WM-hidden windows after a crash.
-Ambiguous records are kept, not guessed.
+Ambiguous records are kept, not guessed. `xmonad recover --report` prints the
+journal format, entry count, any load error and the quarantine path, but never
+window titles.
 
 `./scripts/make-upstream-fork.sh` grafts this tree under `macos/` onto
 xmonad at `a9a8b5c1`.

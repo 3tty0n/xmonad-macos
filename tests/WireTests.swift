@@ -147,10 +147,82 @@ import Foundation
       "an upgrade leaves the user's engine for the recompile")
     check(fm.fileExists(atPath: cache.path), "an upgrade keeps the kit's build cache")
   }
+  static func recoveryJournalChecks() throws {
+    let fm = FileManager.default
+    let root = fm.temporaryDirectory.appendingPathComponent("xmonad-journal-\(getpid())")
+    defer { try? fm.removeItem(at: root) }
+    try fm.createDirectory(at: root, withIntermediateDirectories: true)
+    let url = root.appendingPathComponent("recovery.json")
+    let entry = RecoveryEntry(
+      token: "token-1", pid: 42, launch: 1_700_000_000, bundle: "com.example.app",
+      identifier: "id", title: "secret title",
+      frame: Rect(x: 1, y: 2, width: 300, height: 200))
+    let missing = RecoveryJournal(url)
+    check(missing.entries.isEmpty && !missing.needsAttention,
+          "a missing journal starts empty without needing attention")
+    try missing.add(entry)
+    let loaded = RecoveryJournal(url)
+    check(loaded.entries == [entry] && loaded.formatVersion == RecoveryJournal.currentVersion,
+          "a versioned journal round trips")
+    let mode = try fm.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
+    check(mode?.intValue == 0o600, "the journal is owner-readable only")
+    let encoded = try JSONEncoder().encode(loaded.report())
+    let reportText = String(data: encoded, encoding: .utf8) ?? ""
+    check(!reportText.contains("secret title"),
+          "the recovery report does not expose window titles")
+    try loaded.remove(entry.token)
+    check(loaded.entries.isEmpty, "removing the last entry empties the journal")
+    check(RecoveryJournal(url).entries.isEmpty, "the empty journal persists")
+
+    let legacyURL = root.appendingPathComponent("legacy.json")
+    try JSONEncoder().encode([entry]).write(to: legacyURL)
+    let migrated = RecoveryJournal(legacyURL)
+    check(migrated.entries == [entry] && migrated.formatVersion == 1,
+          "a legacy array journal is migrated")
+    check(migrated.loadWarning != nil, "legacy migration is reported")
+    check((try? JSONDecoder().decode(
+      RecoveryEnvelope.self, from: Data(contentsOf: legacyURL)))?.version == 1,
+      "the migrated file uses the versioned envelope")
+
+    let corruptURL = root.appendingPathComponent("corrupt.json")
+    let corruptBytes = Data("{not json".utf8)
+    try corruptBytes.write(to: corruptURL)
+    let corrupt = RecoveryJournal(corruptURL)
+    check(corrupt.needsAttention && corrupt.entries.isEmpty,
+          "a corrupt journal needs attention instead of being decoded")
+    check(corrupt.quarantineURL.map { fm.fileExists(atPath: $0.path) } == true,
+          "a corrupt journal is preserved in quarantine")
+    check(corrupt.quarantineURL.flatMap { try? Data(contentsOf: $0) } == corruptBytes,
+          "the quarantined bytes are unchanged")
+    let quarantinesBefore = try fm.contentsOfDirectory(atPath: root.path)
+      .filter { $0.hasPrefix("corrupt.corrupt-") }
+    let reportOnly = RecoveryJournal(corruptURL, quarantine: false)
+    check(reportOnly.needsAttention && reportOnly.quarantineURL != nil,
+          "a read-only report still describes the corrupt journal")
+    let quarantinesAfter = try fm.contentsOfDirectory(atPath: root.path)
+      .filter { $0.hasPrefix("corrupt.corrupt-") }
+    check(quarantinesBefore == quarantinesAfter,
+          "a read-only report does not create another quarantine copy")
+    do {
+      try corrupt.add(entry)
+      fatalError("a corrupt journal accepted a mutation")
+    } catch { count += 1 }
+
+    let futureURL = root.appendingPathComponent("future.json")
+    try JSONEncoder().encode(
+      RecoveryEnvelope(version: 99, entries: [entry])).write(to: futureURL)
+    let future = RecoveryJournal(futureURL)
+    check(future.needsAttention && future.formatVersion == 99,
+          "an unknown journal version is refused, not guessed")
+    check(fm.fileExists(atPath: futureURL.path),
+          "an unknown journal version keeps the original file")
+  }
   static func main() throws {
     visibilityChecks()
+    appScanBackoffChecks()
     scanReadinessChecks()
     writeBackoffChecks()
+    try recoveryJournalChecks()
     let primary = Rect(x: 0, y: 0, width: 1512, height: 982)
     check(Rect.quartz(appKit: primary, primaryTop: 982) == primary, "primary origin")
     check(
@@ -649,10 +721,11 @@ import Foundation
     func decide(_ now: Double, known: Bool = true, owned: Bool = false,
                 minimized: Bool = false, isHidden: Bool? = false,
                 visible: Bool? = false, ready: Bool = true,
-                ambiguous: Bool = false) -> VisibilityDecision {
+                ambiguous: Bool = false, unresponsive: Bool = false) -> VisibilityDecision {
       windowVisibilityDecision(known: known, owned: owned, orphaned: false,
         minimized: minimized, hidden: isHidden, onScreen: visible, readsReady: ready,
-        hiddenGrace: hidden, screenGrace: screen, now: now, ambiguous: ambiguous)
+        hiddenGrace: hidden, screenGrace: screen, now: now, ambiguous: ambiguous,
+        unresponsive: unresponsive)
     }
     for i in 0...12 {
       let now = Double(i) * 0.08
@@ -723,6 +796,21 @@ import Foundation
     check(!decide(100, owned: true, minimized: true, visible: false,
       ambiguous: true).actionable,
       "owned late minimize never overrides genuine peer ambiguity")
+    screen.observe(false, at: 101)
+    check(decide(101, visible: false, unresponsive: true).retained
+      && !decide(101, visible: false, unresponsive: true).actionable,
+      "an unresponsive app keeps known policy state but cannot mutate")
+    check(!decide(101, known: false, visible: false, unresponsive: true).retained,
+      "an unresponsive app cannot newly admit a window")
+    check(!decide(101, isHidden: true, visible: true, unresponsive: true).retained,
+      "a hidden app still leaves management while unresponsive")
+    check(!decide(101, minimized: true, visible: true, unresponsive: true).retained,
+      "a user-minimized window still leaves management while unresponsive")
+    check(decide(101, owned: true, minimized: true, visible: false,
+      unresponsive: true).retained
+      && !decide(101, owned: true, minimized: true, visible: false,
+        unresponsive: true).actionable,
+      "an owned hide survives an unresponsive app without a retry")
     rapidVisibilityRecoveryChecks()
   }
   static func rapidVisibilityRecoveryChecks() {
@@ -763,6 +851,32 @@ import Foundation
     }
     check(grace[1]!.negativeReads == 0 && grace[1]!.uncertainSince == nil,
       "positive recovery clears counters and deadline")
+  }
+  static func appScanBackoffChecks() {
+    func at(_ seconds: Double) -> Date { Date(timeIntervalSince1970: seconds) }
+    var backoff = AppScanBackoff()
+    check(backoff.shouldScan(owned: false, now: at(0)),
+          "a healthy app is scanned immediately")
+    backoff.noteFailure(at: at(0))
+    check(backoff.shouldScan(owned: false, now: at(0.1)),
+          "one failed scan retries on the next scan")
+    backoff.noteFailure(at: at(0.1))
+    check(!backoff.shouldScan(owned: false, now: at(0.2)),
+          "two consecutive failures enter a short cooldown")
+    check(backoff.shouldScan(owned: true, now: at(0.2)),
+          "an owned app is scanned through a cooldown")
+    check(backoff.shouldScan(owned: false, now: at(2.1)),
+          "the first cooldown expires after two seconds")
+    var long = AppScanBackoff()
+    for i in 0..<8 { long.noteFailure(at: at(Double(i))) }
+    check(long.failures == 8, "scan failures accumulate")
+    check(!long.shouldScan(owned: false, now: at(7.5)),
+          "a repeated failure stays in cooldown")
+    check(long.shouldScan(owned: false, now: at(40)),
+          "the cooldown widens but never becomes permanent")
+    long.noteSuccess()
+    check(long.failures == 0 && long.shouldScan(owned: false, now: at(40)),
+          "a successful scan resets the breaker")
   }
   static func scanReadinessChecks() {
     // scanReadiness lives in native/Accessibility.swift, which the portable

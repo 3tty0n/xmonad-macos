@@ -9,7 +9,7 @@ mkdir -p "$ROOT/build"
 xcrun swiftc -swift-version 5 -O -parse-as-library \
   -sdk "$SDK" -target "$(uname -m)-apple-macosx13.0" \
   "$ROOT/native/Wire.swift" "$ROOT/native/EventTap.swift" "$ROOT/native/Keyboard.swift" "$ROOT/native/Pointer.swift" "$ROOT/native/Border.swift" "$ROOT/native/Install.swift" \
-  "$ROOT/native/Accessibility.swift" "$ROOT/native/App.swift" \
+  "$ROOT/native/Recovery.swift" "$ROOT/native/Accessibility.swift" "$ROOT/native/App.swift" \
   -framework AppKit -framework ApplicationServices -framework CoreGraphics \
   -o "$ROOT/build/XMonadMac"
 BUNDLE="$ROOT/build/XMonadMac.app"

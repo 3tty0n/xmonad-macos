@@ -234,6 +234,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var pruneLogs =
     UserDefaults.standard.object(forKey: pruneLogsDefaultsKey) as? Bool ?? true
   private var axBusySince: Date?
+  private var lastScanMetrics = ScanMetrics()
+  // A pause must not wait forever for a wedged AX queue. The recovery journal
+  // is durable, so exiting is safer than a helper that looks alive but can
+  // neither restore nor scan.
+  private var restoreToken = UUID()
+  private var restoreFinished = true
   private let dryRun = CommandLine.arguments.contains("--dry-run")
 
   func applicationDidFinishLaunching(_ notification: Notification) {
@@ -242,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       lockFD = try acquireLock()
       LogFiles.rotateIfNeeded()
       LogFiles.redirect()
-      store = AXStore(journal: try RecoveryJournal(Paths.recovery), relay: relay)
+      store = AXStore(journal: RecoveryJournal(Paths.recovery), relay: relay)
     } catch {
       fputs("XMonadMac: \(error)\n", stderr)
       NSApp.terminate(nil)
@@ -456,6 +462,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       "keyboardReady": tapReady, "pointerReady": pointerReady, "nativeFullScreen": fullScreen,
       "dryRun": dryRun, "recompiling": recompiling,
       "status": text, "epoch": currentEpoch, "generation": latestSent,
+      "scanMs": lastScanMetrics.durationMs,
+      "scanApps": lastScanMetrics.appsScanned,
+      "scanDeferred": lastScanMetrics.appsDeferred,
+      "scanCooling": lastScanMetrics.appsCoolingDown,
+      "scanTimeouts": lastScanMetrics.appsTimedOut,
       // Published for external bars: sketchybar, Übersicht, a shell loop.
       "workspaces": workspaces.map {
         [
@@ -495,6 +506,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return
       }
       recoveryDone = true
+    }
+    if let journal = store.journal.loadError {
+      // Starting mutations with an unreadable journal could hide a window
+      // without a durable way to restore it. Stay paused and report.
+      setStatus("Recovery journal needs attention: \(journal); run xmonad recover --report")
+      return
     }
     if !recoveryDone {
       recovering = true
@@ -997,6 +1014,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.fullScreen = result.nativeFullScreen
         self.updateKeyState()
         self.lastStack = result.stack
+        self.lastScanMetrics = result.metrics
         self.traceFocus(result, displays: displays)
         if self.fullScreen {
           self.setStatus("Native full-screen; tiling suspended")
@@ -1070,10 +1088,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     stopEngine()
     setStatus(reason)
     logMessage(reason)
-    if store != nil {
+    let token = UUID()
+    restoreToken = token
+    restoreFinished = store == nil
+    if let store = store {
       axQueue.async { [weak self] in
-        self?.store.cancelPointerDrag()
-        self?.store.restoreAll()
+        store.cancelPointerDrag()
+        store.restoreAll()
+        DispatchQueue.main.async {
+          guard let self = self, self.restoreToken == token else { return }
+          self.restoreFinished = true
+        }
+      }
+      // A single AX call can wedge past its messaging timeout (a hung app,
+      // a WindowServer transition). Never leave a paused helper that cannot
+      // restore: exit with the journal intact so the next launch recovers.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+        guard let self = self, self.restoreToken == token, !self.restoreFinished,
+          !self.quitting
+        else { return }
+        let message = "AX queue did not restore within 8s; exiting with the recovery journal intact"
+        self.setStatus(message)
+        logMessage(message)
+        exit(1)
       }
     }
   }
@@ -1344,11 +1381,18 @@ struct XMonadMacMain {
       }
     }
     if args.contains("--diagnose") {
+      let journal = RecoveryJournal(Paths.recovery, quarantine: false)
+      let report = journal.report()
       let info: [String: Any] = [
         "macOS": ProcessInfo.processInfo.operatingSystemVersionString,
         "accessibility": AXIsProcessTrusted(), "engine": Paths.engine.path,
         "engineExecutable": FileManager.default.isExecutableFile(atPath: Paths.engine.path),
         "journalExists": FileManager.default.fileExists(atPath: Paths.recovery.path),
+        "journalVersion": report.version as Any? ?? NSNull(),
+        "journalEntries": report.entries,
+        "journalWarning": report.warning as Any? ?? NSNull(),
+        "journalError": report.error as Any? ?? NSNull(),
+        "journalQuarantine": report.quarantine as Any? ?? NSNull(),
         "config": Paths.config.path,
         "log": Paths.log.path, "status": Paths.status.path,
       ]
@@ -1357,6 +1401,14 @@ struct XMonadMacMain {
       FileHandle.standardOutput.write(data)
       print("")
       return
+    }
+    if args.contains("--recover-report") {
+      let journal = RecoveryJournal(Paths.recovery, quarantine: false)
+      let report = journal.report()
+      let data = try! JSONEncoder().encode(report)
+      FileHandle.standardOutput.write(data)
+      print("")
+      exit(journal.needsAttention ? 2 : 0)
     }
     let commands = [
       "pause", "resume", "reload", "recompile", "recover", "dump", "quit", "relaunch",
@@ -1391,7 +1443,15 @@ struct XMonadMacMain {
     do {
       let fd = try acquireLock()
       defer { close(fd) }
-      let journal = try RecoveryJournal(Paths.recovery)
+      let journal = RecoveryJournal(Paths.recovery)
+      if let error = journal.loadError {
+        fputs("Recovery journal needs attention: \(error)\n", stderr)
+        if let quarantine = journal.quarantineURL {
+          fputs("Preserved copy: \(quarantine.path)\n", stderr)
+        }
+        fputs("Run xmonad recover --report for details.\n", stderr)
+        exit(2)
+      }
       let store = AXStore(journal: journal, relay: NotificationRelay())
       store.recover(apps: descriptors(), displays: displayInfo())
       print("Unresolved recovery entries: \(journal.entries.count)")

@@ -37,8 +37,19 @@ matches. Repeated writes to a size an app clamps back off exponentially.
   retries; ordinary scans do not activate apps.
 - Hides are journaled **before** mutation. Recovery restores only WM-owned
   hides, not user-minimized windows; it is not a full geometry rollback.
+- `recovery.json` uses a versioned envelope. A legacy bare array is migrated;
+  an unreadable or unknown-version file is preserved (corrupt files are copied
+  to `recovery.corrupt-*.json`) and the helper starts paused instead of hiding
+  a window without a durable restore path. `xmonad recover --report` prints
+  counts and the quarantine path without titles.
+- An app that repeatedly times out enters a bounded scan cooldown (2s doubling
+  to 30s). Its known windows stay in the snapshot with their last observed
+  state but are never actionable, so one hung app cannot drop another app's
+  workspace or make every scan pay its timeout.
 - `session.json` restores workspace/float state after helper restart using
   public fingerprints. Ambiguous matches remain unresolved.
+- A paused helper that cannot finish restoring within 8s exits with the journal
+  intact; the next launch recovers. It does not remain alive but wedged.
 - Emergency stop and recovery do not depend on the Haskell engine.
 
 ## Recompile

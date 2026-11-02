@@ -183,9 +183,20 @@ func windowVisibilityDecision(known: Bool, owned: Bool, orphaned: Bool,
                               minimized: Bool, hidden: Bool?, onScreen: Bool?,
                               readsReady: Bool, hiddenGrace: VisibilityGrace,
                               screenGrace: VisibilityGrace, now: Double,
-                              ambiguous: Bool = false) -> VisibilityDecision {
+                              ambiguous: Bool = false,
+                              unresponsive: Bool = false) -> VisibilityDecision {
   if minimized && !owned {
     return VisibilityDecision(retained: false, actionable: false, reason: "user-minimized")
+  }
+  // An app that keeps timing out is not evidence that its windows closed.
+  // Keep a known window in the snapshot with its last observed state, but
+  // never make it actionable while AX cannot confirm the world. A hidden app
+  // and a user-minimized window still leave management.
+  if unresponsive && known {
+    let retained = hidden != true && (!minimized || owned)
+    return VisibilityDecision(
+      retained: retained, actionable: false,
+      reason: retained ? "ax-unresponsive" : "app-hidden")
   }
   let hiddenOK = hidden == false
   let visibleOK = onScreen == true
@@ -202,6 +213,39 @@ func windowVisibilityDecision(known: Bool, owned: Bool, orphaned: Bool,
     : !visibleOK && !owned ? "cg-mismatch" : !readsReady ? "ax-query-unknown" : "visible"
   return VisibilityDecision(retained: retained, actionable: actionable, reason: reason)
 }
+// A per-application scan circuit breaker. The first slow/failed read retries on
+// the next scan; a second consecutive failure backs off for 2s, then doubles up
+// to 30s. Owned windows are always attempted because they carry recovery
+// state. This is deliberately separate from WriteBackoff: a scan failure must
+// not suppress a later real placement.
+struct AppScanBackoff {
+  private(set) var failures = 0
+  private(set) var retryAt = Date.distantPast
+  mutating func noteFailure(at now: Date) {
+    failures += 1
+    if failures < 2 {
+      retryAt = .distantPast
+    } else {
+      let delay = min(30.0, 2.0 * pow(2.0, Double(failures - 2)))
+      retryAt = now.addingTimeInterval(delay)
+    }
+  }
+  mutating func noteSuccess() {
+    failures = 0
+    retryAt = .distantPast
+  }
+  func shouldScan(owned: Bool, now: Date) -> Bool {
+    owned || now >= retryAt
+  }
+}
+struct ScanMetrics: Equatable {
+  var durationMs = 0
+  var appsScanned = 0
+  var appsDeferred = 0
+  var appsCoolingDown = 0
+  var appsTimedOut = 0
+}
+
 // Tiling admission. Minimized need not be settable: emacs-mac undecorated
 // frames often have no AXMinimized. Empty subrole is a standard window that
 // has not filled the attribute in yet.

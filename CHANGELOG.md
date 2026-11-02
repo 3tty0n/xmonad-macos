@@ -13,6 +13,17 @@ Written when a version tag is cut; between tags, see the git log.
 - Hovering the window that already has policy focus no longer sends a focus
   request. The old request activated its app and raised it, which pushed an
   unmanaged panel in front of it to the back.
+- A hung app no longer re-opens its AX timeout for every window on every scan.
+  Failed apps enter a bounded 2s-to-30s cooldown, their known windows stay in
+  the snapshot but are never actionable, and scan duration/timeout/deferred
+  counts appear in `xmonad status`/`doctor`. A paused helper that cannot
+  restore within 8s exits with the journal intact instead of hanging.
+- `recovery.json` is versioned. Legacy arrays migrate, unknown versions are
+  refused, and corrupt files are preserved in quarantine while the helper
+  starts paused. `xmonad recover --report` prints a redacted summary.
+- Added `make ax-test`, a controllable AppKit fixture and a desktop driver for
+  membership, focus, close, minimize ownership, duplicate titles, delayed
+  minimize, hung-app isolation and accessory fixed-size floating.
 
 ## 1.2.0 - 2026-10-10
 

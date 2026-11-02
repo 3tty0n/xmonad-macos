@@ -8,12 +8,6 @@ func logMessage(_ s: String) {
   let text = "[\(ISO8601DateFormatter().string(from:Date()))] \(s)\n"
   FileHandle.standardError.write(Data(text.utf8))
 }
-// The recovery journal and the session file carry window titles and frames, so
-// both are written owner-readable only.
-func writePrivate(_ data: Data, to url: URL) throws {
-  try data.write(to: url, options: .atomic)
-  try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-}
 func axCopy(_ e: AXUIElement, _ name: String) -> CFTypeRef? {
   var raw: CFTypeRef?
   guard AXUIElementCopyAttributeValue(e, name as CFString, &raw) == .success else { return nil }
@@ -206,30 +200,9 @@ struct AppDescriptor {
   // path of its own.
   var accessory: Bool = false
 }
-struct RecoveryEntry: Codable {
-  var token: String, pid: Int32, launch: Double, bundle: String
-  var identifier: String, title: String, frame: Rect
-}
-final class RecoveryJournal {
-  let url: URL
-  private(set) var entries: [RecoveryEntry]
-  init(_ url: URL) throws {
-    self.url = url
-    if FileManager.default.fileExists(atPath: url.path) {
-      entries = try JSONDecoder().decode([RecoveryEntry].self, from: Data(contentsOf: url))
-    } else {
-      entries = []
-    }
-  }
-  private func persist(_ next: [RecoveryEntry]) throws {
-    try writePrivate(try JSONEncoder().encode(next), to: url)
-    entries = next
-  }
-  func add(_ e: RecoveryEntry) throws { try persist(entries + [e]) }
-  func remove(_ token: String) throws { try persist(entries.filter { $0.token != token }) }
-}
 final class AXRecord {
-  let wid: UInt64, descriptor: AppDescriptor
+  let wid: UInt64
+  var descriptor: AppDescriptor
   var element: AXUIElement
   var frame: Rect, title: String, identifier: String
   // When the element was first found destroyed. Display wake destroys every
@@ -286,6 +259,7 @@ final class NotificationRelay {
 struct ScanResult {
   var windows: [WindowInfo], focused: UInt64?, nativeFullScreen: Bool
   var stack: [StackEntry] = []
+  var metrics = ScanMetrics()
 }
 struct PointerDragSession {
   var wid: UInt64, mode: PointerMode, start: CGPoint, initial: Rect
@@ -341,6 +315,9 @@ final class AXStore {
   // starting up never moves it.
   private var pointerScreen = -1
   private var axFail: [pid_t: Int] = [:]
+  private var scanBackoff: [pid_t: AppScanBackoff] = [:]
+  private var lastScannedAt: [pid_t: Date] = [:]
+  private var lastScanMetricsLog = Date.distantPast
   private var actionFirstSeen: [Int: Date] = [:]
   private var actionFrom: [Int: UInt64] = [:]
   private var pendingAck: (Int, UInt64?, Bool)?
@@ -408,6 +385,16 @@ final class AXStore {
       r.backoff.reset()
     } catch { logMessage("Cannot update recovery journal: \(error)") }
   }
+  // NSWorkspace may report a just-launched app as regular for one scan before
+  // setActivationPolicy(.accessory) propagates. Keep the recorded launch time
+  // (process identity) but refresh the descriptive fields so an accessory
+  // window is not stuck as a regular one for its whole lifetime.
+  private func refreshDescriptor(_ r: AXRecord, from app: AppDescriptor) {
+    r.descriptor.name = app.name
+    r.descriptor.bundle = app.bundle
+    r.descriptor.hidden = app.hidden
+    r.descriptor.accessory = app.accessory
+  }
   // A stale record adopts a replacement element only when the match is
   // unique: by AXIdentifier when the element has one, otherwise by title
   // plus either a nearby old frame or ownership (a token means we may have
@@ -435,15 +422,24 @@ final class AXStore {
   func scan(apps: [AppDescriptor], displays: [DisplayInfo], generation: Int, epoch: Int)
     -> ScanResult
   {
+    let scanStarted = Date()
+    var metrics = ScanMetrics()
+    let previousEpoch = activeEpoch
     latestGeneration = generation
     activeEpoch = epoch
     // A changed display arrangement moves every window's real frame; a
     // backoff computed for the old arrangement must not defer the new one.
-    if displays != self.displays {
+    if displays != self.displays || previousEpoch != epoch {
       for r in records.values { r.backoff.reset() }
+      scanBackoff.removeAll()
+      lastScannedAt.removeAll()
     }
     self.displays = displays
     let livePIDs = Set(apps.map(\.pid))
+    // Drop state for processes that are no longer listed, but keep a failed
+    // app's breaker across a transient NSWorkspace omission.
+    scanBackoff = scanBackoff.filter { livePIDs.contains($0.key) }
+    lastScannedAt = lastScannedAt.filter { livePIDs.contains($0.key) }
     // An application missing from one scan is not proof that it exited:
     // coming back from display sleep, NSWorkspace briefly reports an
     // incomplete list. Forgetting a window here is expensive, because the
@@ -475,8 +471,12 @@ final class AXStore {
     var succeeded: Set<pid_t> = []
     var hiddenPIDs: Set<pid_t> = []
     var readsReady: Set<UInt64> = []
+    var coolingPIDs: Set<pid_t> = []
+    var deferredPIDs: Set<pid_t> = []
+    var unresponsivePIDs: Set<pid_t> = []
     let budgetEnd = Date().addingTimeInterval(0.45)
     let ownedPIDs = Set(records.values.compactMap { $0.token == nil ? nil : $0.descriptor.pid })
+    let orderNow = Date()
     let ordered = apps.sorted { a, b in
       let ao = ownedPIDs.contains(a.pid)
       let bo = ownedPIDs.contains(b.pid)
@@ -484,26 +484,54 @@ final class AXStore {
       let af = axFail[a.pid] ?? 0
       let bf = axFail[b.pid] ?? 0
       if af != bf { return af < bf }
+      let at = lastScannedAt[a.pid] ?? Date.distantPast
+      let bt = lastScannedAt[b.pid] ?? Date.distantPast
+      if at != bt { return at < bt }
       return a.pid < b.pid
     }
     for app in ordered {
       if app.hidden { hiddenPIDs.insert(app.pid) }
+      let owned = ownedPIDs.contains(app.pid)
+      let breaker = scanBackoff[app.pid] ?? AppScanBackoff()
+      guard breaker.shouldScan(owned: owned, now: orderNow) else {
+        coolingPIDs.insert(app.pid)
+        unresponsivePIDs.insert(app.pid)
+        continue
+      }
       let remain = budgetEnd.timeIntervalSinceNow
-      if remain <= 0, !ownedPIDs.contains(app.pid) { continue }
+      if remain <= 0, !owned {
+        deferredPIDs.insert(app.pid)
+        unresponsivePIDs.insert(app.pid)
+        continue
+      }
       let fails = axFail[app.pid] ?? 0
       let timeout = Float(fails >= 2 ? 0.04 : min(0.15, max(0.03, remain > 0 ? remain : 0.04)))
       let root = AXUIElementCreateApplication(app.pid)
       AXUIElementSetMessagingTimeout(root, timeout)
       observe(app, root)
       let started = Date()
+      lastScannedAt[app.pid] = started
+      metrics.appsScanned += 1
       guard let windows = axCopy(root, kAXWindowsAttribute) as? [AXUIElement] else {
         axFail[app.pid] = fails + 1
+        var next = breaker
+        next.noteFailure(at: Date())
+        scanBackoff[app.pid] = next
+        unresponsivePIDs.insert(app.pid)
+        metrics.appsTimedOut += 1
         continue
       }
       if Date().timeIntervalSince(started) > Double(timeout) * 0.8 {
         axFail[app.pid] = fails + 1
+        var next = breaker
+        next.noteFailure(at: Date())
+        scanBackoff[app.pid] = next
+        metrics.appsTimedOut += 1
       } else {
         axFail[app.pid] = 0
+        var next = breaker
+        next.noteSuccess()
+        scanBackoff[app.pid] = next
       }
       succeeded.insert(app.pid)
       // Display sleep/wake makes macOS destroy every AXUIElement and hand
@@ -523,12 +551,14 @@ final class AXStore {
           // during its own animations, and losing the record would
           // hand the window back to the engine as a new one.
           r = old
+          refreshDescriptor(r, from: app)
           if let frame = axFrame(e) { r.frame = frame }
           r.title = axString(e, kAXTitleAttribute)
           if let ms = axMinSize(e) { r.minSize = ms }
         } else if let match = adoptStale(stale, adopted, e) {
           r = match
           adopted.insert(r.wid)
+          refreshDescriptor(r, from: app)
           r.element = e
           AXUIElementSetMessagingTimeout(e, timeout)
           observeWindow(r)
@@ -614,6 +644,10 @@ final class AXStore {
     let all = Array(records.values)
     var minimizedReads: [UInt64: Bool] = [:]
     for r in all {
+      // Asking an app that just timed out for each window's minimized state
+      // re-opens the same stall. Use the last observation; an unresponsive
+      // app's windows are retained but never actionable.
+      guard succeeded.contains(r.descriptor.pid) else { continue }
       if let observed = axMinimizedRead(r.element) {
         minimizedReads[r.wid] = observed
         r.lastMinimized = observed
@@ -678,7 +712,8 @@ final class AXStore {
         minimized: mini, hidden: hidden, onScreen: onScreen,
         readsReady: readsReady.contains(r.wid) && observedMini != nil,
         hiddenGrace: r.hiddenGrace, screenGrace: r.screenGrace, now: now,
-        ambiguous: peers > 1 && visible < peers)
+        ambiguous: peers > 1 && visible < peers,
+        unresponsive: unresponsivePIDs.contains(r.descriptor.pid))
       r.visibilityReason = decision.reason
       guard decision.retained else {
         if !mini && visible > 0 { ambiguous += 1 }
@@ -757,8 +792,21 @@ final class AXStore {
     let me = ProcessInfo.processInfo.processIdentifier
     let stack = observedStack(cg.filter { $0.0 != me }, windows: result)
     if !fullScreen { raiseCoveredFloats(focused: focused, stack: stack) }
+    metrics.appsDeferred = deferredPIDs.count
+    metrics.appsCoolingDown = coolingPIDs.count
+    metrics.durationMs = Int(Date().timeIntervalSince(scanStarted) * 1000)
+    if (metrics.durationMs > 450 || metrics.appsTimedOut > 0
+      || !coolingPIDs.isEmpty), Date().timeIntervalSince(lastScanMetricsLog) > 10
+    {
+      lastScanMetricsLog = Date()
+      logMessage(
+        "Scan budget gen=\(generation) ms=\(metrics.durationMs) apps=\(metrics.appsScanned) "
+          + "deferred=\(metrics.appsDeferred) cooling=\(metrics.appsCoolingDown) "
+          + "timeouts=\(metrics.appsTimedOut)")
+    }
     return ScanResult(
-      windows: result, focused: focused, nativeFullScreen: fullScreen, stack: stack)
+      windows: result, focused: focused, nativeFullScreen: fullScreen, stack: stack,
+      metrics: metrics)
   }
   private func windowAt(_ point: CGPoint) -> AXRecord? {
     let system = AXUIElementCreateSystemWide()

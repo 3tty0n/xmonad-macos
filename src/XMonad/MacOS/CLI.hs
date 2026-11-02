@@ -101,7 +101,10 @@ run (cmd:rest) = do
     "dump" -> toHelper p "--dump"
     "quit" -> toHelper p "--quit"
     "relaunch" -> toHelper p "--relaunch"
-    "recover" -> toHelper p "--recover"
+    "recover" -> case rest of
+      [] -> toHelper p "--recover"
+      ["--report"] -> toHelper p "--recover-report"
+      _ -> hPutStrLn stderr "Usage: xmonad recover [--report]" >> pure (ExitFailure 2)
     "doctor" -> doctor p
     "self-test" -> toHelper p "--self-test"
     "start" -> startApp p rest
@@ -404,7 +407,7 @@ usage h = hPutStr h $ unlines
   ,"  log                      follow bridge.log"
   ,"  config                   open xmonad.hs"
   ,"  pause|resume             pause/resume tiling"
-  ,"  recover                  restore windows minimized by XMonadMac"
+  ,"  recover [--report]      restore windows minimized by XMonadMac; --report is redacted"
   ,"  quit                     quit XMonadMac"
   ,"  relaunch                 quit XMonadMac and start it again"
   ,"  autostart on|off|status  manage login startup"
