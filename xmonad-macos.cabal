@@ -1,6 +1,6 @@
 cabal-version: 3.0
 name: xmonad-macos
-version: 1.2.0
+version: 1.2.1
 synopsis: Native macOS portability fork of the xmonad policy core
 license: BSD-3-Clause
 license-file: LICENSE

@@ -2,7 +2,7 @@
 
 Written when a version tag is cut; between tags, see the git log.
 
-## Unreleased
+## 1.2.1 - 2026-11-02
 
 - Windows of accessory (`LSUIElement`) applications are managed while they own
   an on-screen window. Box Drive's fixed-size integration panel is floated and
@@ -24,6 +24,14 @@ Written when a version tag is cut; between tags, see the git log.
 - Added `make ax-test`, a controllable AppKit fixture and a desktop driver for
   membership, focus, close, minimize ownership, duplicate titles, delayed
   minimize, hung-app isolation and accessory fixed-size floating.
+- Ported `Layout.Maximize`, `Layout.Minimize`, `Actions.Minimize`,
+  `Actions.SpawnOn`, `Hooks.OnPropertyChange`, `Hooks.DynamicProperty`,
+  `Hooks.Place`, `Layout.TwoPanePersistent`, `Layout.MouseResizableTile`,
+  `Actions.WorkspaceNames` and `Hooks.RefocusLast`. `MouseResizableTile`
+  matches upstream geometry and messages; see `docs/COMPATIBILITY.md` for the
+  supported subset and remaining differences.
+- Diagnostic logs are more compact, unbound keycodes are no longer reported,
+  and the menu item for the config editor is named consistently.
 
 ## 1.2.0 - 2026-10-10
 
