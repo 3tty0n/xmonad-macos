@@ -58,6 +58,7 @@ main = xmonad
             ]
         }
       [ ("M-f", toggleFloat)
+      , ("M-t", toggleFloat)
       , ("M-S-p", pause)
       , ("M-S-m", windows W.shiftMaster)
       , ("M-r", sendMessage (Toggle REFLECTX))

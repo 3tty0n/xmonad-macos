@@ -92,7 +92,7 @@ main = xmonad $ def
   , manageHook = composeAll
       [ bundleId =? "com.apple.systempreferences" --> doFloat ]
   }
-  `additionalKeysP` [ ("M-f", toggleFloat) ]
+  `additionalKeysP` [ ("M-f", toggleFloat), ("M-t", toggleFloat) ]
 ```
 
 ```sh
@@ -126,7 +126,7 @@ and floating panels are floated automatically.
 | `M-r` | Flip the layout left to right (bundled config) |
 | `M-1…0` | Go to that **virtual** workspace |
 | `M-S-1…0` | Send the window to that workspace |
-| `M-f` / `M-t` | Float / unfloat |
+| `M-f` / `M-t` | Toggle float |
 | `M-C-Space` | Switch between the tiled and floating layer |
 | `M` + drag | Move (left) or resize (right) |
 | `M-S-c` | Close the window |

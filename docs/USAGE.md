@@ -41,7 +41,7 @@ The table includes example-config additions.
 | `M-w` / `M-e` | Focus screen 0 / 1 |
 | `M-r` | Reflect layout (overrides default screen-2 focus) |
 | `M-S-w` / `M-S-e` / `M-S-r` | Send to that screen's workspace |
-| `M-f` / `M-t` | Float / sink |
+| `M-f` / `M-t` | Toggle float |
 | `M-C-Space` | Switch between the tiled and floating layer |
 | `M-S-c` | Close (never force-quit) |
 | `M-q` / `M-S-q` | Recompile / quit |
