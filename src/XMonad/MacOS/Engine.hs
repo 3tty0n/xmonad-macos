@@ -8,7 +8,7 @@ module XMonad.MacOS.Engine
 import XMonad.Core
 import XMonad.MacOS.Protocol
 import XMonad.MacOS.CLI (handleCommand)
-import XMonad.Operations (broadcastMessage, windows)
+import XMonad.Operations (broadcastMessage, windows, withWindowSet)
 import XMonad.ManageHook ((-->), doFloat, isAccessory)
 import XMonad.Hooks.ManageHelpers (isDialog)
 import qualified XMonad.StackSet as W
@@ -604,6 +604,12 @@ handleEvent keymap event = case event of
         onScreen = onScreenWorkspace w (windowset s)
         alreadyFocused = W.peek (windowset s) == Just w
     when (known && onScreen && not alreadyFocused) $ windows (W.focusWindow w)
+  -- A click on the desktop focuses that screen, as a click on the root window
+  -- does in xmonad, so M-<n> then acts on it even when it shows no window.
+  ScreenFocusEvent d -> withWindowSet $ \ws ->
+    whenJust (find ((==d) . displayID . W.screenDetail) (W.screens ws)) $ \sc ->
+      let t = W.tag (W.workspace sc)
+      in when (t /= W.currentTag ws) $ windows (W.view t)
   -- A bound key is the one thing that may ask the helper to change focus.
   KeyEvent m k grabbed -> do
     pending <- gets keyGrab

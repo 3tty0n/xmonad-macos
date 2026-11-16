@@ -278,6 +278,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       self?.handlePointer(mode: mode, phase: phase, point: point)
     }
     pointer.onHover = { [weak self] point in self?.handleHover(point) }
+    pointer.onClick = { [weak self] point in self?.handleClick(point) }
     pointer.onReady = { [weak self] in
       self?.pointerReady = true
       self?.updateKeyState()
@@ -921,6 +922,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard wid != self.hoverWid else { return }
         self.hoverWid = wid
         self.sendPointerFocus(wid)
+      }
+    }
+  }
+  // A click on no window is xmonad's click on the root window: it focuses the
+  // screen under the pointer, which an empty workspace has no other way to do.
+  private func handleClick(_ point: CGPoint) {
+    guard running, configured, !dryRun, !fullScreen else { return }
+    axQueue.async { [weak self] in
+      guard let self = self, self.store.window(at: point) == nil else { return }
+      var id: CGDirectDisplayID = 0
+      var count: UInt32 = 0
+      guard CGGetDisplaysWithPoint(point, 1, &id, &count) == .success, count == 1 else { return }
+      DispatchQueue.main.async {
+        guard self.running else { return }
+        self.sendObject(["type": "screenFocus", "display": Int(id)])
       }
     }
   }

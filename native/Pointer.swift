@@ -29,6 +29,8 @@ final class PointerTap {
   var onPointer: ((PointerMode, PointerPhase, CGPoint) -> Void)?
   // Reported at most every 80ms, and never during a mod-drag.
   var onHover: ((CGPoint) -> Void)?
+  // A press that no mouse binding took.
+  var onClick: ((CGPoint) -> Void)?
   var onReady: (() -> Void)?
   var onFailure: ((String) -> Void)?
 
@@ -112,6 +114,9 @@ final class PointerTap {
       activeButton = 0
     }
     lock.unlock()
+    if down && !matching {
+      DispatchQueue.main.async { [weak self] in self?.onClick?(location) }
+    }
     guard matching, let active = active else { return Unmanaged.passUnretained(event) }
     if active == .raise {
       if down {

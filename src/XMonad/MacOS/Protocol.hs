@@ -18,6 +18,7 @@ data InputEvent
   | KeyEvent KeyMask KeySym Bool  -- a bound or grabbed key was pressed
   | MouseFloatEvent Window     -- a mod-drag started on this window
   | PointerFocusEvent Window   -- the pointer moved onto this window
+  | ScreenFocusEvent Int       -- a click on no window, on this display
   | AckEvent Int (Maybe Window) Bool  -- action id, observed focus, expired
   | PingEvent                  -- liveness check
   | ExitEvent                  -- shut down
@@ -32,6 +33,7 @@ instance FromJSON InputEvent where
       "key" -> KeyEvent <$> o .: "mask" <*> o .: "sym" <*> o .:? "grabbed" .!= False
       "mouseFloat" -> MouseFloatEvent <$> o .: "wid"
       "pointerFocus" -> PointerFocusEvent <$> o .: "wid"
+      "screenFocus" -> ScreenFocusEvent <$> o .: "display"
       "ack" -> AckEvent <$> o .: "action" <*> o .:? "focused" <*> o .:? "expired" .!= False
       "ping" -> pure PingEvent
       "exit" -> pure ExitEvent

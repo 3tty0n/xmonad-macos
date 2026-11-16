@@ -275,6 +275,14 @@ main = do
   (_,clicked) <- runX conf kept (reconcile (across 4 [wi 1 20,wi 2 20,wi 3 20] 3))
   check "a native focus change still moves to the other screen"
     (W.currentTag (windowset clicked)=="2" && W.peek (windowset clicked)==Just 3)
+  -- A click on the empty screen's desktop focuses it, so M-<n> lands there.
+  (_,rootClick) <- runX conf clicked (handleEvent M.empty (ScreenFocusEvent 10))
+  (_,viewed) <- runX conf rootClick (windows (W.greedyView "3"))
+  check "desktop click focuses the empty screen"
+    (W.currentTag (windowset rootClick)=="1")
+  check "M-<n> after a desktop click views on the clicked screen"
+    (W.lookupWorkspace 0 (windowset viewed)==Just "3"
+     && W.lookupWorkspace 1 (windowset viewed)==Just "2")
   check "three windows laid out" (length (planFrames p1)==3 && null (planHide p1))
   (_,mouseFloat) <- runX conf s2 (floatObservedWindow 2)
   check "mouse drag floats observed window" (M.member 2 (W.floating $ windowset mouseFloat))

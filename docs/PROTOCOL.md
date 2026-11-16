@@ -17,8 +17,9 @@ to a physical key. Mask 0 is rejected. `borderWidth` 0 turns overlays off.
 ## Helper → engine
 
 `pointerFocus` — pointer entered a window (`focusFollowsMouse` or
-`MouseRaise`). `ack` — a plan's focus request observed, taken over, or
-expired. Snapshot:
+`MouseRaise`). `screenFocus` — an unbound click on no window, with the
+`display` under it; policy views that screen's workspace. `ack` — a plan's
+focus request observed, taken over, or expired. Snapshot:
 
 ```json
 {"type":"snapshot","generation":3,"epoch":1,"screens":[{"display":10,"usable":{"x":0,"y":24,"width":1600,"height":1000}}],"windows":[{"wid":1,"pid":123,"app":"Terminal","bundle":"com.apple.Terminal","titleText":"shell","onDisplay":10,"frame":{"x":0,"y":24,"width":800,"height":1000},"minimized":false,"ownedHidden":false,"subrole":"AXStandardWindow"}],"focused":1,"restore":null}
