@@ -390,6 +390,21 @@ final class AXStore {
     guard r.awaitsReplacement, let at = r.orphanedAt else { return false }
     return Date().timeIntervalSince(max(at, wokeAt)) <= orphanGrace
   }
+  private func elementDestroyed(_ r: AXRecord) -> Bool {
+    var value: CFTypeRef?
+    return AXUIElementCopyAttributeValue(r.element, kAXRoleAttribute as CFString, &value)
+      == .invalidUIElement
+  }
+  private func dropDestroyed(_ r: AXRecord) {
+    if r.orphanedAt == nil {
+      r.orphanedAt = Date()
+      r.awaitsReplacement = Date().timeIntervalSince(wokeAt) < orphanGrace
+    }
+    guard !awaitingReplacement(r) else { return }
+    logMessage("Window \(r.wid) removed: its element was destroyed")
+    releaseOwnership(r)
+    records.removeValue(forKey: r.wid)
+  }
   private func releaseOwnership(_ r: AXRecord) {
     guard let token = r.token else { return }
     do {
@@ -533,6 +548,16 @@ final class AXStore {
         scanBackoff[app.pid] = next
         unresponsivePIDs.insert(app.pid)
         metrics.appsTimedOut += 1
+        // An Electron app whose last window closed refuses AXWindows at
+        // once. Retained as unresponsive, that window would keep its tile
+        // and border until the app opens another, so a quick refusal (not a
+        // stall) is answered by asking each recorded element directly.
+        if Date().timeIntervalSince(started) < Double(timeout) * 0.8 {
+          for r in records.values
+          where r.descriptor.pid == app.pid && elementDestroyed(r) {
+            dropDestroyed(r)
+          }
+        }
         continue
       }
       if Date().timeIntervalSince(started) > Double(timeout) * 0.8 {
@@ -655,17 +680,8 @@ final class AXStore {
       guard succeeded.contains(r.descriptor.pid) else { continue }
       r.absent += 1
       guard r.absent >= 2 else { continue }
-      var value: CFTypeRef?
-      let error = AXUIElementCopyAttributeValue(r.element, kAXRoleAttribute as CFString, &value)
-      if error == .invalidUIElement {
-        if r.orphanedAt == nil {
-          r.orphanedAt = Date()
-          r.awaitsReplacement = Date().timeIntervalSince(wokeAt) < orphanGrace
-        }
-        guard !awaitingReplacement(r) else { continue }
-        logMessage("Window \(id) removed: its element was destroyed")
-        releaseOwnership(r)
-        records.removeValue(forKey: id)
+      if elementDestroyed(r) {
+        dropDestroyed(r)
       } else if processIsGone(r.descriptor.pid) {
         logMessage("Window \(id) removed: process \(r.descriptor.pid) exited")
         releaseOwnership(r)
