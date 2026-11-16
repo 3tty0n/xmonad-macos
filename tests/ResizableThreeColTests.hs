@@ -30,6 +30,7 @@ baseState = XState
   , generation = 0
   , epoch = 0
   , pendingFocus = Nothing
+  , nativeFocus = Nothing
   , nextActionId = 0
   , displayAffinity = M.empty
   , borderOverrides = M.empty

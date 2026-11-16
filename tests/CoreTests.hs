@@ -259,6 +259,22 @@ main = do
   check "statusBarFile writes the rendered line" (sbOut=="[1] <2>\n")
   removeFile sbFile
   check "passive snapshot never requests focus" (planFocus p1==Nothing)
+  -- Shifting to a workspace visible on the other screen keeps focus on this
+  -- screen, as in xmonad, though macOS leaves native focus on the moved window.
+  (_,shifted) <- runX conf s1 (windows (W.shift "2"))
+  let aid = maybe 0 fst (pendingFocus shifted)
+  (_,staleAck) <- runX conf shifted (handleEvent M.empty (AckEvent aid (Just 1) False))
+  check "shift to other screen ignores stale native focus in ack"
+    (W.currentTag (windowset staleAck)=="1" && W.peek (windowset staleAck)==Just 2)
+  let across g ws f = snapshot {snapGeneration=g,snapWindows=ws,snapFocused=Just f}
+  (_,on2) <- runX conf staleAck (reconcile (across 2 [wi 1 20,wi 2 10,wi 3 20] 2))
+  (_,emptied) <- runX conf on2 (windows (W.shift "2"))
+  (_,kept) <- runX conf emptied (reconcile (across 3 [wi 1 20,wi 2 20,wi 3 20] 2))
+  check "shift emptying a screen keeps current workspace"
+    (W.currentTag (windowset kept)=="1")
+  (_,clicked) <- runX conf kept (reconcile (across 4 [wi 1 20,wi 2 20,wi 3 20] 3))
+  check "a native focus change still moves to the other screen"
+    (W.currentTag (windowset clicked)=="2" && W.peek (windowset clicked)==Just 3)
   check "three windows laid out" (length (planFrames p1)==3 && null (planHide p1))
   (_,mouseFloat) <- runX conf s2 (floatObservedWindow 2)
   check "mouse drag floats observed window" (M.member 2 (W.floating $ windowset mouseFloat))

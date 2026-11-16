@@ -79,6 +79,10 @@ data XState = XState
   -- (action id, window) for an explicit focus request; Nothing once acked,
   -- expired, or superseded by a later user focus.
   , pendingFocus :: Maybe (Int, Window)
+  -- The window the helper last reported as natively focused. Only a change
+  -- from it is the user moving focus; macOS keeping focus on a window policy
+  -- moved away from (shifted to another screen's workspace) is not.
+  , nativeFocus :: Maybe Window
   , nextActionId :: Int
   -- Display ID -> workspace tag, including displays that are currently gone.
   , displayAffinity :: M.Map Int WorkspaceId

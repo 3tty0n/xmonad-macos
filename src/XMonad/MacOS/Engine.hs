@@ -29,7 +29,7 @@ initialState :: XConfig Layout -> [DisplayInfo] -> XState
 initialState c ds = XState
   { windowset=ws, windowInfo=M.empty, ignoredWindows=S.empty, unconfirmed=M.empty
   , generation=(-1), epoch=(-1)
-  , pendingFocus=Nothing, nextActionId=0
+  , pendingFocus=Nothing, nativeFocus=Nothing, nextActionId=0
   , displayAffinity=M.fromList [(displayID (W.screenDetail sc), W.tag (W.workspace sc))
                                | sc <- W.screens ws]
   , borderOverrides=M.empty, keyGrab=Nothing
@@ -119,6 +119,7 @@ reconcile snap = do
         Just (_, target) | target /= w -> s {pendingFocus=Nothing}
         _ -> s
   followObservedFocus snap observed
+  modify $ \s -> s {nativeFocus=snapFocused snap}
   unless restarted $ do
     now <- gets windowset
     announceRemovals previous now
@@ -284,8 +285,9 @@ followObservedFocus snap observed = whenJust (snapFocused snap) $ \w -> do
       visible = maybe False (\wi -> not (minimized wi) && not (ownedHidden wi))
         (M.lookup w observed)
       ours = maybe True ((==w) . snd) (pendingFocus s)
-  when (known && visible && ours && onScreenWorkspace w (windowset s)) $ put s
-    {windowset=W.focusWindow w (windowset s),pendingFocus=Nothing}
+      moved = nativeFocus s /= Just w
+  when (known && visible && ours && moved && onScreenWorkspace w (windowset s)) $
+    put s {windowset=W.focusWindow w (windowset s),pendingFocus=Nothing}
 
 -- Layouts that track windows need to hear about the ones that really closed:
 -- a user-minimized window, or an omission whose grace has run out. A window
@@ -617,7 +619,7 @@ handleEvent keymap event = case event of
         -- Only a different, non-expired focused window is the user clicking away.
         case (expired, focused) of
           (False, Just w)
-            | w /= wanted, W.member w (windowset s)
+            | w /= wanted, nativeFocus s /= Just w, W.member w (windowset s)
             , onScreenWorkspace w (windowset s) ->
               modify $ \st -> st {windowset=W.focusWindow w (windowset st)}
           _ -> pure ()

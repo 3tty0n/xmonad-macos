@@ -19,7 +19,7 @@ st0 = XState
   { windowset = W.new (Layout (layoutHook def)) ["1"]
       [SD (Rectangle 0 0 1000 800) 10]
   , windowInfo = M.empty, ignoredWindows = S.empty, generation = 0, epoch = 0
-  , pendingFocus = Nothing, nextActionId = 0, displayAffinity = M.empty
+  , pendingFocus = Nothing, nativeFocus = Nothing, nextActionId = 0, displayAffinity = M.empty
   , borderOverrides = M.empty, keyGrab = Nothing, commands = []
   , extensibleState = M.empty, menuBarText = Nothing, unconfirmed = M.empty }
 
