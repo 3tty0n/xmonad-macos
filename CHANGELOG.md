@@ -2,6 +2,12 @@
 
 Written when a version tag is cut; between tags, see the git log.
 
+## 1.2.4 - 2026-11-16
+
+- A border is drawn only for a window the window server shows. A record kept
+  for a closed, hidden or unresponsive window still reports its last frame,
+  and its border used to stay behind outlining nothing.
+
 ## 1.2.3 - 2026-11-16
 
 - Sending a window to a workspace shown on another screen keeps focus on the
