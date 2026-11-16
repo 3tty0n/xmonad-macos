@@ -25,8 +25,7 @@ stage_kit "$KIT_NEW"
 if [ -d "$SUPPORT/build-kit/dist-newstyle" ]; then
   cp -Rp "$SUPPORT/build-kit/dist-newstyle" "$KIT_NEW/dist-newstyle"
 fi
-rm -rf "$SUPPORT/build-kit.previous"
-if [ -d "$SUPPORT/build-kit" ]; then mv "$SUPPORT/build-kit" "$SUPPORT/build-kit.previous"; fi
+rm -rf "$SUPPORT/build-kit" "$SUPPORT/build-kit.previous"
 mv "$KIT_NEW" "$SUPPORT/build-kit"
 rm -f "$SUPPORT/recompile.sh" "$SUPPORT/autostart.sh" "$SUPPORT/xmonadctl"
 # The control commands live in the compiled config, as upstream's do, so both
@@ -40,10 +39,7 @@ requirement() {
 }
 OLD_REQ=""
 if [ -d "$APP" ]; then OLD_REQ="$(requirement "$APP")"; fi
-if [ -d "$APP" ]; then
-  rm -rf "$HOME/Applications/XMonadMac.previous.app"
-  mv "$APP" "$HOME/Applications/XMonadMac.previous.app"
-fi
+rm -rf "$APP" "$HOME/Applications/XMonadMac.previous.app"
 /usr/bin/ditto "$ROOT/build/XMonadMac.app" "$APP"
 # A changed designated requirement leaves a stale Accessibility entry that
 # cannot be overridden by re-adding the app, so drop it and ask again.
@@ -53,7 +49,7 @@ if [ -n "$OLD_REQ" ] && [ "$OLD_REQ" != "$NEW_REQ" ]; then
   echo "The app signature changed; its Accessibility grant was reset."
   echo "Re-add $APP under Privacy & Security -> Accessibility."
 fi
-if [ -x "$SUPPORT/xmonad-engine" ]; then cp "$SUPPORT/xmonad-engine" "$SUPPORT/xmonad-engine.previous"; fi
+rm -f "$SUPPORT/xmonad-engine.previous"
 cp "$ROOT/build/xmonad-engine" "$SUPPORT/xmonad-engine.new"
 chmod 755 "$SUPPORT/xmonad-engine.new"
 mv -f "$SUPPORT/xmonad-engine.new" "$SUPPORT/xmonad-engine"

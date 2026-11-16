@@ -75,15 +75,14 @@ struct BundledInstall {
     let fm = FileManager.default
     let current = support.appendingPathComponent("build-kit", isDirectory: true)
     let staged = support.appendingPathComponent("build-kit.new", isDirectory: true)
-    let previous = support.appendingPathComponent("build-kit.previous", isDirectory: true)
     try? fm.removeItem(at: staged)
     try fm.copyItem(at: bundledKit, to: staged)
     let cache = current.appendingPathComponent("dist-newstyle", isDirectory: true)
     if fm.fileExists(atPath: cache.path) {
       try? fm.copyItem(at: cache, to: staged.appendingPathComponent("dist-newstyle"))
     }
-    try? fm.removeItem(at: previous)
-    if fm.fileExists(atPath: current.path) { try fm.moveItem(at: current, to: previous) }
+    try? fm.removeItem(at: support.appendingPathComponent("build-kit.previous"))
+    if fm.fileExists(atPath: current.path) { try fm.removeItem(at: current) }
     try fm.moveItem(at: staged, to: current)
   }
   // The bundled engine loads non-system libraries from beside itself.
