@@ -348,6 +348,15 @@ func tracesFocusBorder(_ window: WindowInfo, displays: [DisplayInfo], pinned: Bo
 {
   !window.minimized && !parkedOffDisplay(window.frame, displays) && (pinned || !window.ownedHidden)
 }
+// Only a window the window server shows can carry a border: a record kept
+// for a closed, hidden or unresponsive window still reports its last frame,
+// and its border would outline nothing. A window being revealed is not shown
+// yet, and an empty stack is no observation, so neither is filtered.
+func shownByWindowServer(_ windows: [WindowInfo], stack: [StackEntry]) -> [WindowInfo] {
+  guard !stack.isEmpty else { return windows }
+  let shown = Set(stack.compactMap(\.wid))
+  return windows.filter { shown.contains($0.wid) || $0.ownedHidden }
+}
 func cgHasWindow(pid: Int32, near rect: Rect, in windows: [(Int32, Rect)], tolerance: Int = 8)
   -> Bool
 {

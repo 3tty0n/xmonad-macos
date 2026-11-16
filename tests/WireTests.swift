@@ -31,6 +31,15 @@ import Foundation
     ]
     let stack = observedStack(cg, windows: windows)
     check(stack.map(\.wid) == [3, nil, 1, 2], "stack matches windows by PID and frame")
+    var revealed = window(5, 10, panel)
+    revealed.ownedHidden = true
+    let kept = window(4, 10, Rect(x: 0, y: 0, width: 200, height: 200))
+    check(
+      shownByWindowServer(windows + [kept, revealed], stack: stack).map(\.wid) == [1, 2, 3, 5],
+      "a window the window server does not show gets no border")
+    check(
+      shownByWindowServer([kept], stack: []).map(\.wid) == [4],
+      "no stack observation filters nothing")
     let painted: [UInt64: Rect] = [1: master, 2: east, 3: west]
     check(occluders(of: 3, in: stack, painted: painted) == [], "the top window is not covered")
     check(

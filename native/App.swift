@@ -227,6 +227,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   private var lastSnapshot: Snapshot?
   // Front-to-back on-screen order from the last scan, for clipping borders.
   private var lastStack: [StackEntry] = []
+  // Windows the last scan reported that the window server does not show.
+  private var unshown: Set<UInt64> = []
   private var dumpNext = false
   private var suppressShortcuts = UserDefaults.standard.bool(forKey: suppressDefaultsKey)
   private var logDiagnostics = UserDefaults.standard.bool(forKey: logKeysDefaultsKey)
@@ -813,7 +815,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     guard running, configured, !fullScreen, let snap = lastSnapshot else { return }
     let windows = patchingFrame(snap.windows, wid: wid, frame: frame)
     traceFocus(
-      ScanResult(windows: windows, focused: snap.focused, nativeFullScreen: false),
+      ScanResult(
+        windows: windows, focused: snap.focused, nativeFullScreen: false, stack: lastStack),
       displays: displayInfo())
   }
   // A plan states every border it wants, so the widths of the previous plan
@@ -842,10 +845,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       border.hide()
       return
     }
-    let visible = result.windows.filter { tracesFocusBorder($0, displays: displays) }
+    let windows = shownByWindowServer(result.windows, stack: result.stack)
+    unshown = Set(result.windows.map(\.wid)).subtracting(windows.map(\.wid))
+    let visible = windows.filter { tracesFocusBorder($0, displays: displays) }
     let rest = visible.map { ($0.wid, $0.frame) }
     if let pin = borderPin {
-      if let window = result.windows.first(where: { $0.wid == pin }),
+      if let window = windows.first(where: { $0.wid == pin }),
         tracesFocusBorder(window, displays: displays, pinned: true)
       {
         paintBorders(focused: (pin, window.frame), rest: rest)
@@ -856,7 +861,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       borderPin = nil
     }
     if let wid = result.focused,
-      let window = result.windows.first(where: { $0.wid == wid }),
+      let window = windows.first(where: { $0.wid == wid }),
       tracesFocusBorder(window, displays: displays)
     {
       paintBorders(focused: (wid, window.frame), rest: rest)
@@ -872,8 +877,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       border.hide()
       return
     }
-    let rest = plan.frames.map { ($0.wid, $0.frame) }
-    if let id = plan.focus, let chosen = plan.frames.first(where: { $0.wid == id }) {
+    let frames = plan.frames.filter { !unshown.contains($0.wid) }
+    let rest = frames.map { ($0.wid, $0.frame) }
+    if let id = plan.focus, let chosen = frames.first(where: { $0.wid == id }) {
       borderPin = id
       paintBorders(focused: (id, chosen.frame), rest: rest)
       hoverWid = id
