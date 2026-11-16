@@ -14,7 +14,7 @@ jobs:
       - run: cabal update
       - run: ./scripts/test.sh
   macos-sdk:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - uses: haskell-actions/setup@v2
