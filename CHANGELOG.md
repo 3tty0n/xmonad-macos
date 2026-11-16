@@ -2,6 +2,21 @@
 
 Written when a version tag is cut; between tags, see the git log.
 
+## 1.2.3 - 2026-11-16
+
+- Sending a window to a workspace shown on another screen keeps focus on the
+  current screen, as in xmonad. macOS leaving native focus on the moved window
+  no longer drags the current workspace to the other screen; only a change of
+  native focus is followed.
+- A click on no window focuses the screen under it, as a click on the root
+  window does in xmonad, so `M-<n>` acts on an empty screen. The helper sends
+  a new `screenFocus` event.
+- `M-t` toggles floating in the example config.
+- A window whose Electron app refuses `AXWindows` after its last window closed
+  is dropped at once instead of keeping its tile and border.
+- Installing no longer keeps `.previous` copies of the app, engine and build
+  kit, and removes old ones.
+
 ## 1.2.2 - 2026-11-02
 
 - A native tab group (Ghostty and other AppKit-tabbed windows) is no longer
